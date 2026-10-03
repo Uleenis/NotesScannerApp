@@ -39,3 +39,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+.env
+.env.*
+!.env.example
+
+supabase/.temp/
+supabase/.branches/
+
+__pycache__/
