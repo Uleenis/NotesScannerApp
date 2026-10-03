@@ -64,3 +64,7 @@ All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitle
 
 - `GHSA-vfj7-8cjw-p6xm`: `braces` 3.0.3 via Jest, stack exhaustion on crafted glob patterns.
 - `GHSA-86w9-cpqp-85rv`: `node-forge` 1.4.0 via `@expo/cli` code signing, lax RSA signature parsing.
+
+## Expo-managed dependencies
+
+`expo`, `expo-*`, `react`, `react-native`, `@types/react`, `jest`, `jest-expo`, `eslint-config-expo` and `typescript` are pinned by the Expo SDK. Dependabot ignores them. Upgrade them together with `npx expo install --fix`, during an Expo SDK upgrade, never one by one.
