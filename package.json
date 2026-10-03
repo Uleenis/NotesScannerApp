@@ -5,8 +5,8 @@
   "dependencies": {
     "expo": "~57.0.22",
     "expo-status-bar": "~57.0.1",
-    "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react": "19.3.0",
+    "react-native": "0.87.1"
   },
   "scripts": {
     "start": "expo start",
@@ -26,7 +26,7 @@
   "devDependencies": {
     "@testing-library/react-native": "^14.0.1",
     "@types/jest": "^29.5.14",
-    "@types/react": "~19.2.4",
+    "@types/react": "~19.3.0",
     "audit-ci": "^7.1.0",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
