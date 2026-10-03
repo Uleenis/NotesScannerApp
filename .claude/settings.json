@@ -1,5 +1,25 @@
 {
   "enabledPlugins": {
     "expo@claude-plugins-official": true
+  },
+  "permissions": {
+    "deny": [
+      "Bash(gh pr merge*)",
+      "Bash(gh api *merge*)",
+      "Bash(git push)",
+      "Bash(git push *main*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)",
+      "PowerShell(gh pr merge*)",
+      "PowerShell(gh api *merge*)",
+      "PowerShell(git push)",
+      "PowerShell(git push *main*)",
+      "PowerShell(git push --force*)",
+      "PowerShell(git push -f*)",
+      "PowerShell(git push * --force*)",
+      "PowerShell(git push * -f*)"
+    ]
   }
 }
