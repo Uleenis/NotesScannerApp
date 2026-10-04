@@ -11,6 +11,79 @@ revoke all on public.anonymous_daily_counts from anon, authenticated;
 
 alter table public.anonymous_daily_counts enable row level security;
 
+create function public.anonymous_daily_cap()
+returns integer
+language sql
+immutable
+security definer
+set search_path = ''
+as $$
+  select 300;
+$$;
+
+revoke all on function public.anonymous_daily_cap() from public, anon, authenticated;
+
+create schema private;
+
+create table private.email_pepper (
+  id boolean primary key default true check (id),
+  pepper text not null
+);
+
+revoke all on private.email_pepper from public, anon, authenticated;
+
+alter table private.email_pepper enable row level security;
+
+insert into private.email_pepper (pepper) values (gen_random_uuid()::text || gen_random_uuid()::text);
+
+create table public.email_monthly_counts (
+  email_hash bytea not null,
+  month date not null,
+  pages integer not null check (pages > 0),
+  primary key (email_hash, month)
+);
+
+revoke all on public.email_monthly_counts from anon, authenticated;
+
+alter table public.email_monthly_counts enable row level security;
+
+create function public.email_hash(p_email text)
+returns bytea
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select sha256(convert_to((select e.pepper from private.email_pepper e) || lower(btrim(p_email)), 'utf8'));
+$$;
+
+revoke all on function public.email_hash(text) from public, anon, authenticated;
+
+create function public.keep_month_count_on_delete() returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if old.email is not null and not coalesce(old.is_anonymous, false) then
+    insert into public.email_monthly_counts as e (email_hash, month, pages)
+    select public.email_hash(old.email), date_trunc('month', c.charged_at at time zone 'Europe/Paris')::date, count(*)
+    from public.page_charges c
+    where c.user_id = old.id
+      and c.charged_at >= date_trunc('month', now() at time zone 'Europe/Paris') at time zone 'Europe/Paris'
+    group by 2
+    on conflict (email_hash, month) do update set pages = e.pages + excluded.pages;
+  end if;
+  return old;
+end;
+$$;
+
+revoke all on function public.keep_month_count_on_delete() from public, anon, authenticated;
+
+create trigger keep_month_count_before_user_delete
+  before delete on auth.users
+  for each row execute function public.keep_month_count_on_delete();
+
 create function public.page_allowance(p_user_id uuid, p_at timestamptz default now())
 returns table (
   is_anonymous boolean,
@@ -34,8 +107,12 @@ declare
   v_month_start timestamptz;
   v_day_count integer;
   v_blocked text;
+  v_email text;
+  v_carried integer;
 begin
-  select u.is_anonymous into v_anonymous from auth.users u where u.id = p_user_id;
+  p_at := coalesce(p_at, now());
+
+  select u.is_anonymous, u.email into v_anonymous, v_email from auth.users u where u.id = p_user_id;
   if not found then
     return;
   end if;
@@ -53,6 +130,12 @@ begin
     select count(*) into v_used
     from public.page_charges c
     where c.user_id = p_user_id and c.charged_at >= v_month_start and c.charged_at < v_resets;
+    select coalesce(sum(e.pages), 0) into v_carried
+    from public.email_monthly_counts e
+    where v_email is not null
+      and e.email_hash = public.email_hash(v_email)
+      and e.month = date_trunc('month', p_at at time zone 'Europe/Paris')::date;
+    v_used := v_used + v_carried;
   end if;
 
   v_remaining := greatest(v_max - v_used, 0);
@@ -63,7 +146,7 @@ begin
     select d.pages into v_day_count
     from public.anonymous_daily_counts d
     where d.day = (p_at at time zone 'Europe/Paris')::date;
-    if coalesce(v_day_count, 0) >= 300 then
+    if coalesce(v_day_count, 0) >= public.anonymous_daily_cap() then
       v_blocked := 'anonymous_daily_cap';
     end if;
   end if;
@@ -86,6 +169,8 @@ declare
   v_allowance record;
   v_counted integer;
 begin
+  p_at := coalesce(p_at, now());
+
   select p.user_id into v_user from public.pages p where p.id = p_page_id;
   if not found then
     return query select false, 'page_not_found'::text;
@@ -109,7 +194,7 @@ begin
   if v_allowance.is_anonymous then
     insert into public.anonymous_daily_counts as d (day, pages)
     values ((p_at at time zone 'Europe/Paris')::date, 1)
-    on conflict (day) do update set pages = d.pages + 1 where d.pages < 300
+    on conflict (day) do update set pages = d.pages + 1 where d.pages < public.anonymous_daily_cap()
     returning d.pages into v_counted;
     if v_counted is null then
       return query select false, 'anonymous_daily_cap'::text;

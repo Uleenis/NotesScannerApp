@@ -19,6 +19,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `supabase/migrations/`: the only way the schema changes.
 - `supabase/functions/`: Edge Functions.
 - `supabase/tests/database/`: pgTAP tests.
+- `supabase/tests/concurrency/`: parallel-call tests.
 - `services/reading/`: reading service.
 
 ## Commands
@@ -31,6 +32,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 | `npm run audit` | Dependency audit with the allowlist in `audit-ci.json` |
 | `npm run db:start` / `npm run db:stop` | Start or stop the local Supabase stack (Docker) |
 | `npm run db:test` | pgTAP tests on the local database |
+| `npm run db:test:concurrency` | Parallel `charge_page` calls on the local database (needs `db:start`) |
 | `npm run functions:test` | Deno tests of the Edge Functions |
 
 All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitleaks.

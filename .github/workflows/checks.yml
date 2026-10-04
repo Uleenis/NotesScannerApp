@@ -42,6 +42,7 @@ jobs:
       - run: npm ci
       - run: npx supabase db start
       - run: npx supabase test db
+      - run: npm run db:test:concurrency
 
   secrets:
     runs-on: ubuntu-latest

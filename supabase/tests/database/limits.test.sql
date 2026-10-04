@@ -1,6 +1,6 @@
 begin;
 
-select plan(42);
+select plan(66);
 
 create function pg_temp.u(n integer) returns uuid
 language sql immutable as $$
@@ -50,6 +50,11 @@ select pg_temp.make_user(pg_temp.u(9));
 select pg_temp.make_user(pg_temp.u(10));
 select pg_temp.make_user(pg_temp.u(11), true);
 select pg_temp.make_user(pg_temp.u(12), true);
+select pg_temp.make_user(pg_temp.u(13));
+select pg_temp.make_user(pg_temp.u(14), true);
+select pg_temp.make_user(pg_temp.u(15), true);
+select pg_temp.make_user(pg_temp.u(28));
+select pg_temp.make_user(pg_temp.u(n), true) from generate_series(20, 27) as n;
 
 select is(
   pg_temp.charge_many(pg_temp.u(1), 3, '2026-01-15 12:00:00+00'),
@@ -320,6 +325,200 @@ select is(
   (select blocked_reason from public.page_allowance(pg_temp.u(9), '2031-03-10 12:00:00+00')),
   null,
   'a registered account is not blocked by the daily cap of anonymous accounts'
+);
+
+select pg_temp.charge_new(pg_temp.u(13), '2026-10-31 22:59:59.999999+00');
+select pg_temp.charge_new(pg_temp.u(13), '2026-10-31 23:00:00+00');
+
+select is(
+  (select used from public.page_allowance(pg_temp.u(13), '2026-10-15 12:00:00+00')),
+  1,
+  'a charge made after the end of the month is not counted in that month'
+);
+
+select is(
+  (select used from public.page_allowance(pg_temp.u(13), '2026-11-15 12:00:00+00')),
+  1,
+  'a charge made exactly at midnight in Paris on the first of the month counts in the new month'
+);
+
+select is(
+  (select used from public.page_allowance(pg_temp.u(13), '2026-10-31 23:00:00+00')),
+  1,
+  'the month changes exactly at midnight in Paris'
+);
+
+create temp table first_page_14 as select pg_temp.new_page(pg_temp.u(14)) as id;
+
+select public.charge_page((select id from first_page_14), '2031-05-05 12:00:00+00');
+select pg_temp.charge_many(pg_temp.u(14), 2, '2031-05-05 12:00:00+00');
+
+update public.anonymous_daily_counts set pages = 300 where day = '2031-05-05';
+
+select is(
+  (select blocked_reason from public.page_allowance(pg_temp.u(14), '2031-05-05 12:00:00+00')),
+  'anonymous_limit',
+  'an anonymous account at its three pages is told about its own limit before the daily cap'
+);
+
+select is(
+  (select reason from public.charge_page((select id from first_page_14), '2031-05-05 12:00:00+00')),
+  'already_charged',
+  'an anonymous page already charged can be read again at both limits'
+);
+
+select is(
+  (select pages from public.anonymous_daily_counts where day = '2031-05-05'),
+  300,
+  'reading an anonymous page again does not move the daily counter'
+);
+
+create temp table page_15 as select pg_temp.new_page(pg_temp.u(15)) as id;
+
+select is(
+  (select reason from public.charge_page((select id from page_15), '2031-06-06 12:00:00+00')),
+  'charged',
+  'an anonymous page is charged the first time'
+);
+
+select is(
+  (select reason from public.charge_page((select id from page_15), '2031-06-06 12:00:00+00')),
+  'already_charged',
+  'the same anonymous page is not charged a second time'
+);
+
+select is(
+  (select pages from public.anonymous_daily_counts where day = '2031-06-06'),
+  1,
+  'an anonymous page moves the daily counter once, not once per reading'
+);
+
+select pg_temp.charge_new(pg_temp.u(20), '2031-03-29 22:59:59+00');
+select pg_temp.charge_new(pg_temp.u(21), '2031-03-29 23:00:00+00');
+select pg_temp.charge_new(pg_temp.u(22), '2031-03-30 21:59:59+00');
+select pg_temp.charge_new(pg_temp.u(23), '2031-03-30 22:00:00+00');
+select pg_temp.charge_new(pg_temp.u(24), '2031-10-25 21:59:59+00');
+select pg_temp.charge_new(pg_temp.u(25), '2031-10-25 22:00:00+00');
+select pg_temp.charge_new(pg_temp.u(26), '2031-10-26 22:59:59+00');
+select pg_temp.charge_new(pg_temp.u(27), '2031-10-26 23:00:00+00');
+
+select is(
+  (select pages from public.anonymous_daily_counts where day = '2031-03-29'),
+  1,
+  'the day before the spring clock change ends at midnight in Paris'
+);
+
+select is(
+  (select pages from public.anonymous_daily_counts where day = '2031-03-30'),
+  2,
+  'the 23-hour day of the spring clock change runs from midnight to midnight in Paris'
+);
+
+select is(
+  (select pages from public.anonymous_daily_counts where day = '2031-03-31'),
+  1,
+  'the day after the spring clock change starts at midnight in Paris'
+);
+
+select is(
+  (select pages from public.anonymous_daily_counts where day = '2031-10-25'),
+  1,
+  'the day before the autumn clock change ends at midnight in Paris'
+);
+
+select is(
+  (select pages from public.anonymous_daily_counts where day = '2031-10-26'),
+  2,
+  'the 25-hour day of the autumn clock change runs from midnight to midnight in Paris'
+);
+
+select is(
+  (select pages from public.anonymous_daily_counts where day = '2031-10-27'),
+  1,
+  'the day after the autumn clock change starts at midnight in Paris'
+);
+
+select is(
+  (select reason from public.charge_page(pg_temp.new_page(pg_temp.u(28)), null)),
+  'charged',
+  'a missing date means now'
+);
+
+select is(
+  (select used from public.page_allowance(pg_temp.u(28), null)),
+  1,
+  'the allowance with a missing date counts the pages of the current month'
+);
+
+insert into auth.users (id, email, is_anonymous) values (pg_temp.u(30), 'carry@example.test', false);
+
+select pg_temp.charge_many(pg_temp.u(30), 15, now());
+
+delete from auth.users where id = pg_temp.u(30);
+
+insert into auth.users (id, email, is_anonymous) values (pg_temp.u(31), ' Carry@Example.test', false);
+
+select is(
+  (select used from public.page_allowance(pg_temp.u(31))),
+  15,
+  'an address that deleted its account keeps the pages it read this month, whatever its letter case'
+);
+
+select is(
+  pg_temp.charge_new(pg_temp.u(31), now()),
+  'monthly_limit',
+  'a new account on the same address is refused its first page at the monthly limit'
+);
+
+select pg_temp.make_user(pg_temp.u(32));
+
+select is(
+  (select used from public.page_allowance(pg_temp.u(32))),
+  0,
+  'a new account on another address starts with no pages read'
+);
+
+select is(
+  (select used from public.page_allowance(pg_temp.u(31), now() + interval '40 days')),
+  0,
+  'the pages kept for an address are forgotten when the month is over'
+);
+
+create temp table count_rows_before as select count(*) as n from public.email_monthly_counts;
+
+select pg_temp.make_user(pg_temp.u(33), true);
+select pg_temp.charge_many(pg_temp.u(33), 2, now());
+delete from auth.users where id = pg_temp.u(33);
+
+select pg_temp.make_user(pg_temp.u(34));
+delete from auth.users where id = pg_temp.u(34);
+
+select is(
+  (select count(*) from public.email_monthly_counts) - (select n from count_rows_before),
+  0::bigint,
+  'deleting an anonymous account, or an account without pages, keeps nothing'
+);
+
+delete from auth.users where id = pg_temp.u(31);
+
+select pg_temp.make_user(pg_temp.u(35), true);
+
+update auth.users set email = 'carry@example.test', is_anonymous = false where id = pg_temp.u(35);
+
+select is(
+  (select used from public.page_allowance(pg_temp.u(35))),
+  15,
+  'an anonymous account that registers on that address inherits the pages kept for it'
+);
+
+select set_eq(
+  $$
+    select a.attname::text, format_type(a.atttypid, a.atttypmod)
+    from pg_attribute a
+    where a.attrelid = 'public.email_monthly_counts'::regclass and a.attnum > 0 and not a.attisdropped
+  $$,
+  $$ values ('email_hash', 'bytea'), ('month', 'date'), ('pages', 'integer') $$,
+  'what is kept for an address is a hash, a month and a number, never the address'
 );
 
 select * from finish();
