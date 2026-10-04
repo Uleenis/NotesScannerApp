@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useStrings } from "@/i18n";
 import { colors, typography } from "@/theme";
@@ -17,11 +17,11 @@ export function ShellIndex() {
   return (
     <View>
       {rows.map((row) => (
-        <View key={row.href} style={styles.row}>
-          <Link href={row.href} style={styles.label}>
-            {row.label}
-          </Link>
-        </View>
+        <Link key={row.href} href={row.href} asChild>
+          <Pressable style={styles.row}>
+            <Text style={styles.label}>{row.label}</Text>
+          </Pressable>
+        </Link>
       ))}
     </View>
   );
