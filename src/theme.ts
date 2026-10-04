@@ -34,6 +34,7 @@ export const typography = {
   pageTitle: { fontFamily: fontFamilies.serifSemiBold, fontSize: 26 },
   documentBody: { fontFamily: fontFamilies.serif, fontSize: 17, lineHeight: 26 },
   interfaceBody: { fontSize: 17 },
+  interfaceSecondary: { fontSize: 15 },
   footnote: { fontSize: 13 },
 } satisfies Record<string, TextStyle>;
 

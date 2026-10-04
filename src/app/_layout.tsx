@@ -2,10 +2,12 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 import { AuthProvider } from "@/auth/auth-provider";
 import { defaultAuthServices } from "@/auth/default-services";
+import { createQueryClient, followAppFocus } from "@/lib/query-client";
 import { stackScreenOptions } from "@/navigation-options";
 import { fontAssets } from "@/theme";
 
@@ -16,6 +18,9 @@ export const unstable_settings = { anchor: "index" };
 export default function RootLayout() {
   const [loaded, error] = useFonts(fontAssets);
   const ready = loaded || error !== null;
+  const [queryClient] = useState(createQueryClient);
+
+  useEffect(followAppFocus, []);
 
   useEffect(() => {
     if (ready) {
@@ -29,13 +34,16 @@ export default function RootLayout() {
 
   return (
     <AuthProvider services={defaultAuthServices}>
-      <StatusBar style="dark" />
-      <Stack screenOptions={stackScreenOptions}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="capture" options={{ presentation: "fullScreenModal" }} />
-        <Stack.Screen name="account" options={{ presentation: "modal" }} />
-        <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />
-      </Stack>
+      <QueryClientProvider client={queryClient}>
+        <StatusBar style="dark" />
+        <Stack screenOptions={stackScreenOptions}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="capture" options={{ presentation: "fullScreenModal" }} />
+          <Stack.Screen name="account" options={{ presentation: "modal" }} />
+          <Stack.Screen name="new-notebook" options={{ presentation: "modal" }} />
+          <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />
+        </Stack>
+      </QueryClientProvider>
     </AuthProvider>
   );
 }
