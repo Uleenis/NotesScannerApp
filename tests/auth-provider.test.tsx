@@ -6,7 +6,7 @@ import { AppState, type AppStateStatus, Text } from "react-native";
 import { AuthProvider, useAuth, type AuthServices } from "@/auth/auth-provider";
 import type { AuthResult } from "@/auth/session";
 import { createSessionManager } from "@/auth/session";
-import { created, fakeAuthClient, noSession } from "./fake-auth-client";
+import { created, deferred, fakeAuthClient, noSession } from "./fake-auth-client";
 import { phoneLocale } from "./phone-locale";
 
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
@@ -61,8 +61,8 @@ async function advance(milliseconds: number): Promise<void> {
   });
 }
 
-function mount(services: AuthServices) {
-  return render(
+async function mount(services: AuthServices) {
+  return await render(
     <AuthProvider services={services}>
       <Probe />
       <Text testID="content">content</Text>
@@ -71,17 +71,22 @@ function mount(services: AuthServices) {
 }
 
 test("is loading first, then ready with the account", async () => {
-  const { services } = fakeServices(READY);
-  mount(services);
+  const { services, ensureSession } = fakeServices(READY);
+  const pending = deferred<AuthResult>();
+  ensureSession.mockReset().mockReturnValue(pending.promise);
+  await mount(services);
 
   expect(screen.getByTestId("auth").props.children).toBe("loading:none");
+  expect(screen.getByTestId("content")).toBeTruthy();
+
+  pending.resolve(READY);
   await flush();
   expect(screen.getByTestId("auth").props.children).toBe("ready:user-1");
 });
 
 test("writes the language of the phone into the profile of the account", async () => {
   const { services, syncLanguage } = fakeServices(READY);
-  mount(services);
+  await mount(services);
   await flush();
 
   expect(syncLanguage).toHaveBeenCalledWith("user-1", "fr");
@@ -89,11 +94,11 @@ test("writes the language of the phone into the profile of the account", async (
 
 test("writes the new language when the phone language changes", async () => {
   const { services, syncLanguage } = fakeServices(READY);
-  const { rerender } = mount(services);
+  const { rerender } = await mount(services);
   await flush();
 
   jest.mocked(useLocales).mockReturnValue([phoneLocale("en")]);
-  rerender(
+  await rerender(
     <AuthProvider services={services}>
       <Probe />
     </AuthProvider>,
@@ -105,7 +110,7 @@ test("writes the new language when the phone language changes", async () => {
 
 test("does not write a language while there is no account", async () => {
   const { services, syncLanguage } = fakeServices(UNAVAILABLE);
-  mount(services);
+  await mount(services);
   await flush();
 
   expect(syncLanguage).not.toHaveBeenCalled();
@@ -113,7 +118,7 @@ test("does not write a language while there is no account", async () => {
 
 test("shows the app while loading and while the account is unavailable", async () => {
   const { services } = fakeServices(UNAVAILABLE);
-  mount(services);
+  await mount(services);
   expect(screen.getByTestId("content")).toBeTruthy();
 
   await flush();
@@ -123,7 +128,7 @@ test("shows the app while loading and while the account is unavailable", async (
 
 test("tries again by itself after a failure and becomes ready", async () => {
   const { services, ensureSession } = fakeServices(UNAVAILABLE, READY);
-  mount(services);
+  await mount(services);
   await flush();
   expect(screen.getByTestId("auth").props.children).toBe("unavailable:none");
 
@@ -135,7 +140,7 @@ test("tries again by itself after a failure and becomes ready", async () => {
 
 test("waits 2, 4, 8 then 30 seconds between attempts", async () => {
   const { services, ensureSession } = fakeServices(UNAVAILABLE);
-  mount(services);
+  await mount(services);
   await flush();
   expect(ensureSession).toHaveBeenCalledTimes(1);
 
@@ -165,7 +170,7 @@ test("waits 2, 4, 8 then 30 seconds between attempts", async () => {
 
 test("stops trying once the account is ready", async () => {
   const { services, ensureSession } = fakeServices(UNAVAILABLE, READY);
-  mount(services);
+  await mount(services);
   await flush();
   await advance(2000);
   await advance(120000);
@@ -175,7 +180,7 @@ test("stops trying once the account is ready", async () => {
 
 test("tries again when the app comes back to the foreground", async () => {
   const { services, ensureSession } = fakeServices(UNAVAILABLE, READY);
-  mount(services);
+  await mount(services);
   await flush();
   expect(ensureSession).toHaveBeenCalledTimes(1);
 
@@ -191,7 +196,7 @@ test("tries again when the app comes back to the foreground", async () => {
 
 test("does not try again on a return to the foreground once the account is ready", async () => {
   const { services, ensureSession } = fakeServices(READY);
-  mount(services);
+  await mount(services);
   await flush();
 
   await act(async () => {
@@ -205,10 +210,10 @@ test("does not try again on a return to the foreground once the account is ready
 
 test("stops trying after the app is closed", async () => {
   const { services, ensureSession } = fakeServices(UNAVAILABLE);
-  const view = mount(services);
+  const view = await mount(services);
   await flush();
 
-  view.unmount();
+  await view.unmount();
   await advance(120000);
 
   expect(ensureSession).toHaveBeenCalledTimes(1);
@@ -225,7 +230,7 @@ test("creates one account even when the app renders twice in strict mode", async
     syncLanguage: jest.fn().mockResolvedValue(true),
   };
 
-  render(
+  await render(
     <StrictMode>
       <AuthProvider services={services}>
         <Probe />

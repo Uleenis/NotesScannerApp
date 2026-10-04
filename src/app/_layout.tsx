@@ -4,6 +4,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 
+import { AuthProvider } from "@/auth/auth-provider";
+import { defaultAuthServices } from "@/auth/default-services";
 import { stackScreenOptions } from "@/navigation-options";
 import { fontAssets } from "@/theme";
 
@@ -26,7 +28,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <AuthProvider services={defaultAuthServices}>
       <StatusBar style="dark" />
       <Stack screenOptions={stackScreenOptions}>
         <Stack.Screen name="index" />
@@ -34,6 +36,6 @@ export default function RootLayout() {
         <Stack.Screen name="account" options={{ presentation: "modal" }} />
         <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />
       </Stack>
-    </>
+    </AuthProvider>
   );
 }

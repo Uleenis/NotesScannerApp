@@ -11,6 +11,12 @@ jest.mock("expo-font", () => ({
   useFonts: jest.fn(),
 }));
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
+jest.mock("@/auth/default-services", () => ({
+  defaultAuthServices: {
+    ensureSession: async () => ({ status: "ready", userId: "test-user" }),
+    syncLanguage: async () => true,
+  },
+}));
 jest.mock("expo-splash-screen", () => ({
   preventAutoHideAsync: jest.fn(),
   hideAsync: jest.fn(),
