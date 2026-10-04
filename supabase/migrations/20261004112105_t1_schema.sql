@@ -202,3 +202,10 @@ create policy page_texts_select on public.page_texts
 create policy page_charges_select on public.page_charges
   for select to authenticated
   using (user_id = (select auth.uid()));
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('photos', 'photos', false, 10485760, array['image/jpeg']);
+
+create policy photos_select on storage.objects
+  for select to authenticated
+  using (bucket_id = 'photos' and (storage.foldername(name))[1] = (select auth.uid())::text);
