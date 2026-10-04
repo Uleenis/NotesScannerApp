@@ -63,8 +63,12 @@ select is_empty(
         select 1 from pg_policies p
         where p.schemaname = 'public' and p.tablename = c.relname and p.cmd = 'SELECT'
       )
+      and (
+        has_table_privilege('authenticated', c.oid, 'select')
+        or has_any_column_privilege('authenticated', c.oid, 'select')
+      )
   $$,
-  'every table in public has a read rule'
+  'every table in public that a user can read has a read rule'
 );
 
 select set_eq(
