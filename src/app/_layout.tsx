@@ -30,6 +30,9 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Stack screenOptions={stackScreenOptions}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="capture" options={{ presentation: "fullScreenModal" }} />
+        <Stack.Screen name="account" options={{ presentation: "modal" }} />
+        <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />
       </Stack>
     </>
   );
