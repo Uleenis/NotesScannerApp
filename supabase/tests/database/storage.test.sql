@@ -1,6 +1,6 @@
 begin;
 
-select plan(12);
+select plan(13);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -63,15 +63,31 @@ select throws_ok(
 reset role;
 
 select is(
-  (select count(*) from storage.objects where bucket_id = 'photos'),
+  (select count(*) from storage.objects
+    where bucket_id = 'photos'
+      and name in (
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/page/original.jpg',
+        'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/page/original.jpg'
+      )),
   2::bigint,
   'those attempts changed nothing'
 );
 
 select is(
-  (select count(*) from storage.objects where name like '%renamed%'),
+  (select count(*) from storage.objects where bucket_id = 'photos' and name like '%/page/renamed.jpg'),
   0::bigint,
   'no file was renamed'
+);
+
+select is_empty(
+  $$
+    select policyname
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename in ('objects', 'buckets')
+      and cmd <> 'SELECT'
+  $$,
+  'no access rule lets a user write files or buckets'
 );
 
 select pg_temp.as_anon();

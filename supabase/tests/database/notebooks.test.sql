@@ -1,6 +1,6 @@
 begin;
 
-select plan(16);
+select plan(23);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -57,6 +57,37 @@ select throws_ok(
   '23505',
   null,
   'a leading space does not make a new name'
+);
+
+select throws_ok(
+  $$insert into public.notebooks (name) values (E'Math\u00a0')$$,
+  '23505',
+  null,
+  'a non-breaking space does not make a new name'
+);
+
+select throws_ok(
+  $$insert into public.notebooks (name) values (E'\u00a0\u3000\u200b')$$,
+  '23514',
+  null,
+  'a name made of non-breaking or invisible spaces is refused'
+);
+
+select throws_ok(
+  $$insert into public.notebooks (name) values (repeat('a', 201))$$,
+  '23514',
+  null,
+  'a name of more than 200 characters is refused'
+);
+
+select lives_ok(
+  $$insert into public.notebooks (name) values (repeat('b', 200))$$,
+  'a name of 200 characters is accepted'
+);
+
+select lives_ok(
+  $$update public.notebooks set position = 3 where name = 'math'$$,
+  'a user can reorder their notebooks'
 );
 
 select throws_ok(
@@ -119,6 +150,17 @@ select lives_ok(
   $$insert into public.chapters (notebook_id, name, position)
     values ((select id from public.notebooks where name = 'Math'), 'Algebra', 0)$$,
   'a user can create a chapter in their own notebook'
+);
+
+select lives_ok(
+  $$update public.chapters set name = 'Algebra 2', position = 1 where name = 'Algebra'$$,
+  'a user can rename and reorder their chapters'
+);
+
+select is(
+  (select position from public.chapters where name = 'Algebra 2'),
+  1,
+  'the new chapter position is saved'
 );
 
 select throws_ok(

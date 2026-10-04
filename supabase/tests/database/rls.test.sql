@@ -1,6 +1,6 @@
 begin;
 
-select plan(5);
+select plan(6);
 
 select is_empty(
   $$
@@ -16,14 +16,18 @@ select is_empty(
 
 select is_empty(
   $$
-    select c.relname
+    select c.relname || '.' || a.attname
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
+    join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
     where n.nspname = 'public'
       and c.relkind in ('r', 'p')
-      and has_table_privilege('anon', c.oid, 'select,insert,update,delete,truncate,references,trigger')
+      and (
+        has_table_privilege('anon', c.oid, 'select,insert,update,delete,truncate,references,trigger')
+        or has_column_privilege('anon', c.oid, a.attnum, 'select,insert,update,references')
+      )
   $$,
-  'a visitor without an account has no right on any table in public'
+  'a visitor without an account has no right on any table or column in public'
 );
 
 select is_empty(
@@ -61,6 +65,41 @@ select is_empty(
       )
   $$,
   'every table in public has a read rule'
+);
+
+select set_eq(
+  $$
+    select c.relname::text, a.attname::text, p.privilege
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+    cross join (values ('insert'), ('update')) as p (privilege)
+    where n.nspname = 'public'
+      and c.relkind in ('r', 'p')
+      and has_column_privilege('authenticated', c.oid, a.attnum, p.privilege)
+  $$,
+  $$
+    values
+      ('notebooks', 'name', 'insert'),
+      ('notebooks', 'position', 'insert'),
+      ('notebooks', 'name', 'update'),
+      ('notebooks', 'position', 'update'),
+      ('chapters', 'notebook_id', 'insert'),
+      ('chapters', 'name', 'insert'),
+      ('chapters', 'position', 'insert'),
+      ('chapters', 'name', 'update'),
+      ('chapters', 'position', 'update'),
+      ('pages', 'notebook_id', 'insert'),
+      ('pages', 'chapter_id', 'insert'),
+      ('pages', 'position', 'insert'),
+      ('pages', 'source', 'insert'),
+      ('pages', 'captured_at', 'insert'),
+      ('pages', 'chapter_id', 'update'),
+      ('pages', 'position', 'update'),
+      ('pages', 'uploaded_at', 'update'),
+      ('profiles', 'interface_language', 'update')
+  $$,
+  'the columns a user can write are exactly the ones the client may decide'
 );
 
 select * from finish();

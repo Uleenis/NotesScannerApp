@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(11);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -13,6 +13,8 @@ language sql as $$
     set_config('role', 'authenticated', true),
     set_config('request.jwt.claims', json_build_object('sub', uid, 'role', 'authenticated')::text, true);
 $$;
+
+create temp table profile_count_before as select count(*) as n from public.profiles;
 
 select pg_temp.make_user('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
@@ -29,7 +31,7 @@ select is(
 );
 
 select is(
-  (select count(*) from public.profiles),
+  (select count(*) from public.profiles) - (select n from profile_count_before),
   1::bigint,
   'creating one account creates exactly one profile'
 );
@@ -82,6 +84,12 @@ select is(
     or has_function_privilege('anon', 'public.handle_new_user()', 'execute'),
   false,
   'a client cannot call the function that creates profiles'
+);
+
+select is(
+  (select prosecdef and proconfig = array['search_path=""'] from pg_proc where oid = 'public.handle_new_user()'::regprocedure),
+  true,
+  'the function that creates profiles runs with the rights of its owner and an empty search path'
 );
 
 select * from finish();

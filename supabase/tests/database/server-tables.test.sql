@@ -33,8 +33,8 @@ insert into public.page_images (user_id, page_id, kind, storage_path) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '44444444-4444-4444-4444-444444444444', 'original',
    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/44444444-4444-4444-4444-444444444444/original.jpg');
 
-insert into public.readings (user_id, page_id, label, raw_text, model, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms) values
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '44444444-4444-4444-4444-444444444444', 'B1', 'Bonjour', 'gemini-3.6-flash', 'V0', 0, 10, 2, 1500);
+insert into public.readings (user_id, page_id, label, raw_text, model, model_version, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '44444444-4444-4444-4444-444444444444', 'B1', 'Bonjour', 'gemini-3.6-flash', 'gemini-3.6-flash-001', 'V0', 0, 10, 2, 1500);
 
 insert into public.page_texts (user_id, page_id, text, pipeline_version) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '44444444-4444-4444-4444-444444444444', 'Bonjour', '1');
@@ -108,8 +108,8 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$insert into public.readings (user_id, page_id, label, raw_text, model, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms)
-    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '55555555-5555-5555-5555-555555555555', 'Z', 'x', 'm', 'V0', 0, 1, 1, 1)$$,
+  $$insert into public.readings (user_id, page_id, label, raw_text, model, model_version, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '55555555-5555-5555-5555-555555555555', 'Z', 'x', 'm', 'mv', 'V0', 0, 1, 1, 1)$$,
   '23514', null, 'a reading label that does not exist is refused'
 );
 
@@ -129,8 +129,8 @@ select lives_ok(
 );
 
 select lives_ok(
-  $$insert into public.readings (user_id, page_id, label, raw_text, model, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms)
-    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '55555555-5555-5555-5555-555555555555', 'B1', 'Salut', 'gemini-3.6-flash', 'V0', 0, 10, 2, 900)$$,
+  $$insert into public.readings (user_id, page_id, label, raw_text, model, model_version, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '55555555-5555-5555-5555-555555555555', 'B1', 'Salut', 'gemini-3.6-flash', 'gemini-3.6-flash-001', 'V0', 0, 10, 2, 900)$$,
   'the server can write a reading'
 );
 

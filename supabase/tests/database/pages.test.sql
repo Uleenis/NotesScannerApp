@@ -1,6 +1,6 @@
 begin;
 
-select plan(31);
+select plan(36);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -28,7 +28,8 @@ insert into public.notebooks (id, user_id, name) values
   ('22222222-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Other');
 
 insert into public.chapters (id, user_id, notebook_id, name) values
-  ('33333333-3333-3333-3333-333333333333', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'Chapter');
+  ('33333333-3333-3333-3333-333333333333', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'Chapter'),
+  ('66666666-6666-6666-6666-666666666666', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-1212-1212-121212121212', 'Other chapter');
 
 select pg_temp.login('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
@@ -64,6 +65,21 @@ select lives_ok(
 select lives_ok(
   $$update public.pages set position = 2, uploaded_at = now() where position = 1$$,
   'a user can move a page and record its upload'
+);
+
+select lives_ok(
+  $$update public.pages set chapter_id = null where position = 2$$,
+  'a user can take a page out of its chapter'
+);
+
+select lives_ok(
+  $$update public.pages set chapter_id = '33333333-3333-3333-3333-333333333333' where position = 2$$,
+  'a user can put a page into a chapter of its notebook'
+);
+
+select throws_ok(
+  $$update public.pages set chapter_id = '66666666-6666-6666-6666-666666666666' where position = 2$$,
+  '23503', null, 'a page cannot be moved into a chapter of another notebook'
 );
 
 select throws_ok(
@@ -140,46 +156,46 @@ select throws_ok(
 reset role;
 
 select throws_ok(
-  $$update public.pages set status = 'done' where position = 0$$,
+  $$update public.pages set status = 'done' where position = 0 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   '23514', null, 'a status outside the four known ones is refused'
 );
 
 select throws_ok(
-  $$update public.pages set retry_count = 4 where position = 0$$,
+  $$update public.pages set retry_count = 4 where position = 0 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   '23514', null, 'more than three retries are refused'
 );
 
 select throws_ok(
-  $$update public.pages set status = 'read', queue_reason = 'read_error' where position = 0$$,
+  $$update public.pages set status = 'read', queue_reason = 'read_error' where position = 0 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   '23514', null, 'a queue reason on a page that is not queued is refused'
 );
 
 select throws_ok(
-  $$update public.pages set queue_reason = 'unknown' where position = 0$$,
+  $$update public.pages set queue_reason = 'unknown' where position = 0 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   '23514', null, 'an unknown queue reason is refused'
 );
 
 select lives_ok(
-  $$update public.pages set queue_reason = 'read_error', retry_count = 3 where position = 0$$,
+  $$update public.pages set queue_reason = 'read_error', retry_count = 3 where position = 0 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   'a queued page can carry a read error'
 );
 
 select pg_temp.as_server();
 
 select lives_ok(
-  $$update public.pages set status = 'processing', queue_reason = null where position = 0$$,
+  $$update public.pages set status = 'processing', queue_reason = null where position = 0 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   'the server can change the status of a page and clear its queue reason'
 );
 
 select lives_ok(
-  $$update public.pages set status = 'read', read_at = now() where position = 0$$,
+  $$update public.pages set status = 'read', read_at = now() where position = 0 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   'the server can mark a page as read'
 );
 
 reset role;
 
 select is(
-  (select status from public.pages where position = 0),
+  (select status from public.pages where position = 0 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
   'read',
   'the server change is saved'
 );
@@ -193,16 +209,32 @@ select is(
 );
 
 select lives_ok(
-  $$update public.pages set position = 9 where position = 0$$,
+  $$update public.pages set position = 9 where position = 0 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'$$,
   'another user can run an update that targets the page of someone else'
 );
 
 reset role;
 
 select is(
-  (select count(*) from public.pages where position = 9),
+  (select count(*) from public.pages where position = 9 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
   0::bigint,
   'that update changed nothing'
+);
+
+delete from public.chapters where id = '33333333-3333-3333-3333-333333333333';
+
+select is(
+  (select count(*) from public.pages where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and position = 2 and chapter_id is null),
+  1::bigint,
+  'deleting a chapter keeps its pages, without the chapter'
+);
+
+delete from public.notebooks where id = '11111111-1111-1111-1111-111111111111';
+
+select is(
+  (select count(*) from public.pages where notebook_id = '11111111-1111-1111-1111-111111111111'),
+  0::bigint,
+  'deleting a notebook deletes its pages'
 );
 
 select * from finish();
