@@ -3,7 +3,6 @@ import {
   getNotebook,
   listNotebooks,
   type NotebookClient,
-  type NotebookSelection,
 } from "@/notebooks/notebooks";
 
 type Outcome<T> = { data: T | null; error: { code?: string } | null };
@@ -30,32 +29,38 @@ function fakeClient(script: Script) {
   const settled = <T>(outcome: Outcome<T> | undefined) =>
     Promise.resolve(outcome ?? { data: null, error: { code: "unscripted" } });
 
-  const client: NotebookClient = {
+  const sorted = Object.assign(settled(script.rows), {
+    order: (column: string) => {
+      record("order", column);
+      return settled(script.rows);
+    },
+    limit: (count: number) => {
+      record("limit", count);
+      return settled(script.positions);
+    },
+  });
+  const selection = Object.assign(settled(script.rows), {
+    order: (column: string, options?: { ascending: boolean }) => {
+      record("order", column, options);
+      return sorted;
+    },
+    eq: (column: string, value: string) => {
+      record("eq", column, value);
+      return { maybeSingle: () => settled(script.row) };
+    },
+  });
+  const client = {
     from: () => ({
-      select: (columns) => {
+      select: (columns: string) => {
         record("select", columns);
-        const selection: NotebookSelection = Object.assign(settled(script.rows), {
-          order: (column: string, options?: { ascending: boolean }) => {
-            record("order", column, options);
-            return selection;
-          },
-          limit: (count: number) => {
-            record("limit", count);
-            return settled(script.positions);
-          },
-          eq: (column: string, value: string) => {
-            record("eq", column, value);
-            return { maybeSingle: () => settled(script.row) };
-          },
-        });
         return selection;
       },
-      insert: (values) => {
+      insert: (values: { name: string; position: number }) => {
         record("insert", values);
         return { select: () => ({ single: () => settled(script.inserted) }) };
       },
     }),
-  };
+  } as unknown as NotebookClient;
   return { client, calls };
 }
 

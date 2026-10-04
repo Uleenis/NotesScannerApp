@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type NotebookSummary = { id: string; name: string; pageCount: number };
 
 export type CreateNotebookResult =
@@ -6,31 +8,45 @@ export type CreateNotebookResult =
   | { status: "duplicate"; name: string }
   | { status: "failed" };
 
-type NotebookRow = { id: string; name: string; pages: { count: number }[] };
+export type NotebookClient = Pick<SupabaseClient, "from">;
 
-type Reply<T> = PromiseLike<{ data: T | null; error: { code?: string } | null }>;
-
-export type NotebookSelection = Reply<NotebookRow[]> & {
-  order: (column: string, options?: { ascending: boolean }) => NotebookSelection;
-  limit: (count: number) => Reply<{ position: number }[]>;
-  eq: (column: string, value: string) => { maybeSingle: () => Reply<NotebookRow> };
-};
-
-export type NotebookClient = {
-  from: (table: "notebooks") => {
-    select: (columns: string) => NotebookSelection;
-    insert: (values: { name: string; position: number }) => {
-      select: (columns: string) => { single: () => Reply<{ id: string; name: string }> };
-    };
-  };
-};
-
-const WITH_PAGE_COUNT = "id, name, pages(count)";
 const UNIQUE_VIOLATION = "23505";
 const CHECK_VIOLATION = "23514";
 
-function summarize(row: NotebookRow): NotebookSummary {
-  return { id: row.id, name: row.name, pageCount: row.pages[0]?.count ?? 0 };
+function readPageCount(pages: unknown): number {
+  if (!Array.isArray(pages) || pages.length === 0) {
+    return 0;
+  }
+  const first: unknown = pages[0];
+  if (typeof first === "object" && first !== null && "count" in first && typeof first.count === "number") {
+    return first.count;
+  }
+  return 0;
+}
+
+function readNotebook(value: unknown): NotebookSummary | null {
+  if (typeof value !== "object" || value === null || !("id" in value) || !("name" in value)) {
+    return null;
+  }
+  const { id, name } = value;
+  if (typeof id !== "string" || typeof name !== "string") {
+    return null;
+  }
+  return { id, name, pageCount: "pages" in value ? readPageCount(value.pages) : 0 };
+}
+
+function readNextPosition(rows: unknown): number | null {
+  if (!Array.isArray(rows)) {
+    return null;
+  }
+  if (rows.length === 0) {
+    return 0;
+  }
+  const last: unknown = rows[0];
+  if (typeof last === "object" && last !== null && "position" in last && typeof last.position === "number") {
+    return last.position + 1;
+  }
+  return null;
 }
 
 export async function listNotebooks(client: NotebookClient): Promise<NotebookSummary[]> {
@@ -39,18 +55,26 @@ export async function listNotebooks(client: NotebookClient): Promise<NotebookSum
     .select("id, name, position, pages(count)")
     .order("position")
     .order("id");
-  if (error || !data) {
+  const notebooks = Array.isArray(data) ? data.map(readNotebook) : null;
+  if (error || notebooks === null || notebooks.includes(null)) {
     throw new Error("The notebooks could not be loaded.");
   }
-  return data.map(summarize);
+  return notebooks.filter((notebook) => notebook !== null);
 }
 
 export async function getNotebook(client: NotebookClient, id: string): Promise<NotebookSummary | null> {
-  const { data, error } = await client.from("notebooks").select(WITH_PAGE_COUNT).eq("id", id).maybeSingle();
+  const { data, error } = await client.from("notebooks").select("id, name, pages(count)").eq("id", id).maybeSingle();
   if (error) {
     throw new Error("The notebook could not be loaded.");
   }
-  return data ? summarize(data) : null;
+  if (data === null || data === undefined) {
+    return null;
+  }
+  const notebook = readNotebook(data);
+  if (notebook === null) {
+    throw new Error("The notebook could not be read.");
+  }
+  return notebook;
 }
 
 export async function createNotebook(client: NotebookClient, rawName: string): Promise<CreateNotebookResult> {
@@ -64,10 +88,10 @@ export async function createNotebook(client: NotebookClient, rawName: string): P
       .select("position")
       .order("position", { ascending: false })
       .limit(1);
-    if (last.error) {
+    const position = last.error ? null : readNextPosition(last.data);
+    if (position === null) {
       return { status: "failed" };
     }
-    const position = last.data && last.data.length > 0 ? last.data[0].position + 1 : 0;
     const inserted = await client.from("notebooks").insert({ name, position }).select("id, name").single();
     if (inserted.error?.code === UNIQUE_VIOLATION) {
       return { status: "duplicate", name };
@@ -75,10 +99,8 @@ export async function createNotebook(client: NotebookClient, rawName: string): P
     if (inserted.error?.code === CHECK_VIOLATION) {
       return { status: "empty" };
     }
-    if (inserted.error || !inserted.data) {
-      return { status: "failed" };
-    }
-    return { status: "created", notebook: { id: inserted.data.id, name: inserted.data.name, pageCount: 0 } };
+    const notebook = inserted.error ? null : readNotebook(inserted.data);
+    return notebook === null ? { status: "failed" } : { status: "created", notebook };
   } catch {
     return { status: "failed" };
   }
