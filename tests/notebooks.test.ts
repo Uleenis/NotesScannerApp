@@ -1,4 +1,10 @@
-import { createNotebook, getNotebook, listNotebooks, type NotebookClient } from "@/notebooks/notebooks";
+import {
+  createNotebook,
+  getNotebook,
+  listNotebooks,
+  type NotebookClient,
+  type NotebookSelection,
+} from "@/notebooks/notebooks";
 
 type Outcome<T> = { data: T | null; error: { code?: string } | null };
 type Row = { id: string; name: string; pages: { count: number }[] };
@@ -28,7 +34,7 @@ function fakeClient(script: Script) {
     from: () => ({
       select: (columns) => {
         record("select", columns);
-        const selection = Object.assign(settled(script.rows), {
+        const selection: NotebookSelection = Object.assign(settled(script.rows), {
           order: (column: string, options?: { ascending: boolean }) => {
             record("order", column, options);
             return selection;
