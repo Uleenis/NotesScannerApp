@@ -6,6 +6,12 @@ import { strings } from "@/i18n";
 import { phoneLocale } from "./phone-locale";
 
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
+jest.mock("@/auth/default-services", () => ({
+  defaultAuthServices: {
+    ensureSession: async () => ({ status: "ready", userId: "test-user" }),
+    syncLanguage: async () => true,
+  },
+}));
 
 const mockedUseLocales = jest.mocked(useLocales);
 
