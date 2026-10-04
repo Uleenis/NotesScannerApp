@@ -52,7 +52,6 @@ All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitle
 - TypeScript strict, no `any`, no `@ts-ignore`.
 - Every user-facing string lives in the language files (English and French), never inline.
 - Colors only come from src/theme.ts.
-- Colors only come from src/theme.ts.
 
 ## Security rules
 
@@ -73,4 +72,4 @@ All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitle
 
 ## Expo-managed dependencies
 
-`expo`, `expo-*`, `react`, `react-native`, `@types/react`, `jest`, `jest-expo`, `eslint-config-expo` and `typescript` are pinned by the Expo SDK. Dependabot ignores them. Upgrade them together with `npx expo install --fix`, during an Expo SDK upgrade, never one by one.
+`expo`, `expo-*`, `react`, `react-dom`, `react-native`, `react-native-screens`, `react-native-safe-area-context`, `@types/react`, `jest`, `jest-expo`, `eslint-config-expo` and `typescript` are pinned by the Expo SDK. Dependabot ignores them. Upgrade them together with `npx expo install --fix`, during an Expo SDK upgrade, never one by one.
