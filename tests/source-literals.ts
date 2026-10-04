@@ -12,10 +12,18 @@ const DISPLAYED_KEYS = new Set([
   "accessibilityLabel",
   "accessibilityHint",
   "aria-label",
+  "text",
+  "message",
+  "description",
+  "subtitle",
+  "alt",
 ]);
 
 const COLOR_PATTERN = /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\()/i;
+const TEMPLATE_COLOR = /^(#|rgba?\(|hsla?\()/i;
+const COLOR_KEY =/colou?r$/i;
 const LETTER = /\p{L}/u;
+const ENTITY = /&(#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/gi;
 
 type StringNode = ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.TemplateExpression;
 
@@ -53,6 +61,11 @@ function isDisplayedKey(name: ts.Node): boolean {
   return text !== undefined && DISPLAYED_KEYS.has(text);
 }
 
+function isColorKey(name: ts.Node): boolean {
+  const text = nameText(name);
+  return text !== undefined && COLOR_KEY.test(text);
+}
+
 function isAlertCall(node: ts.CallExpression): boolean {
   const callee = node.expression;
   return (
@@ -63,27 +76,47 @@ function isAlertCall(node: ts.CallExpression): boolean {
   );
 }
 
+const VALUE_OPERATORS = new Set([
+  ts.SyntaxKind.AmpersandAmpersandToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.QuestionQuestionToken,
+]);
+
+function isStringJoin(parent: ts.BinaryExpression): boolean {
+  return parent.operatorToken.kind === ts.SyntaxKind.PlusToken;
+}
+
+function isValuePassThrough(node: ts.Node, parent: ts.Node): boolean | undefined {
+  if (ts.isParenthesizedExpression(parent) || ts.isAsExpression(parent)) {
+    return true;
+  }
+  if (ts.isConditionalExpression(parent)) {
+    return node !== parent.condition;
+  }
+  if (ts.isBinaryExpression(parent)) {
+    return VALUE_OPERATORS.has(parent.operatorToken.kind) || isStringJoin(parent);
+  }
+  return undefined;
+}
+
+function isTextChain(node: ts.Node, parent: ts.Node): boolean {
+  if (ts.isArrayLiteralExpression(parent)) {
+    return true;
+  }
+  if (ts.isPropertyAccessExpression(parent)) {
+    return node === parent.expression;
+  }
+  return ts.isCallExpression(parent) && node === parent.expression && ts.isPropertyAccessExpression(node);
+}
+
 function isDisplayed(start: ts.Node): boolean {
   let node = start;
   for (let parent = node.parent; parent; node = parent, parent = parent.parent) {
-    if (ts.isParenthesizedExpression(parent) || ts.isAsExpression(parent)) {
+    const passThrough = isValuePassThrough(node, parent);
+    if (passThrough === true || (passThrough === undefined && isTextChain(node, parent))) {
       continue;
     }
-    if (ts.isConditionalExpression(parent)) {
-      if (node === parent.condition) {
-        return false;
-      }
-      continue;
-    }
-    if (ts.isBinaryExpression(parent)) {
-      const operator = parent.operatorToken.kind;
-      if (
-        operator === ts.SyntaxKind.AmpersandAmpersandToken ||
-        operator === ts.SyntaxKind.BarBarToken ||
-        operator === ts.SyntaxKind.QuestionQuestionToken
-      ) {
-        continue;
-      }
+    if (passThrough === false) {
       return false;
     }
     if (ts.isJsxExpression(parent)) {
@@ -107,13 +140,37 @@ function isDisplayed(start: ts.Node): boolean {
   return false;
 }
 
+function isColorValue(start: ts.Node): boolean {
+  let node = start;
+  for (let parent = node.parent; parent; node = parent, parent = parent.parent) {
+    const passThrough = isValuePassThrough(node, parent);
+    if (passThrough === true) {
+      continue;
+    }
+    if (passThrough === false) {
+      return false;
+    }
+    if (ts.isJsxExpression(parent)) {
+      return ts.isJsxAttribute(parent.parent) && isColorKey(parent.parent.name);
+    }
+    if (ts.isJsxAttribute(parent)) {
+      return isColorKey(parent.name);
+    }
+    if (ts.isPropertyAssignment(parent)) {
+      return node === parent.initializer && isColorKey(parent.name);
+    }
+    return false;
+  }
+  return false;
+}
+
 export function findHardcodedText(fileName: string, source: string): Finding[] {
   const sourceFile = parse(fileName, source);
   const findings: Finding[] = [];
   visit(sourceFile, (node) => {
     if (ts.isJsxText(node)) {
       const text = node.getText(sourceFile);
-      if (LETTER.test(text)) {
+      if (LETTER.test(text.replace(ENTITY, ""))) {
         const offset = text.length - text.trimStart().length;
         findings.push({ line: lineOf(sourceFile, node.getStart(sourceFile) + offset), text: text.trim() });
       }
@@ -130,7 +187,13 @@ export function findColorLiterals(fileName: string, source: string): Finding[] {
   const sourceFile = parse(fileName, source);
   const findings: Finding[] = [];
   visit(sourceFile, (node) => {
-    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && COLOR_PATTERN.test(node.text)) {
+    if (!isStringNode(node)) {
+      return;
+    }
+    const text = literalText(node);
+    const startsAsColor = ts.isTemplateExpression(node) ? TEMPLATE_COLOR.test(node.head.text) : COLOR_PATTERN.test(text);
+    const namedColor = text !== "" && !ts.isTemplateExpression(node) && isColorValue(node);
+    if (startsAsColor || namedColor) {
       findings.push({ line: lineOf(sourceFile, node.getStart(sourceFile)), text: node.getText(sourceFile).trim() });
     }
   });
