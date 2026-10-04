@@ -2,6 +2,7 @@
   "expo": {
     "name": "NotesScannerApp",
     "slug": "NotesScannerApp",
+    "scheme": "notesscannerapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,7 +22,10 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-localization"
+      "expo-localization",
+      "expo-router",
+      "expo-font",
+      "expo-splash-screen"
     ]
   }
 }

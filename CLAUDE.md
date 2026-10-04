@@ -11,7 +11,11 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 
 ## Layout
 
-- `App.tsx`, `index.ts`: app entry.
+- `src/app/`: routes (Expo Router) and their `_layout.tsx`, nothing else.
+- `src/components/`: shared components.
+- `src/i18n/`: language files (`en.ts`, `fr.ts`) and the choice of language.
+- `src/theme.ts`: colors, fonts and type sizes of the design direction.
+- `tests/`: Jest tests.
 - `supabase/migrations/`: the only way the schema changes.
 - `supabase/functions/`: Edge Functions.
 - `supabase/tests/database/`: pgTAP tests.
@@ -47,6 +51,8 @@ All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitle
 - Everything in English.
 - TypeScript strict, no `any`, no `@ts-ignore`.
 - Every user-facing string lives in the language files (English and French), never inline.
+- Colors only come from src/theme.ts.
+- Colors only come from src/theme.ts.
 
 ## Security rules
 
