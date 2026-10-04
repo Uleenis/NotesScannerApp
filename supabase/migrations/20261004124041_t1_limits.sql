@@ -124,3 +124,22 @@ $$;
 
 revoke all on function public.charge_page(uuid, timestamptz) from public, anon, authenticated;
 grant execute on function public.charge_page(uuid, timestamptz) to service_role;
+
+create function public.my_page_allowance()
+returns table (
+  is_anonymous boolean,
+  used integer,
+  max integer,
+  remaining integer,
+  resets_at timestamptz,
+  blocked_reason text
+)
+language sql
+security definer
+set search_path = ''
+as $$
+  select a.* from public.page_allowance((select auth.uid())) a;
+$$;
+
+revoke all on function public.my_page_allowance() from public, anon, authenticated;
+grant execute on function public.my_page_allowance() to authenticated;
