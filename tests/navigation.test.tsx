@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen } from "expo-router/testing-library";
 
 import { strings } from "@/i18n";
+import { histoire, installFakeNotebooks } from "./fake-notebook-service";
 import { phoneLocale } from "./phone-locale";
 
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
@@ -13,7 +14,15 @@ jest.mock("@/auth/default-services", () => ({
   },
 }));
 
+jest.mock("@/notebooks/service", () => ({
+  notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn() },
+}));
+
 const mockedUseLocales = jest.mocked(useLocales);
+
+beforeEach(() => {
+  installFakeNotebooks([histoire]);
+});
 
 async function openApp(languageCode: string, initialUrl = "/"): Promise<() => string> {
   mockedUseLocales.mockReturnValue([phoneLocale(languageCode)]);
@@ -29,7 +38,7 @@ test.each([
 ] as const)("opens on the library with a phone in %s", async (languageCode, t) => {
   const pathname = await openApp(languageCode);
   expect(pathname()).toBe("/");
-  expect(screen.getByText(t.shell.notebook)).toBeTruthy();
+  expect(await screen.findByText(t.library.notebooks)).toBeTruthy();
 });
 
 test("sends an unknown address back to the library", async () => {
@@ -38,16 +47,26 @@ test("sends an unknown address back to the library", async () => {
 });
 
 test.each([
-  ["notebook", "/notebook/preview"],
   ["page", "/page/preview"],
   ["capture", "/capture"],
   ["signIn", "/sign-in"],
   ["code", "/sign-in/code"],
-] as const)("opens the %s screen from the library", async (name, path) => {
-  const pathname = await openApp("fr");
-  await fireEvent.press(screen.getByText(strings.fr.shell[name]));
+] as const)("opens the %s screen by its address", async (name, path) => {
+  const pathname = await openApp("fr", path);
   expect(pathname()).toBe(path);
   expect(screen.getByText(strings.fr.shell[name])).toBeTruthy();
+});
+
+test("opens a notebook from the library", async () => {
+  const pathname = await openApp("fr");
+  await fireEvent.press(await screen.findByText(histoire.name));
+  expect(pathname()).toBe(`/notebook/${histoire.id}`);
+});
+
+test("opens the capture screen from the library", async () => {
+  const pathname = await openApp("fr");
+  await fireEvent.press(await screen.findByText(strings.fr.common.scan));
+  expect(pathname()).toBe("/capture");
 });
 
 test("opens the account from the library header", async () => {
@@ -57,17 +76,17 @@ test("opens the account from the library header", async () => {
 });
 
 test.each([
-  ["account", () => screen.getByLabelText(strings.fr.account.title), strings.fr.common.done],
-  ["capture", () => screen.getByText(strings.fr.shell.capture), strings.fr.common.cancel],
-  ["sign-in", () => screen.getByText(strings.fr.shell.signIn), strings.fr.common.cancel],
+  ["account", async () => screen.getByLabelText(strings.fr.account.title), strings.fr.common.done],
+  ["capture", async () => screen.findByText(strings.fr.common.scan), strings.fr.common.cancel],
+  ["new-notebook", async () => screen.findByText(strings.fr.library.newNotebook), strings.fr.common.cancel],
 ])("closes the %s screen with its header button", async (_, entry, button) => {
   const pathname = await openApp("fr");
-  await fireEvent.press(entry());
+  await fireEvent.press(await entry());
   await fireEvent.press(screen.getByText(button));
   expect(pathname()).toBe("/");
 });
 
-test.each(["/capture", "/account", "/sign-in"])("keeps the library under %s when the app opens on it", async (path) => {
+test.each(["/capture", "/account", "/sign-in", "/new-notebook"])("keeps the library under %s when the app opens on it", async (path) => {
   const pathname = await openApp("fr", path);
   expect(pathname()).toBe(path);
   await fireEvent.press(screen.getByText(path === "/account" ? strings.fr.common.done : strings.fr.common.cancel));

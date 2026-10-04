@@ -16,6 +16,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/i18n/`: language files (`en.ts`, `fr.ts`) and the choice of language.
 - `src/auth/`: the anonymous account and the provider that opens it when the app starts.
 - `src/lib/`: the Supabase client, its config and the secure session storage.
+- `src/notebooks/`: reading, creating and caching notebooks.
 - `src/theme.ts`: colors, fonts and type sizes of the design direction.
 - `tests/`: Jest tests.
 - `supabase/migrations/`: the only way the schema changes.

@@ -6,6 +6,7 @@ import { defaultAuthServices } from "@/auth/default-services";
 import { strings } from "@/i18n";
 import type { CreateNotebookResult } from "@/notebooks/notebooks";
 import { notebookService } from "@/notebooks/service";
+import { deferred } from "./fake-auth-client";
 import { histoire, installFakeNotebooks, sciences } from "./fake-notebook-service";
 import { phoneLocale } from "./phone-locale";
 
@@ -169,19 +170,18 @@ test("creates the notebook with the OK key of the keyboard", async () => {
 
 test("creates only one notebook when Create is pressed twice quickly", async () => {
   installFakeNotebooks();
-  let finish: (result: CreateNotebookResult) => void = () => undefined;
-  jest.mocked(notebookService.create).mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      }),
-  );
+  const pending = deferred<CreateNotebookResult>();
+  jest.mocked(notebookService.create).mockReturnValue(pending.promise);
   await openNewNotebookSheet();
   await typeName("Histoire");
 
-  await fireEvent.press(screen.getByText(fr.newNotebook.create));
-  await fireEvent.press(screen.getByText(fr.newNotebook.create));
-  await act(async () => finish({ status: "created", notebook: { id: "notebook-1", name: "Histoire", pageCount: 0 } }));
+  const submit = screen.getByLabelText(fr.newNotebook.nameLabel).props.onSubmitEditing as () => Promise<void>;
+
+  await act(async () => {
+    const attempts = [submit(), submit()];
+    pending.resolve({ status: "created", notebook: { id: "notebook-1", name: "Histoire", pageCount: 0 } });
+    await Promise.all(attempts);
+  });
 
   expect(notebookService.create).toHaveBeenCalledTimes(1);
 });
