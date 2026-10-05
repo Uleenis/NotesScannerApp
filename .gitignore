@@ -48,3 +48,5 @@ supabase/.temp/
 supabase/.branches/
 
 __pycache__/
+
+deno.lock
