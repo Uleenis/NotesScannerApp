@@ -266,6 +266,47 @@ Deno.test({
         assertEquals((await pageRow(fourth)).status, "queued");
       });
 
+      await t.step("the server store refuses to touch a page in the name of another user", async () => {
+        const alice = await account();
+        const bob = await account();
+        const { pageId } = await newPage(alice);
+        const server = createServerStore(keys);
+        assertEquals(await server.claimForReading(bob.id, pageId), false);
+        assertEquals((await pageRow(pageId)).status, "queued");
+        assertEquals(await server.claimForReading(alice.id, pageId), true);
+        let refused = 0;
+        const attempts = [
+          () => server.markRead(bob.id, pageId, new Date().toISOString()),
+          () => server.releaseToQueue(bob.id, pageId, "read_error"),
+          () => server.insertReading(bob.id, pageId, {
+            label: "B1",
+            rawText: "x",
+            model: "m",
+            modelVersion: "m",
+            promptVersion: "v0",
+            thinkingBudget: 0,
+            inputTokens: 1,
+            outputTokens: 1,
+            durationMs: 1,
+          }),
+          () => server.upsertPageText(bob.id, pageId, "x", "b1-raw"),
+          () => server.recordOriginalImage(bob.id, pageId, `${bob.id}/${pageId}/original.jpg`),
+        ];
+        for (const attempt of attempts) {
+          try {
+            await attempt();
+          } catch {
+            refused++;
+          }
+        }
+        assertEquals(refused, attempts.length);
+        const page = await pageRow(pageId);
+        assertEquals(page.status, "processing");
+        assertEquals((await rows("readings", pageId)).length, 0);
+        assertEquals((await rows("page_texts", pageId)).length, 0);
+        assertEquals((await rows("page_images", pageId)).length, 0);
+      });
+
       await t.step("the logs hold neither the text nor the upload token", () => {
         const all = logLines.join("\n");
         assert(all.length > 0);

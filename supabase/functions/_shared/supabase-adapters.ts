@@ -58,8 +58,8 @@ function first(data: unknown): Row | null {
   return Array.isArray(data) ? row(data[0]) : row(data);
 }
 
-export function createAuth(keys: Keys): Auth {
-  const client = createClient(keys.url, keys.publishableKey, { auth: NO_SESSION });
+export function createAuth(keys: Keys, fetchImpl?: typeof fetch): Auth {
+  const client = createClient(keys.url, keys.publishableKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
   return {
     verify: async (token) => {
       const { data, error } = await client.auth.getUser(token);
@@ -68,10 +68,10 @@ export function createAuth(keys: Keys): Auth {
   };
 }
 
-export function createCallerStore(keys: Keys, token: string): CallerStore {
+export function createCallerStore(keys: Keys, token: string, fetchImpl?: typeof fetch): CallerStore {
   const client: SupabaseClient = createClient(keys.url, keys.publishableKey, {
     auth: NO_SESSION,
-    global: { headers: { Authorization: `Bearer ${token}` } },
+    global: { headers: { Authorization: `Bearer ${token}` }, fetch: fetchImpl },
   });
   return {
     getPage: async (pageId): Promise<PageRow | null> => {
@@ -109,8 +109,8 @@ export function createCallerStore(keys: Keys, token: string): CallerStore {
   };
 }
 
-export function createServerStore(keys: Keys): ServerStore {
-  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION });
+export function createServerStore(keys: Keys, fetchImpl?: typeof fetch): ServerStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
   return {
     charge: async (pageId): Promise<ChargeResult> => {
       const { data, error } = await client.rpc("charge_page", { p_page_id: pageId });

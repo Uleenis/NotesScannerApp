@@ -49,6 +49,15 @@ Deno.test("prepare-page treats the page of another user as not found", async () 
   assertEquals(world.uploadPaths, []);
 });
 
+Deno.test("prepare-page still refuses a page of another user when the row rules let it through", async () => {
+  const world = new World();
+  world.addPage(BOB);
+  world.brokenRowLevelSecurity = true;
+  const response = await call(world, TOKEN_ALICE);
+  assertEquals(response.status, 404);
+  assertEquals(world.uploadPaths, []);
+});
+
 Deno.test("prepare-page treats an unknown page as not found", async () => {
   const world = new World();
   const response = await call(world, TOKEN_ALICE);

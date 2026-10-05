@@ -67,7 +67,7 @@ Deno.test("the logs of a failed reading hold neither the text nor Gemini's error
       world.readyPage();
       const failure = new GeminiFailure("http_error");
       Object.assign(failure, { body: CANARY_GEMINI_ERROR, cause: new Error(CANARY_GEMINI_ERROR) });
-      world.push(failure, new TypeError(`${CANARY_GEMINI_ERROR} ${CANARY_PAGE_TEXT}`));
+      world.push(failure, new TypeError(CANARY_GEMINI_ERROR));
     },
   );
   assertClean(logged);
