@@ -5,6 +5,7 @@ import { handleReadPage } from "../read-page/handler.ts";
 import { handlePreparePage } from "../prepare-page/handler.ts";
 import { GeminiFailure } from "../_shared/gemini.ts";
 import {
+  ALICE,
   BOB,
   CANARY_EXCEPTION,
   CANARY_GEMINI_ERROR,
