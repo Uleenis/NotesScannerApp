@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, isAuthRetryableFetchError } from "npm:@supabase/supabase-js@2";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type {
   Allowance,
@@ -48,6 +48,11 @@ export function readKeys(get: (name: string) => string | undefined): Keys {
   return { url, publishableKey, secretKey };
 }
 
+function isNotFound(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null ? (error as Record<string, unknown>).statusCode : null;
+  return String(code) === "404";
+}
+
 const NO_SESSION = { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false };
 
 function row(value: unknown): Row | null {
@@ -63,7 +68,11 @@ export function createAuth(keys: Keys, fetchImpl?: typeof fetch): Auth {
   return {
     verify: async (token) => {
       const { data, error } = await client.auth.getUser(token);
-      return error || !data.user ? null : { userId: data.user.id };
+      if (error) {
+        if (isAuthRetryableFetchError(error) || (error.status ?? 0) >= 500) throw new StoreError("verify");
+        return null;
+      }
+      return data.user ? { userId: data.user.id } : null;
     },
   };
 }
@@ -98,12 +107,20 @@ export function createCallerStore(keys: Keys, token: string, fetchImpl?: typeof 
     },
     photoInfo: async (path): Promise<PhotoInfo | null> => {
       const { data, error } = await client.storage.from(BUCKET).info(path);
-      if (error || !data) return null;
+      if (error) {
+        if (isNotFound(error)) return null;
+        throw new StoreError("photoInfo");
+      }
+      if (!data) return null;
       return { size: typeof data.size === "number" ? data.size : Number.MAX_SAFE_INTEGER, mimeType: typeof data.contentType === "string" ? data.contentType : null };
     },
     downloadPhoto: async (path): Promise<Uint8Array | null> => {
       const { data, error } = await client.storage.from(BUCKET).download(path);
-      if (error || !data) throw new StoreError("downloadPhoto");
+      if (error) {
+        if (isNotFound(error)) return null;
+        throw new StoreError("downloadPhoto");
+      }
+      if (!data) throw new StoreError("downloadPhoto");
       return new Uint8Array(await data.arrayBuffer());
     },
   };

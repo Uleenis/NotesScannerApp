@@ -110,6 +110,21 @@ Deno.test("the logs of an unexpected exception hold only its class name [16]", a
   assert(logged.includes("Error"));
 });
 
+Deno.test("the logs of a result that cannot be written hold only the class name of the exception [16]", async () => {
+  for (const step of ["insertReading", "upsertPageText", "markRead"]) {
+    const logged = await everythingLogged(
+      (world) => read(world),
+      (world) => {
+        world.readyPage();
+        world.push({ text: CANARY_PAGE_TEXT, modelVersion: null, inputTokens: 5, outputTokens: 6, thoughtsTokens: 0 });
+        world.failOn.add(step);
+      },
+    );
+    assertClean(logged);
+    assert(logged.includes("Error"));
+  }
+});
+
 Deno.test("a page id that is not a UUID is refused before it can reach a log [16]", async () => {
   const world = new World();
   const spy = capture();

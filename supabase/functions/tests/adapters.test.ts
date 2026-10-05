@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createCallerStore, createServerStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAuth, createCallerStore, createServerStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -155,4 +155,51 @@ Deno.test("missing keys stop the function without printing any value", () => {
     thrown = error;
   }
   assertEquals(thrown instanceof StoreError, true);
+});
+
+function answer(status: number, body: unknown): typeof fetch {
+  return (() => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }))) as typeof fetch;
+}
+
+async function thrownBy(run: () => Promise<unknown>): Promise<unknown> {
+  try {
+    await run();
+  } catch (error) {
+    return error;
+  }
+  return null;
+}
+
+const STORAGE_NOT_FOUND = { statusCode: "404", error: "not_found", message: "Object not found" };
+const STORAGE_BROKEN = { statusCode: "500", error: "internal", message: "Internal error" };
+
+Deno.test("a photo that is not in the storage is a missing photo, whether it is checked or downloaded", async () => {
+  const store = createCallerStore(KEYS, "caller-token", answer(400, STORAGE_NOT_FOUND));
+  assertEquals(await store.photoInfo("a/b/original.jpg"), null);
+  assertEquals(await store.downloadPhoto("a/b/original.jpg"), null);
+});
+
+Deno.test("a storage failure is an error, never a missing photo", async () => {
+  const store = createCallerStore(KEYS, "caller-token", answer(500, STORAGE_BROKEN));
+  assertEquals((await thrownBy(() => store.photoInfo("a/b/original.jpg"))) instanceof StoreError, true);
+  assertEquals((await thrownBy(() => store.downloadPhoto("a/b/original.jpg"))) instanceof StoreError, true);
+});
+
+Deno.test("a token the accounts service rejects is no caller", async () => {
+  const auth = createAuth(KEYS, answer(403, { code: 403, error_code: "bad_jwt", msg: "invalid JWT" }));
+  assertEquals(await auth.verify("garbage"), null);
+});
+
+Deno.test("an accounts service that cannot answer is an error, never a rejected token", async () => {
+  const unreachable = createAuth(KEYS, (() => Promise.reject(new TypeError("unreachable"))) as typeof fetch);
+  assertEquals((await thrownBy(() => unreachable.verify("token"))) instanceof StoreError, true);
+  const broken = createAuth(KEYS, answer(500, { code: 500, error_code: "unexpected_failure", msg: "broken" }));
+  assertEquals((await thrownBy(() => broken.verify("token"))) instanceof StoreError, true);
+  const unavailable = createAuth(KEYS, answer(503, { code: 503, msg: "unavailable" }));
+  assertEquals((await thrownBy(() => unavailable.verify("token"))) instanceof StoreError, true);
+});
+
+Deno.test("a valid token gives the id of its account", async () => {
+  const auth = createAuth(KEYS, answer(200, { id: ALICE, aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-10-01T00:00:00Z" }));
+  assertEquals(await auth.verify("token"), { userId: ALICE });
 });

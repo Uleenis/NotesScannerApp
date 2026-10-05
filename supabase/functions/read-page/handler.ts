@@ -86,12 +86,12 @@ export async function handleReadPage(request: Request, deps: ReadPageDeps): Prom
     if (!image) return refuse(deps.log, PHOTO_MISSING, pageId);
     if (image.length > MAX_PHOTO_BYTES) return refuse(deps.log, PHOTO_TOO_LARGE, pageId);
     if (!looksLikeJpeg(image)) return refuse(deps.log, PHOTO_NOT_JPEG, pageId);
-    await deps.server.recordOriginalImage(userId, pageId, path);
 
     const charge = await deps.server.charge(pageId);
     const refused = refusalForCharge(charge.reason);
     if (refused) return refuse(deps.log, refused, pageId);
     deps.log.event("charged", { pageId, code: charge.reason });
+    await deps.server.recordOriginalImage(userId, pageId, path);
 
     if (!(await deps.server.claimForReading(userId, pageId))) {
       return refuse(deps.log, { status: 409, code: "page_processing" }, pageId);

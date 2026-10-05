@@ -215,6 +215,7 @@ for (const [reason, status, code] of CHARGE_CASES) {
     assertEquals(world.calls.includes("claim"), false);
     assertEquals(world.page().status, "queued");
     assertEquals(world.readings, []);
+    assertEquals(world.pageImages, []);
   });
 }
 
@@ -233,7 +234,7 @@ Deno.test("read-page checks the owner, then the photo, then charges, then claims
   const world = new World();
   world.readyPage();
   await call(world, TOKEN_ALICE);
-  const order = ["getPage", "photoInfo", "download", "recordOriginalImage", "charge", "claim", "gemini", "insertReading", "upsertPageText", "markRead"];
+  const order = ["getPage", "photoInfo", "download", "charge", "recordOriginalImage", "claim", "gemini", "insertReading", "upsertPageText", "markRead"];
   assertEquals(world.calls, order);
 });
 
@@ -288,4 +289,28 @@ Deno.test("read-page sends Gemini the original photo bytes", async () => {
   world.readyPage();
   await call(world, TOKEN_ALICE);
   assertEquals(world.geminiImages, [JPEG_BYTES]);
+});
+
+Deno.test("read-page refuses a photo that disappears between the check and the download, and counts nothing", async () => {
+  const world = new World();
+  world.readyPage();
+  const deps = world.readDeps();
+  const forCaller = deps.forCaller;
+  deps.forCaller = (token) => ({ ...forCaller(token), downloadPhoto: () => Promise.resolve(null) });
+  const response = await handleReadPage(post(TOKEN_ALICE, { page_id: PAGE_ID }), deps);
+  assertEquals(response.status, 422);
+  assertEquals(await readJson(response), { error: "photo_missing" });
+  assertUntouched(world);
+  assertEquals(world.pageImages, []);
+});
+
+Deno.test("read-page answers 500 and counts nothing when the accounts service cannot be reached", async () => {
+  const world = new World();
+  world.readyPage();
+  const deps = world.readDeps();
+  deps.auth = { verify: () => Promise.reject(new TypeError("unreachable")) };
+  const response = await handleReadPage(post(TOKEN_ALICE, { page_id: PAGE_ID }), deps);
+  assertEquals(response.status, 500);
+  assertEquals(await readJson(response), { error: "internal_error" });
+  assertUntouched(world);
 });
