@@ -34,7 +34,9 @@
     "db:stop": "supabase stop",
     "db:test": "supabase test db",
     "db:test:concurrency": "bash supabase/tests/concurrency/charge-page.sh",
-    "functions:test": "deno test --allow-env --allow-net --permit-no-files supabase/functions",
+    "functions:test": "deno test --node-modules-dir=none --allow-env --allow-net --permit-no-files supabase/functions",
+    "functions:check": "deno check --node-modules-dir=none \"supabase/functions/**/*.ts\"",
+    "functions:lint": "deno lint --rules-exclude=no-import-prefix supabase/functions",
     "audit": "audit-ci --config audit-ci.json"
   },
   "private": true,

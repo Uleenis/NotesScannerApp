@@ -36,6 +36,8 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 | `npm run db:start` / `npm run db:stop` | Start or stop the local Supabase stack (Docker) |
 | `npm run db:test` | pgTAP tests on the local database |
 | `npm run db:test:concurrency` | Parallel `charge_page` calls on the local database (needs `db:start`) |
+| `npm run functions:check` | Deno type check of the Edge Functions |
+| `npm run functions:lint` | Deno lint of the Edge Functions |
 | `npm run functions:test` | Deno tests of the Edge Functions |
 
 All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitleaks.

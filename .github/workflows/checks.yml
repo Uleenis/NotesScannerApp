@@ -29,7 +29,9 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno test --allow-env --allow-net --permit-no-files supabase/functions
+      - run: npm run functions:check
+      - run: npm run functions:lint
+      - run: npm run functions:test
 
   database:
     runs-on: ubuntu-latest
