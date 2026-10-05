@@ -7,7 +7,11 @@ export type BlockReason = "monthly_limit" | "anonymous_limit" | "anonymous_daily
 
 export type ChargeReason = "charged" | "already_charged" | "page_not_found" | BlockReason;
 
-export type PageRow = { id: string; userId: string; status: PageStatus };
+export type QueueReason = "read_error" | "offline";
+
+export type PageRow = { id: string; userId: string; status: PageStatus; queueReason: QueueReason | null; retryCount: number };
+
+export type ClaimExpectation = { queueReason: QueueReason | null; retryCount: number };
 
 export type Allowance = {
   isAnonymous: boolean;
@@ -50,11 +54,12 @@ export type CallerStore = {
 export type ServerStore = {
   charge: (pageId: string) => Promise<ChargeResult>;
   recordOriginalImage: (userId: string, pageId: string, path: string) => Promise<void>;
-  claimForReading: (userId: string, pageId: string) => Promise<boolean>;
+  claimForReading: (userId: string, pageId: string, expected: ClaimExpectation) => Promise<boolean>;
   insertReading: (userId: string, pageId: string, reading: ReadingInput) => Promise<void>;
   upsertPageText: (userId: string, pageId: string, text: string, pipelineVersion: string) => Promise<void>;
   markRead: (userId: string, pageId: string, readAt: string) => Promise<void>;
-  releaseToQueue: (userId: string, pageId: string, reason: "read_error") => Promise<void>;
+  releaseToQueue: (userId: string, pageId: string, reason: "read_error", retryCount: number) => Promise<void>;
+  markFailed: (userId: string, pageId: string, retryCount: number) => Promise<void>;
   createUploadUrl: (path: string) => Promise<{ signedUrl: string; token: string }>;
 };
 

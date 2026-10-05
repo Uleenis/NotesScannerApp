@@ -10,6 +10,7 @@ import type {
   PageStatus,
   PhotoInfo,
   PreparePageDeps,
+  QueueReason,
   ReadingInput,
   ReadPageDeps,
   ServerStore,
@@ -55,7 +56,7 @@ type FakePage = {
   id: string;
   userId: string;
   status: PageStatus;
-  queueReason: string | null;
+  queueReason: QueueReason | null;
   retryCount: number;
   readAt: string | null;
 };
@@ -71,6 +72,7 @@ export class World {
   photos = new Map<string, FakePhoto>();
   charges: { userId: string; pageId: string }[] = [];
   chargeArguments: unknown[][] = [];
+  claimArguments: unknown[][] = [];
   readings: StoredReading[] = [];
   pageTexts = new Map<string, { userId: string; text: string; pipelineVersion: string }>();
   pageImages: { userId: string; pageId: string; path: string; kind: string }[] = [];
@@ -151,7 +153,7 @@ export class World {
         await this.tick("getPage");
         const page = this.pages.get(pageId);
         if (!page || !visible(page.userId)) return null;
-        return { id: page.id, userId: page.userId, status: page.status };
+        return { id: page.id, userId: page.userId, status: page.status, queueReason: page.queueReason, retryCount: page.retryCount };
       },
       allowance: async (): Promise<Allowance | null> => {
         await this.tick("allowance");
@@ -193,10 +195,13 @@ export class World {
           this.pageImages.push({ userId, pageId, path, kind: "original" });
         }
       },
-      claimForReading: async (userId, pageId) => {
+      claimForReading: async (userId, pageId, expected) => {
+        this.claimArguments.push([userId, pageId, expected]);
         await this.tick("claim");
         const page = this.pages.get(pageId);
         if (!page || page.userId !== userId || page.status !== "queued") return false;
+        if (page.queueReason !== expected.queueReason || page.retryCount !== expected.retryCount) return false;
+        page.queueReason = null;
         page.status = "processing";
         return true;
       },
@@ -220,12 +225,21 @@ export class World {
         page.readAt = readAt;
         page.queueReason = null;
       },
-      releaseToQueue: async (userId, pageId, reason) => {
+      releaseToQueue: async (userId, pageId, reason, retryCount) => {
         await this.tick("releaseToQueue");
         const page = this.pages.get(pageId);
         if (!page || page.userId !== userId || page.status !== "processing") throw new Error("write for another owner or state");
         page.status = "queued";
         page.queueReason = reason;
+        page.retryCount = retryCount;
+      },
+      markFailed: async (userId, pageId, retryCount) => {
+        await this.tick("markFailed");
+        const page = this.pages.get(pageId);
+        if (!page || page.userId !== userId || page.status !== "processing") throw new Error("write for another owner or state");
+        page.status = "failed";
+        page.queueReason = null;
+        page.retryCount = retryCount;
       },
       createUploadUrl: async (path) => {
         await this.tick("createUploadUrl");

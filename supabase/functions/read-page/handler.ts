@@ -3,7 +3,7 @@ import type { GeminiReading } from "../_shared/gemini.ts";
 import { admit, failed, json, refuse } from "../_shared/http.ts";
 import { looksLikeJpeg, MAX_PHOTO_BYTES, PHOTO_MIME_TYPE, photoPath } from "../_shared/photo.ts";
 import { errorName } from "../_shared/log.ts";
-import type { ReadPageDeps } from "../_shared/ports.ts";
+import type { PageRow, ReadPageDeps } from "../_shared/ports.ts";
 import { PROMPT_VERSION } from "../_shared/prompt.ts";
 import { refusalForCharge, refusalForStatus } from "../_shared/refusals.ts";
 import type { Refusal } from "../_shared/refusals.ts";
@@ -11,6 +11,8 @@ import type { Refusal } from "../_shared/refusals.ts";
 export const PIPELINE_VERSION = "b1-raw";
 
 const ATTEMPTS = 2;
+
+const MAX_RELAUNCHES = 3;
 
 const PHOTO_MISSING: Refusal = { status: 422, code: "photo_missing" };
 const PHOTO_NOT_JPEG: Refusal = { status: 422, code: "photo_not_jpeg" };
@@ -31,9 +33,15 @@ async function attemptReading(deps: ReadPageDeps, pageId: string, image: Uint8Ar
   return null;
 }
 
-async function queueForRetry(deps: ReadPageDeps, userId: string, pageId: string): Promise<Response> {
-  await deps.server.releaseToQueue(userId, pageId, "read_error");
-  deps.log.event("read_queued", { pageId, code: "read_error" });
+async function queueForRetry(deps: ReadPageDeps, userId: string, page: PageRow): Promise<Response> {
+  const failedRelaunches = page.retryCount + (page.queueReason === "read_error" ? 1 : 0);
+  if (failedRelaunches >= MAX_RELAUNCHES) {
+    await deps.server.markFailed(userId, page.id, MAX_RELAUNCHES);
+    deps.log.event("read_failed", { pageId: page.id, code: "relaunches_exhausted" });
+    return json(200, { status: "failed" });
+  }
+  await deps.server.releaseToQueue(userId, page.id, "read_error", failedRelaunches);
+  deps.log.event("read_queued", { pageId: page.id, code: "read_error" });
   return json(200, { status: "queued", queue_reason: "read_error" });
 }
 
@@ -93,17 +101,17 @@ export async function handleReadPage(request: Request, deps: ReadPageDeps): Prom
     deps.log.event("charged", { pageId, code: charge.reason });
     await deps.server.recordOriginalImage(userId, pageId, path);
 
-    if (!(await deps.server.claimForReading(userId, pageId))) {
+    if (!(await deps.server.claimForReading(userId, pageId, { queueReason: page.queueReason, retryCount: page.retryCount }))) {
       return refuse(deps.log, { status: 409, code: "page_processing" }, pageId);
     }
 
     const done = await attemptReading(deps, pageId, image);
-    if (!done) return await queueForRetry(deps, userId, pageId);
+    if (!done) return await queueForRetry(deps, userId, page);
     try {
       await storeReading(deps, userId, pageId, done);
     } catch (error) {
       deps.log.event("unexpected_error", { errorName: errorName(error) });
-      return await queueForRetry(deps, userId, pageId);
+      return await queueForRetry(deps, userId, page);
     }
     return json(200, { status: "read" });
   } catch (error) {

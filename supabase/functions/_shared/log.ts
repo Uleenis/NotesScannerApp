@@ -5,6 +5,7 @@ export type LogEvent =
   | "gemini_attempt_failed"
   | "read_done"
   | "read_queued"
+  | "read_failed"
   | "unexpected_error";
 
 export type LogFields = {

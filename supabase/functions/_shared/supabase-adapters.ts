@@ -7,15 +7,18 @@ import type {
   CallerStore,
   ChargeReason,
   ChargeResult,
+  ClaimExpectation,
   PageRow,
   PageStatus,
   PhotoInfo,
+  QueueReason,
   ServerStore,
 } from "./ports.ts";
 
 const BUCKET = "photos";
 
 const PAGE_STATUSES: readonly string[] = ["queued", "processing", "read", "failed"];
+const QUEUE_REASONS: readonly string[] = ["read_error", "offline"];
 const BLOCK_REASONS: readonly string[] = ["monthly_limit", "anonymous_limit", "anonymous_daily_cap"];
 const CHARGE_REASONS: readonly string[] = ["charged", "already_charged", "page_not_found", ...BLOCK_REASONS];
 
@@ -84,11 +87,20 @@ export function createCallerStore(keys: Keys, token: string, fetchImpl?: typeof 
   });
   return {
     getPage: async (pageId): Promise<PageRow | null> => {
-      const { data, error } = await client.from("pages").select("id, user_id, status").eq("id", pageId).maybeSingle();
+      const { data, error } = await client.from("pages").select("id, user_id, status, queue_reason, retry_count").eq("id", pageId).maybeSingle();
       if (error) throw new StoreError("getPage");
       const found = row(data);
       if (!found || typeof found.id !== "string" || typeof found.user_id !== "string" || !PAGE_STATUSES.includes(String(found.status))) return null;
-      return { id: found.id, userId: found.user_id, status: found.status as PageStatus };
+      const queueReason = found.queue_reason;
+      if (queueReason !== null && !QUEUE_REASONS.includes(String(queueReason))) return null;
+      if (!Number.isInteger(found.retry_count)) return null;
+      return {
+        id: found.id,
+        userId: found.user_id,
+        status: found.status as PageStatus,
+        queueReason: queueReason as QueueReason | null,
+        retryCount: found.retry_count as number,
+      };
     },
     allowance: async (): Promise<Allowance | null> => {
       const { data, error } = await client.rpc("my_page_allowance");
@@ -143,14 +155,15 @@ export function createServerStore(keys: Keys, fetchImpl?: typeof fetch): ServerS
         .upsert({ user_id: userId, page_id: pageId, kind: "original", storage_path: path }, { onConflict: "storage_path", ignoreDuplicates: true });
       if (error) throw new StoreError("recordOriginalImage");
     },
-    claimForReading: async (userId, pageId) => {
-      const { data, error } = await client
+    claimForReading: async (userId, pageId, expected: ClaimExpectation) => {
+      const claim = client
         .from("pages")
         .update({ status: "processing", queue_reason: null })
         .eq("id", pageId)
         .eq("user_id", userId)
         .eq("status", "queued")
-        .select("id");
+        .eq("retry_count", expected.retryCount);
+      const { data, error } = await (expected.queueReason === null ? claim.is("queue_reason", null) : claim.eq("queue_reason", expected.queueReason)).select("id");
       if (error) throw new StoreError("claimForReading");
       return Array.isArray(data) && data.length === 1;
     },
@@ -186,15 +199,25 @@ export function createServerStore(keys: Keys, fetchImpl?: typeof fetch): ServerS
         .select("id");
       if (error || !Array.isArray(data) || data.length !== 1) throw new StoreError("markRead");
     },
-    releaseToQueue: async (userId, pageId, reason) => {
+    releaseToQueue: async (userId, pageId, reason, retryCount) => {
       const { data, error } = await client
         .from("pages")
-        .update({ status: "queued", queue_reason: reason })
+        .update({ status: "queued", queue_reason: reason, retry_count: retryCount })
         .eq("id", pageId)
         .eq("user_id", userId)
         .eq("status", "processing")
         .select("id");
       if (error || !Array.isArray(data) || data.length !== 1) throw new StoreError("releaseToQueue");
+    },
+    markFailed: async (userId, pageId, retryCount) => {
+      const { data, error } = await client
+        .from("pages")
+        .update({ status: "failed", queue_reason: null, retry_count: retryCount })
+        .eq("id", pageId)
+        .eq("user_id", userId)
+        .eq("status", "processing")
+        .select("id");
+      if (error || !Array.isArray(data) || data.length !== 1) throw new StoreError("markFailed");
     },
     createUploadUrl: async (path) => {
       const { data, error } = await client.storage.from(BUCKET).createSignedUploadUrl(path);

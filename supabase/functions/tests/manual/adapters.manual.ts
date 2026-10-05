@@ -271,13 +271,14 @@ Deno.test({
         const bob = await account();
         const { pageId } = await newPage(alice);
         const server = createServerStore(keys);
-        assertEquals(await server.claimForReading(bob.id, pageId), false);
+        assertEquals(await server.claimForReading(bob.id, pageId, { queueReason: null, retryCount: 0 }), false);
         assertEquals((await pageRow(pageId)).status, "queued");
-        assertEquals(await server.claimForReading(alice.id, pageId), true);
+        assertEquals(await server.claimForReading(alice.id, pageId, { queueReason: null, retryCount: 0 }), true);
         let refused = 0;
         const attempts = [
           () => server.markRead(bob.id, pageId, new Date().toISOString()),
-          () => server.releaseToQueue(bob.id, pageId, "read_error"),
+          () => server.releaseToQueue(bob.id, pageId, "read_error", 1),
+          () => server.markFailed(bob.id, pageId, 3),
           () => server.insertReading(bob.id, pageId, {
             label: "B1",
             rawText: "x",
@@ -305,6 +306,38 @@ Deno.test({
         assertEquals((await rows("readings", pageId)).length, 0);
         assertEquals((await rows("page_texts", pageId)).length, 0);
         assertEquals((await rows("page_images", pageId)).length, 0);
+      });
+
+      await t.step("a page that always fails is read four times at most, charged once, and then fails for good", async () => {
+        const alice = await account();
+        const { pageId } = await newPage(alice);
+        await prepareAndUpload(alice, pageId);
+        geminiCalls = 0;
+        const answers: unknown[] = [];
+        const counts: unknown[] = [];
+        for (let i = 0; i < 4; i++) {
+          geminiOutcomes = [new GeminiFailure("http_error"), new GeminiFailure("timeout")];
+          answers.push(await body(await handleReadPage(request(alice.token, pageId), readDeps)));
+          counts.push((await pageRow(pageId)).retry_count);
+        }
+        assertEquals(answers, [
+          { status: "queued", queue_reason: "read_error" },
+          { status: "queued", queue_reason: "read_error" },
+          { status: "queued", queue_reason: "read_error" },
+          { status: "failed" },
+        ]);
+        assertEquals(counts, [0, 1, 2, 3]);
+        const page = await pageRow(pageId);
+        assertEquals(page.status, "failed");
+        assertEquals(page.queue_reason, null);
+        assertEquals(geminiCalls, 8);
+        assertEquals((await rows("page_charges", pageId)).length, 1);
+        const fifth = await handleReadPage(request(alice.token, pageId), readDeps);
+        assertEquals(fifth.status, 409);
+        assertEquals(await body(fifth), { error: "page_failed" });
+        assertEquals(geminiCalls, 8);
+        const still = await alice.client.storage.from("photos").info(`${alice.id}/${pageId}/original.jpg`);
+        assert(!still.error);
       });
 
       await t.step("the logs hold neither the text nor the upload token", () => {
