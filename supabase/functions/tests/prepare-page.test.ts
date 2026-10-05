@@ -1,6 +1,6 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import { handlePreparePage } from "../prepare-page/handler.ts";
-import { ALICE, BOB, CANARY_UPLOAD_TOKEN, OPEN_ALLOWANCE, PAGE_ID, post, readJson, TOKEN_ALICE, TOKEN_BOB, World } from "./fakes.ts";
+import { ALICE, BOB, CANARY_UPLOAD_TOKEN, OPEN_ALLOWANCE, PAGE_ID, post, readJson, TOKEN_ALICE, World } from "./fakes.ts";
 
 function call(world: World, token: string | null, body: unknown = { page_id: PAGE_ID }) {
   return handlePreparePage(post(token, body), world.prepareDeps());
