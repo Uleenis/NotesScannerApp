@@ -148,6 +148,6 @@ Deno.test("a reading logs its usage and duration but never the content [16]", as
   world.geminiDurationMs = 321;
   await read(world);
   const done = world.logs.find((l) => l.event === "read_done");
-  assertEquals(done?.fields, { pageId: PAGE_ID, durationMs: 321, inputTokens: 1100, outputTokens: 216 });
+  assertEquals(done?.fields, { pageId: PAGE_ID, durationMs: 321, inputTokens: 1100, outputTokens: 216, thoughtsTokens: 0 });
   assert(world.logs.every((l) => !JSON.stringify(l).includes("First line")));
 });

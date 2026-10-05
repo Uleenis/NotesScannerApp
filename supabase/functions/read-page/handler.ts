@@ -53,7 +53,13 @@ async function storeReading(deps: ReadPageDeps, userId: string, pageId: string, 
   });
   await deps.server.upsertPageText(userId, pageId, reading.text, PIPELINE_VERSION);
   await deps.server.markRead(userId, pageId, new Date(deps.clock.now()).toISOString());
-  deps.log.event("read_done", { pageId, durationMs, inputTokens: reading.inputTokens, outputTokens });
+  deps.log.event("read_done", {
+    pageId,
+    durationMs,
+    inputTokens: reading.inputTokens,
+    outputTokens,
+    thoughtsTokens: reading.thoughtsTokens,
+  });
 }
 
 export async function handleReadPage(request: Request, deps: ReadPageDeps): Promise<Response> {

@@ -16,6 +16,7 @@ export type LogFields = {
   durationMs?: number;
   inputTokens?: number;
   outputTokens?: number;
+  thoughtsTokens?: number;
   errorName?: string;
 };
 
@@ -27,7 +28,7 @@ const MAX_WORD_LENGTH = 64;
 const PLAIN_WORD = /^[A-Za-z0-9_.:-]+$/;
 
 const WORD_FIELDS = ["pageId", "code", "kind", "errorName"] as const;
-const NUMBER_FIELDS = ["status", "attempt", "durationMs", "inputTokens", "outputTokens"] as const;
+const NUMBER_FIELDS = ["status", "attempt", "durationMs", "inputTokens", "outputTokens", "thoughtsTokens"] as const;
 
 export function createLogger(sink: (line: string) => void): Logger {
   return {
