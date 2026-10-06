@@ -8,6 +8,7 @@ import type {
   ChargeReason,
   ChargeResult,
   ClaimExpectation,
+  PageReader,
   PageRow,
   PageStatus,
   PhotoInfo,
@@ -80,41 +81,29 @@ export function createAuth(keys: Keys, fetchImpl?: typeof fetch): Auth {
   };
 }
 
-export function createCallerStore(keys: Keys, token: string, fetchImpl?: typeof fetch): CallerStore {
-  const client: SupabaseClient = createClient(keys.url, keys.publishableKey, {
-    auth: NO_SESSION,
-    global: { headers: { Authorization: `Bearer ${token}` }, fetch: fetchImpl },
-  });
+function pageReader(client: SupabaseClient): PageReader {
   return {
     getPage: async (pageId): Promise<PageRow | null> => {
-      const { data, error } = await client.from("pages").select("id, user_id, status, queue_reason, retry_count").eq("id", pageId).maybeSingle();
+      const { data, error } = await client
+        .from("pages")
+        .select("id, user_id, status, queue_reason, retry_count, manual_relaunched_at")
+        .eq("id", pageId)
+        .maybeSingle();
       if (error) throw new StoreError("getPage");
       const found = row(data);
       if (!found || typeof found.id !== "string" || typeof found.user_id !== "string" || !PAGE_STATUSES.includes(String(found.status))) return null;
       const queueReason = found.queue_reason;
       if (queueReason !== null && !QUEUE_REASONS.includes(String(queueReason))) return null;
       if (!Number.isInteger(found.retry_count)) return null;
+      const relaunchedAt = found.manual_relaunched_at;
+      if (relaunchedAt !== null && typeof relaunchedAt !== "string") return null;
       return {
         id: found.id,
         userId: found.user_id,
         status: found.status as PageStatus,
         queueReason: queueReason as QueueReason | null,
         retryCount: found.retry_count as number,
-      };
-    },
-    allowance: async (): Promise<Allowance | null> => {
-      const { data, error } = await client.rpc("my_page_allowance");
-      if (error) throw new StoreError("allowance");
-      const found = first(data);
-      if (!found) return null;
-      const blocked = found.blocked_reason;
-      return {
-        isAnonymous: found.is_anonymous === true,
-        used: Number(found.used),
-        max: Number(found.max),
-        remaining: Number(found.remaining),
-        resetsAt: typeof found.resets_at === "string" ? found.resets_at : null,
-        blockedReason: typeof blocked === "string" && BLOCK_REASONS.includes(blocked) ? blocked as BlockReason : null,
+        manualRelaunchedAt: relaunchedAt,
       };
     },
     photoInfo: async (path): Promise<PhotoInfo | null> => {
@@ -134,6 +123,35 @@ export function createCallerStore(keys: Keys, token: string, fetchImpl?: typeof 
       }
       if (!data) throw new StoreError("downloadPhoto");
       return new Uint8Array(await data.arrayBuffer());
+    },
+  };
+}
+
+export function createServiceReader(keys: Keys, fetchImpl?: typeof fetch): PageReader {
+  return pageReader(createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } }));
+}
+
+export function createCallerStore(keys: Keys, token: string, fetchImpl?: typeof fetch): CallerStore {
+  const client: SupabaseClient = createClient(keys.url, keys.publishableKey, {
+    auth: NO_SESSION,
+    global: { headers: { Authorization: `Bearer ${token}` }, fetch: fetchImpl },
+  });
+  return {
+    ...pageReader(client),
+    allowance: async (): Promise<Allowance | null> => {
+      const { data, error } = await client.rpc("my_page_allowance");
+      if (error) throw new StoreError("allowance");
+      const found = first(data);
+      if (!found) return null;
+      const blocked = found.blocked_reason;
+      return {
+        isAnonymous: found.is_anonymous === true,
+        used: Number(found.used),
+        max: Number(found.max),
+        remaining: Number(found.remaining),
+        resetsAt: typeof found.resets_at === "string" ? found.resets_at : null,
+        blockedReason: typeof blocked === "string" && BLOCK_REASONS.includes(blocked) ? blocked as BlockReason : null,
+      };
     },
   };
 }
@@ -161,9 +179,14 @@ export function createServerStore(keys: Keys, fetchImpl?: typeof fetch): ServerS
         .update({ status: "processing", queue_reason: null })
         .eq("id", pageId)
         .eq("user_id", userId)
-        .eq("status", "queued")
+        .eq("status", expected.status)
         .eq("retry_count", expected.retryCount);
-      const { data, error } = await (expected.queueReason === null ? claim.is("queue_reason", null) : claim.eq("queue_reason", expected.queueReason)).select("id");
+      const guarded = expected.status === "failed"
+        ? claim.or(`manual_relaunched_at.is.null,manual_relaunched_at.lte.${expected.relaunchedBefore}`)
+        : expected.queueReason === null
+        ? claim.is("queue_reason", null)
+        : claim.eq("queue_reason", expected.queueReason);
+      const { data, error } = await guarded.select("id");
       if (error) throw new StoreError("claimForReading");
       return Array.isArray(data) && data.length === 1;
     },
@@ -218,6 +241,17 @@ export function createServerStore(keys: Keys, fetchImpl?: typeof fetch): ServerS
         .eq("status", "processing")
         .select("id");
       if (error || !Array.isArray(data) || data.length !== 1) throw new StoreError("markFailed");
+    },
+    abandonQueued: async (userId, pageId) => {
+      const { data, error } = await client
+        .from("pages")
+        .update({ status: "failed", queue_reason: null })
+        .eq("id", pageId)
+        .eq("user_id", userId)
+        .eq("status", "queued")
+        .eq("queue_reason", "read_error")
+        .select("id");
+      if (error || !Array.isArray(data) || data.length !== 1) throw new StoreError("abandonQueued");
     },
     createUploadUrl: async (path) => {
       const { data, error } = await client.storage.from(BUCKET).createSignedUploadUrl(path);

@@ -9,9 +9,18 @@ export type ChargeReason = "charged" | "already_charged" | "page_not_found" | Bl
 
 export type QueueReason = "read_error" | "offline";
 
-export type PageRow = { id: string; userId: string; status: PageStatus; queueReason: QueueReason | null; retryCount: number };
+export type PageRow = {
+  id: string;
+  userId: string;
+  status: PageStatus;
+  queueReason: QueueReason | null;
+  retryCount: number;
+  manualRelaunchedAt: string | null;
+};
 
-export type ClaimExpectation = { queueReason: QueueReason | null; retryCount: number };
+export type ClaimExpectation =
+  | { status: "queued"; queueReason: QueueReason | null; retryCount: number }
+  | { status: "failed"; retryCount: number; relaunchedBefore: string };
 
 export type Allowance = {
   isAnonymous: boolean;
@@ -44,11 +53,14 @@ export type Auth = {
   verify: (token: string) => Promise<Caller | null>;
 };
 
-export type CallerStore = {
+export type PageReader = {
   getPage: (pageId: string) => Promise<PageRow | null>;
-  allowance: () => Promise<Allowance | null>;
   photoInfo: (path: string) => Promise<PhotoInfo | null>;
   downloadPhoto: (path: string) => Promise<Uint8Array | null>;
+};
+
+export type CallerStore = PageReader & {
+  allowance: () => Promise<Allowance | null>;
 };
 
 export type ServerStore = {
@@ -60,6 +72,7 @@ export type ServerStore = {
   markRead: (userId: string, pageId: string, readAt: string) => Promise<void>;
   releaseToQueue: (userId: string, pageId: string, reason: "read_error", retryCount: number) => Promise<void>;
   markFailed: (userId: string, pageId: string, retryCount: number) => Promise<void>;
+  abandonQueued: (userId: string, pageId: string) => Promise<void>;
   createUploadUrl: (path: string) => Promise<{ signedUrl: string; token: string }>;
 };
 
@@ -70,11 +83,19 @@ export type PreparePageDeps = {
   log: Logger;
 };
 
-export type ReadPageDeps = {
-  auth: Auth;
-  forCaller: (token: string) => CallerStore;
+export type ReadingDeps = {
   server: ServerStore;
   gemini: (image: Uint8Array) => Promise<GeminiReading>;
   clock: { now: () => number };
   log: Logger;
+};
+
+export type ReadPageDeps = ReadingDeps & {
+  auth: Auth;
+  forCaller: (token: string) => CallerStore;
+};
+
+export type RelaunchPageDeps = ReadingDeps & {
+  secret: string;
+  reader: PageReader;
 };
