@@ -13,6 +13,10 @@ export type Block = { kind: "month"; max: number; resetMonth: number | null } | 
 
 export type Counter = { kind: "month" | "trial"; remaining: number };
 
+export const TRIAL_PAGES = 3;
+
+export const FREE_MONTHLY_PAGES = 15;
+
 const COUNTER_FROM = 3;
 
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
@@ -45,8 +49,6 @@ export function remainingCounter(allowance: Allowance | null | undefined): Count
   return { kind: allowance.isAnonymous ? "trial" : "month", remaining: allowance.remaining };
 }
 
-const FALLBACK_MONTHLY_PAGES = 15;
-
 export function blockForReason(reason: BlockReason, fresh: Allowance | null | undefined): Block {
   const known = blockFor(fresh);
   if (known !== null) {
@@ -54,7 +56,7 @@ export function blockForReason(reason: BlockReason, fresh: Allowance | null | un
   }
   switch (reason) {
     case "monthly_limit":
-      return { kind: "month", max: FALLBACK_MONTHLY_PAGES, resetMonth: null };
+      return { kind: "month", max: FREE_MONTHLY_PAGES, resetMonth: null };
     case "anonymous_limit":
       return { kind: "trial" };
     case "anonymous_daily_cap":

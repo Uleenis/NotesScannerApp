@@ -61,6 +61,8 @@ export const en = {
     openSettings: "Open Settings",
     photoUnreadable: "This photo cannot be read. Retake it.",
     sendFailed: "Your page could not be sent. Try again.",
+    photoTooLarge: "This photo is too heavy to be sent.",
+    shotFailed: "The photo could not be taken. Try again.",
   },
   limit: {
     monthTitle: (max: number) => `Your ${max} pages this month are read`,
@@ -68,7 +70,8 @@ export const en = {
       `You can scan new ones ${resetMonth === null ? "next month" : `on ${MONTHS[resetMonth]} 1`}. All your pages stay available.`,
     understood: "Got it",
     accountTitle: "Create an account to continue",
-    trialBody: "Your 3 trial pages are read. With a free account you get 15 a month, and your pages are kept.",
+    trialBody: (trial: number, monthly: number) =>
+      `Your ${trial} trial pages are read. With a free account you get ${monthly} a month, and your pages are kept.`,
     dailyBody: "Trials without an account are full for today. With a free account, you can scan right away.",
     createAccount: "Create an account",
     later: "Later",

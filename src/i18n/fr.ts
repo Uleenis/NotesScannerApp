@@ -63,6 +63,8 @@ export const fr: Strings = {
     openSettings: "Ouvrir Réglages",
     photoUnreadable: "Cette photo ne peut pas être lue. Reprends-la.",
     sendFailed: "Ta page n'a pas pu être envoyée. Réessaie.",
+    photoTooLarge: "Cette photo est trop lourde pour être envoyée.",
+    shotFailed: "La photo n'a pas pu être prise. Réessaie.",
   },
   limit: {
     monthTitle: (max: number) => `Tes ${max} pages du mois sont lues`,
@@ -70,7 +72,8 @@ export const fr: Strings = {
       `Tu pourras en scanner de nouvelles ${resetMonth === null ? "le mois prochain" : `le 1er ${MONTHS[resetMonth]}`}. Tes pages restent toutes consultables.`,
     understood: "Compris",
     accountTitle: "Crée un compte pour continuer",
-    trialBody: "Tes 3 pages d'essai sont lues. Avec un compte gratuit, tu en as 15 par mois, et tes pages sont gardées.",
+    trialBody: (trial: number, monthly: number) =>
+      `Tes ${trial} pages d'essai sont lues. Avec un compte gratuit, tu en as ${monthly} par mois, et tes pages sont gardées.`,
     dailyBody: "Les essais sans compte sont complets pour aujourd'hui. Avec un compte gratuit, tu scannes tout de suite.",
     createAccount: "Créer un compte",
     later: "Plus tard",

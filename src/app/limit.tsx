@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { PrimaryButton } from "@/components/primary-button";
 import { SecondaryButton } from "@/components/secondary-button";
+import { FREE_MONTHLY_PAGES, TRIAL_PAGES } from "@/capture/allowance";
 import { readLimitParams } from "@/capture/limit-route";
 import { useStrings } from "@/i18n";
 import { colors, typography } from "@/theme";
@@ -20,7 +21,7 @@ export default function LimitSheet() {
   }
 
   const title = block.kind === "month" ? t.limit.monthTitle(block.max) : t.limit.accountTitle;
-  const body = block.kind === "month" ? t.limit.monthBody(block.resetMonth) : block.kind === "trial" ? t.limit.trialBody : t.limit.dailyBody;
+  const body = block.kind === "month" ? t.limit.monthBody(block.resetMonth) : block.kind === "trial" ? t.limit.trialBody(TRIAL_PAGES, FREE_MONTHLY_PAGES) : t.limit.dailyBody;
 
   return (
     <View style={styles.container}>
