@@ -52,7 +52,7 @@ function looksLikeNetworkFailure(error: unknown): boolean {
   const code = field(error, "code");
   const statusCode = field(error, "statusCode");
   const message = field(error, "message");
-  return code === undefined && statusCode === undefined && typeof message === "string" && NETWORK_MESSAGE.test(message);
+  return (code === undefined || code === "") && statusCode === undefined && typeof message === "string" && NETWORK_MESSAGE.test(message);
 }
 
 export async function fetchAllowance(client: CaptureClient): Promise<Allowance | null> {

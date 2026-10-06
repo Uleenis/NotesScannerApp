@@ -278,3 +278,16 @@ test("a file that cannot be read is a failure and nothing is uploaded", async ()
   expect(await uploadPhotoFile(client(fake), file, "p", "t")).toBe("failed");
   expect(fake.uploadToSignedUrl).not.toHaveBeenCalled();
 });
+
+test("a lost network as the database client reports it, with an empty code, is a network failure", async () => {
+  const lost = { message: "TypeError: Network request failed", details: "stack", hint: "", code: "" };
+
+  expect(await insertPage(client(pagesClient({ data: null, error: lost })), "n", "t")).toEqual({ status: "network" });
+  expect(await markUploaded(client(pagesClient({ data: null, error: lost })), "p", "t")).toBe("network");
+});
+
+test("an empty code on an error that says nothing about the network is still a failure", async () => {
+  const odd = { message: "something else", details: "", hint: "", code: "" };
+
+  expect(await insertPage(client(pagesClient({ data: null, error: odd })), "n", "t")).toEqual({ status: "failed" });
+});
