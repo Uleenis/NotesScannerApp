@@ -17,9 +17,11 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/auth/`: the anonymous account and the provider that opens it when the app starts.
 - `src/lib/`: the Supabase client, its config and the secure session storage.
 - `src/notebooks/`: reading, creating and caching notebooks.
-- `src/capture/`: the limits shown before the camera, sending a page (create, prepare, upload, mark it uploaded, start the reading), shrinking the photo, the camera and network hooks. A page only counts for the user (notebook counts, last notebook, page lists) once its `uploaded_at` is set, so a page created for a photo that never arrived stays invisible.
+- `src/capture/`: the limits shown before the camera and the hook that opens the camera or the limit sheet, sending a page (create, prepare, upload, mark it uploaded, start the reading), shrinking the photo, the camera and network hooks. A page only counts for the user (notebook counts, last notebook, page lists) once its `uploaded_at` is set, so a page created for a photo that never arrived stays invisible.
+- `src/pages/`: the pages a user sees (list, one page with its number and text, signed address of its photo, starting or restarting a reading), what a page shows according to its status, the title of a page and the gluing of its cut lines at display time (the text itself is never changed), dates without `Intl`, and the polling delays. Every query here keeps to pages whose `uploaded_at` is set.
+- `src/components/reading/`: the screens' parts for a reading: ink stroke, waiting view, document, original photo with its zoom, page rows and cards.
 - `src/theme.ts`: colors, fonts and type sizes of the design direction.
-- `tests/`: Jest tests.
+- `tests/`: Jest tests. `tests/fixtures/b1-line-shapes.json` holds only the shape of the lines of the 18 B1 readings of the Thinking Spike (every letter is `x` or `X`, every digit `0`), with the verdict of the ground truth for each line break; no text of a page may enter the repository.
 - `supabase/migrations/`: the only way the schema changes.
 - `supabase/functions/`: Edge Functions (`prepare-page`, `read-page`, `relaunch-page`), their shared code in `_shared/`, their Deno tests in `tests/`. Local secrets (`GEMINI_API_KEY`, `RELAUNCH_SECRET`) live in `supabase/functions/.env`, ignored by git. The `pg_cron` task that calls `relaunch-page` reads its secret and address from Supabase Vault, never from the repository.
 - `supabase/tests/database/`: pgTAP tests.
@@ -81,4 +83,4 @@ All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitle
 
 ## Expo-managed dependencies
 
-`expo`, `expo-*`, `react`, `react-dom`, `react-native`, `react-native-screens`, `react-native-safe-area-context`, `@types/react`, `jest`, `jest-expo`, `eslint-config-expo` and `typescript` are pinned by the Expo SDK. Dependabot ignores them. Upgrade them together with `npx expo install --fix`, during an Expo SDK upgrade, never one by one.
+`expo`, `expo-*`, `react`, `react-dom`, `react-native`, `react-native-screens`, `react-native-safe-area-context`, `react-native-reanimated`, `react-native-worklets`, `react-native-gesture-handler`, `react-native-svg`, `@types/react`, `jest`, `jest-expo`, `eslint-config-expo` and `typescript` are pinned by the Expo SDK. Dependabot ignores them. Upgrade them together with `npx expo install --fix`, during an Expo SDK upgrade, never one by one.
