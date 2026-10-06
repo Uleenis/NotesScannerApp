@@ -10,6 +10,7 @@ import type { SendResult } from "@/capture/send-page";
 import { captureService } from "@/capture/service";
 import { strings } from "@/i18n";
 import { notebookService } from "@/notebooks/service";
+import { pageService } from "@/pages/service";
 import { deferred } from "./fake-auth-client";
 import {
   cameraBehavior,
@@ -44,6 +45,10 @@ jest.mock("@/notebooks/service", () => ({
 }));
 jest.mock("@/capture/service", () => ({
   captureService: { allowance: jest.fn(), latestNotebookId: jest.fn(), send: jest.fn(), preparePhoto: jest.fn(), discardPhoto: jest.fn() },
+}));
+
+jest.mock("@/pages/service", () => ({
+  pageService: { list: jest.fn(async () => []), get: jest.fn(() => new Promise(() => {})), photoUrl: jest.fn(), startReading: jest.fn() },
 }));
 
 const fr = strings.fr;
@@ -519,6 +524,16 @@ test("the page replaces the capture: back from the page goes to the library, not
 
   await goBack();
   expect(pathname()).toBe("/");
+});
+
+test("the page opens even when the lists of pages are slow to reload: the capture does not wait for them", async () => {
+  const pathname = await openCapture();
+  await takePhoto();
+  jest.mocked(pageService.list).mockReturnValue(never());
+  jest.mocked(captureService.allowance).mockReturnValue(never());
+  await fireEvent.press(screen.getByText(fr.capture.read));
+
+  await waitFor(() => expect(pathname()).toBe("/page/page-1"));
 });
 
 test("a failed sending keeps the photo, says so, and the next try reuses the same page", async () => {

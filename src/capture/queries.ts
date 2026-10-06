@@ -47,6 +47,7 @@ export function useSendPage() {
 
   const refresh = () =>
     Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["pages", userId] }),
       queryClient.invalidateQueries({ queryKey: ["notebooks", userId] }),
       queryClient.invalidateQueries({ queryKey: ["notebook", userId] }),
       queryClient.invalidateQueries({ queryKey: ["allowance", userId] }),
@@ -58,6 +59,8 @@ export function useSendPage() {
       captureService.send(input, () => {
         void refresh();
       }),
-    onSettled: refresh,
+    onSettled: () => {
+      void refresh();
+    },
   });
 }
