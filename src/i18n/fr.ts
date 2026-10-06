@@ -1,5 +1,20 @@
 import type { Strings } from "./en";
 
+const MONTHS = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+];
+
 export const fr: Strings = {
   common: {
     cancel: "Annuler",
@@ -32,12 +47,42 @@ export const fr: Strings = {
     emptyTitle: "Ta première page",
     emptyBody: "Photographie une page de ton cours : elle apparaîtra ici, recopiée au propre.",
   },
+  capture: {
+    hint: "Toute la page, à plat, bien éclairée",
+    notebookLabel: "Carnet de destination",
+    flashLabel: "Flash",
+    shutterLabel: "Prendre la photo",
+    counterMonth: (remaining: number) => (remaining === 1 ? "Plus qu'une page ce mois-ci" : `Plus que ${remaining} pages ce mois-ci`),
+    counterTrial: (remaining: number) => (remaining === 1 ? "Plus qu'une page d'essai" : `Plus que ${remaining} pages d'essai`),
+    reviewTitle: (page: number, notebook: string) => `Page ${page} · ${notebook}`,
+    retake: "Reprendre",
+    read: "Lire la page",
+    sending: "Envoi de ta page…",
+    noConnection: "Pas de connexion. Reconnecte-toi pour scanner",
+    cameraNeeded: "L'app a besoin de l'appareil photo pour scanner tes pages",
+    openSettings: "Ouvrir Réglages",
+    photoUnreadable: "Cette photo ne peut pas être lue. Reprends-la.",
+    sendFailed: "Ta page n'a pas pu être envoyée. Réessaie.",
+    photoTooLarge: "Cette photo est trop lourde pour être envoyée.",
+    shotFailed: "La photo n'a pas pu être prise. Réessaie.",
+  },
+  limit: {
+    monthTitle: (max: number) => `Tes ${max} pages du mois sont lues`,
+    monthBody: (resetMonth: number | null) =>
+      `Tu pourras en scanner de nouvelles ${resetMonth === null ? "le mois prochain" : `le 1er ${MONTHS[resetMonth]}`}. Tes pages restent toutes consultables.`,
+    understood: "Compris",
+    accountTitle: "Crée un compte pour continuer",
+    trialBody: (trial: number, monthly: number) =>
+      `Tes ${trial} pages d'essai sont lues. Avec un compte gratuit, tu en as ${monthly} par mois, et tes pages sont gardées.`,
+    dailyBody: "Les essais sans compte sont complets pour aujourd'hui. Avec un compte gratuit, tu scannes tout de suite.",
+    createAccount: "Créer un compte",
+    later: "Plus tard",
+  },
   account: {
     title: "Compte",
   },
   shell: {
     page: "Page",
-    capture: "Capture",
     signIn: "Créer un compte",
     code: "Entre le code",
   },

@@ -1,3 +1,18 @@
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 export const en = {
   common: {
     cancel: "Cancel",
@@ -30,12 +45,42 @@ export const en = {
     emptyTitle: "Your first page",
     emptyBody: "Photograph a page of your course: it will appear here, copied out neatly.",
   },
+  capture: {
+    hint: "The whole page, flat and well lit",
+    notebookLabel: "Destination notebook",
+    flashLabel: "Flash",
+    shutterLabel: "Take the photo",
+    counterMonth: (remaining: number) => (remaining === 1 ? "Only 1 page left this month" : `Only ${remaining} pages left this month`),
+    counterTrial: (remaining: number) => (remaining === 1 ? "Only 1 trial page left" : `Only ${remaining} trial pages left`),
+    reviewTitle: (page: number, notebook: string) => `Page ${page} · ${notebook}`,
+    retake: "Retake",
+    read: "Read the page",
+    sending: "Sending your page…",
+    noConnection: "No connection. Reconnect to scan",
+    cameraNeeded: "The app needs the camera to scan your pages",
+    openSettings: "Open Settings",
+    photoUnreadable: "This photo cannot be read. Retake it.",
+    sendFailed: "Your page could not be sent. Try again.",
+    photoTooLarge: "This photo is too heavy to be sent.",
+    shotFailed: "The photo could not be taken. Try again.",
+  },
+  limit: {
+    monthTitle: (max: number) => `Your ${max} pages this month are read`,
+    monthBody: (resetMonth: number | null) =>
+      `You can scan new ones ${resetMonth === null ? "next month" : `on ${MONTHS[resetMonth]} 1`}. All your pages stay available.`,
+    understood: "Got it",
+    accountTitle: "Create an account to continue",
+    trialBody: (trial: number, monthly: number) =>
+      `Your ${trial} trial pages are read. With a free account you get ${monthly} a month, and your pages are kept.`,
+    dailyBody: "Trials without an account are full for today. With a free account, you can scan right away.",
+    createAccount: "Create an account",
+    later: "Later",
+  },
   account: {
     title: "Account",
   },
   shell: {
     page: "Page",
-    capture: "Capture",
     signIn: "Create an account",
     code: "Enter the code",
   },

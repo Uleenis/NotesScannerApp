@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen } from "expo-router/testing-library";
 
 import { strings } from "@/i18n";
+import { granted, installPermission } from "./fake-camera";
 import { histoire, installFakeNotebooks } from "./fake-notebook-service";
 import { phoneLocale } from "./phone-locale";
 
@@ -18,10 +19,21 @@ jest.mock("@/notebooks/service", () => ({
   notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn() },
 }));
 
+jest.mock("expo-camera", () => require("./fake-camera").cameraModule);
+jest.mock("expo-network", () => ({ useNetworkState: jest.fn(() => ({ isConnected: true, isInternetReachable: true })) }));
+jest.mock("@/capture/service", () => ({
+  captureService: {
+    allowance: jest.fn(async () => null),
+    latestNotebookId: jest.fn(async () => null),
+    send: jest.fn(),
+  },
+}));
+
 const mockedUseLocales = jest.mocked(useLocales);
 
 beforeEach(() => {
   installFakeNotebooks([histoire]);
+  installPermission(granted);
 });
 
 async function openApp(languageCode: string, initialUrl = "/"): Promise<() => string> {
@@ -48,7 +60,6 @@ test("sends an unknown address back to the library", async () => {
 
 test.each([
   ["page", "/page/preview"],
-  ["capture", "/capture"],
   ["signIn", "/sign-in"],
   ["code", "/sign-in/code"],
 ] as const)("opens the %s screen by its address", async (name, path) => {
@@ -82,14 +93,14 @@ test.each([
 ])("closes the %s screen with its header button", async (_, entry, button) => {
   const pathname = await openApp("fr");
   await fireEvent.press(await entry());
-  await fireEvent.press(screen.getByText(button));
+  await fireEvent.press(await screen.findByText(button));
   expect(pathname()).toBe("/");
 });
 
 test.each(["/capture", "/account", "/sign-in", "/new-notebook"])("keeps the library under %s when the app opens on it", async (path) => {
   const pathname = await openApp("fr", path);
   expect(pathname()).toBe(path);
-  await fireEvent.press(screen.getByText(path === "/account" ? strings.fr.common.done : strings.fr.common.cancel));
+  await fireEvent.press(await screen.findByText(path === "/account" ? strings.fr.common.done : strings.fr.common.cancel));
   expect(pathname()).toBe("/");
 });
 

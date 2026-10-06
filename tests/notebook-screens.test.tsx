@@ -7,6 +7,7 @@ import { strings } from "@/i18n";
 import type { CreateNotebookResult } from "@/notebooks/notebooks";
 import { notebookService } from "@/notebooks/service";
 import { deferred } from "./fake-auth-client";
+import { granted, installPermission } from "./fake-camera";
 import { histoire, installFakeNotebooks, sciences } from "./fake-notebook-service";
 import { phoneLocale } from "./phone-locale";
 
@@ -25,6 +26,15 @@ jest.mock("@/lib/query-client", () => {
 jest.mock("@/notebooks/service", () => ({
   notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn() },
 }));
+jest.mock("expo-camera", () => require("./fake-camera").cameraModule);
+jest.mock("expo-network", () => ({ useNetworkState: jest.fn(() => ({ isConnected: true, isInternetReachable: true })) }));
+jest.mock("@/capture/service", () => ({
+  captureService: {
+    allowance: jest.fn(async () => null),
+    latestNotebookId: jest.fn(async () => null),
+    send: jest.fn(),
+  },
+}));
 
 const fr = strings.fr;
 
@@ -35,6 +45,7 @@ beforeEach(() => {
   jest.mocked(notebookService.list).mockReset();
   jest.mocked(notebookService.get).mockReset();
   jest.mocked(notebookService.create).mockReset();
+  installPermission(granted);
 });
 
 async function openApp(initialUrl = "/"): Promise<() => string> {
@@ -232,7 +243,7 @@ test("opens the capture screen from the Scan button of the library and of a note
 
   await fireEvent.press(await screen.findByText(fr.common.scan));
   expect(pathname()).toBe("/capture");
-  await fireEvent.press(screen.getByText(fr.common.cancel));
+  await fireEvent.press(await screen.findByText(fr.common.cancel));
 
   await fireEvent.press(screen.getByText("Histoire"));
   await fireEvent.press(await screen.findByText(fr.common.scan));
