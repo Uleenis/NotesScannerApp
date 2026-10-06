@@ -6,16 +6,19 @@ export type CameraAccess = "loading" | "granted" | "denied";
 
 export function useCameraAccess(): CameraAccess {
   const [permission, request, refresh] = useCameraPermissions();
-  const asked = useRef(false);
-  const [asking, setAsking] = useState(false);
+  const requesting = useRef(false);
+  const [asked, setAsked] = useState(false);
+  const mustAsk = permission !== null && !permission.granted && permission.canAskAgain && !asked;
 
   useEffect(() => {
-    if (permission !== null && !permission.granted && permission.canAskAgain && !asked.current) {
-      asked.current = true;
-      setAsking(true);
-      request().finally(() => setAsking(false));
+    if (!mustAsk || requesting.current) {
+      return;
     }
-  }, [permission, request]);
+    requesting.current = true;
+    request()
+      .catch(() => undefined)
+      .finally(() => setAsked(true));
+  }, [mustAsk, request]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -26,7 +29,7 @@ export function useCameraAccess(): CameraAccess {
     return () => subscription.remove();
   }, [refresh]);
 
-  if (permission === null || asking) {
+  if (permission === null || mustAsk) {
     return "loading";
   }
   return permission.granted ? "granted" : "denied";
