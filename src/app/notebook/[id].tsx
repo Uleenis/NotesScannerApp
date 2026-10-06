@@ -33,7 +33,7 @@ export default function NotebookScreen() {
           </View>
         ) : null}
       </View>
-      <ScanButton />
+      <ScanButton notebookId={id} />
     </>
   );
 }

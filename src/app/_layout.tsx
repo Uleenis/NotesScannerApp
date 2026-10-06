@@ -9,7 +9,7 @@ import { AuthProvider } from "@/auth/auth-provider";
 import { defaultAuthServices } from "@/auth/default-services";
 import { createQueryClient, followAppFocus } from "@/lib/query-client";
 import { stackScreenOptions } from "@/navigation-options";
-import { fontAssets } from "@/theme";
+import { colors, fontAssets } from "@/theme";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -38,7 +38,17 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         <Stack screenOptions={stackScreenOptions}>
           <Stack.Screen name="index" />
-          <Stack.Screen name="capture" options={{ presentation: "fullScreenModal" }} />
+          <Stack.Screen name="capture" options={{ presentation: "fullScreenModal", headerShown: false }} />
+          <Stack.Screen
+            name="limit"
+            options={{
+              presentation: "formSheet",
+              headerShown: false,
+              sheetAllowedDetents: "fitToContents",
+              sheetGrabberVisible: true,
+              contentStyle: { backgroundColor: colors.sheet },
+            }}
+          />
           <Stack.Screen name="account" options={{ presentation: "modal" }} />
           <Stack.Screen name="new-notebook" options={{ presentation: "modal" }} />
           <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />

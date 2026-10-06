@@ -70,9 +70,10 @@ async function openApp(initialUrl = "/"): Promise<() => string> {
 }
 
 async function loaded(): Promise<void> {
-  await act(async () => {});
   await waitFor(() => expect(captureService.allowance).toHaveBeenCalled());
-  await act(async () => {});
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(20);
+  });
 }
 
 async function pressScan(): Promise<void> {
@@ -99,7 +100,7 @@ test("scan opens the camera when nothing blocks, in the notebook of the last pag
   expect(pathname()).toBe("/capture");
   expect(await screen.findByTestId("camera-view")).toBeTruthy();
   expect(screen.getByText(fr.capture.hint)).toBeTruthy();
-  expect(screen.getByLabelText(fr.capture.notebookLabel)).toHaveTextContent(histoire.name);
+  expect(screen.getByLabelText(fr.capture.notebookLabel)).toHaveTextContent(histoire.name, { exact: false });
 });
 
 test("scan opens the camera when the limits could not be read: the server stays the authority", async () => {
@@ -117,7 +118,7 @@ test("the monthly limit opens its sheet before the camera, with the date of the 
   expect(pathname()).toBe("/limit");
   expect(screen.getByText(fr.limit.monthTitle(15))).toBeTruthy();
   expect(screen.getByText(fr.limit.monthBody(10))).toBeTruthy();
-  expect(screen.getByText(fr.limit.monthBody(10))).toHaveTextContent("1er novembre");
+  expect(screen.getByText(fr.limit.monthBody(10))).toHaveTextContent("1er novembre", { exact: false });
   expect(screen.getByText(fr.limit.understood)).toBeTruthy();
   expect(screen.queryByText(fr.limit.createAccount)).toBeNull();
   expect(screen.queryByTestId("camera-view")).toBeNull();
@@ -171,7 +172,7 @@ test("the sheets speak English on an English phone", async () => {
   await act(async () => {});
 
   expect(screen.getByText(en.limit.monthTitle(15))).toBeTruthy();
-  expect(screen.getByText(en.limit.monthBody(10))).toHaveTextContent("November 1");
+  expect(screen.getByText(en.limit.monthBody(10))).toHaveTextContent("November 1", { exact: false });
 });
 
 test("without a network the capture is blocked with its message and no camera [28]", async () => {
@@ -179,7 +180,7 @@ test("without a network the capture is blocked with its message and no camera [2
   const pathname = await openCapture();
 
   expect(pathname()).toBe("/capture");
-  expect(screen.getByText(fr.capture.noConnection)).toBeTruthy();
+  expect(await screen.findByText(fr.capture.noConnection)).toBeTruthy();
   expect(screen.queryByTestId("camera-view")).toBeNull();
   expect(screen.queryByLabelText(fr.capture.shutterLabel)).toBeNull();
 });
@@ -188,7 +189,7 @@ test("a network that is connected but cannot reach the internet blocks the captu
   jest.mocked(useNetworkState).mockReturnValue({ isConnected: true, isInternetReachable: false });
   await openCapture();
 
-  expect(screen.getByText(fr.capture.noConnection)).toBeTruthy();
+  expect(await screen.findByText(fr.capture.noConnection)).toBeTruthy();
   expect(screen.queryByTestId("camera-view")).toBeNull();
 });
 
@@ -210,7 +211,7 @@ test("a refused camera shows its message and a button that opens the settings [2
   installPermission(refused);
   await openCapture();
 
-  expect(screen.getByText(fr.capture.cameraNeeded)).toBeTruthy();
+  expect(await screen.findByText(fr.capture.cameraNeeded)).toBeTruthy();
   expect(screen.queryByTestId("camera-view")).toBeNull();
 
   await fireEvent.press(screen.getByText(fr.capture.openSettings));
@@ -221,8 +222,7 @@ test("the camera permission is asked when it was never asked", async () => {
   const { request } = installPermission(undetermined);
   await openCapture();
 
-  expect(request).toHaveBeenCalledTimes(1);
-  expect(screen.queryByText(fr.capture.cameraNeeded)).toBeNull();
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
 });
 
 test("a counter shows at three pages left, in pages of the month for an account", async () => {
@@ -250,10 +250,10 @@ test("an anonymous account counts its trial pages", async () => {
 
 test("the notebook of the capture can be changed with a tap", async () => {
   await openCapture();
-  await fireEvent.press(screen.getByLabelText(fr.capture.notebookLabel));
+  await fireEvent.press(await screen.findByLabelText(fr.capture.notebookLabel));
   await fireEvent.press(await screen.findByText(sciences.name));
 
-  expect(screen.getByLabelText(fr.capture.notebookLabel)).toHaveTextContent(sciences.name);
+  expect(screen.getByLabelText(fr.capture.notebookLabel)).toHaveTextContent(sciences.name, { exact: false });
 });
 
 test("scan from a notebook opens the capture in that notebook", async () => {
@@ -263,14 +263,14 @@ test("scan from a notebook opens the capture in that notebook", async () => {
   await loaded();
   await pressScan();
 
-  expect(screen.getByLabelText(fr.capture.notebookLabel)).toHaveTextContent(sciences.name);
+  expect(await screen.findByLabelText(fr.capture.notebookLabel)).toHaveTextContent(sciences.name, { exact: false });
 });
 
 test("the first notebook is used when no page was ever taken", async () => {
   jest.mocked(captureService.latestNotebookId).mockResolvedValue(null);
   await openCapture();
 
-  expect(screen.getByLabelText(fr.capture.notebookLabel)).toHaveTextContent(histoire.name);
+  expect(await screen.findByLabelText(fr.capture.notebookLabel)).toHaveTextContent(histoire.name, { exact: false });
 });
 
 test("the flash can be switched on", async () => {

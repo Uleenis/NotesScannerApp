@@ -44,3 +44,20 @@ export function remainingCounter(allowance: Allowance | null | undefined): Count
   }
   return { kind: allowance.isAnonymous ? "trial" : "month", remaining: allowance.remaining };
 }
+
+const FALLBACK_MONTHLY_PAGES = 15;
+
+export function blockForReason(reason: BlockReason, fresh: Allowance | null | undefined): Block {
+  const known = blockFor(fresh);
+  if (known !== null) {
+    return known;
+  }
+  switch (reason) {
+    case "monthly_limit":
+      return { kind: "month", max: FALLBACK_MONTHLY_PAGES, resetMonth: null };
+    case "anonymous_limit":
+      return { kind: "trial" };
+    case "anonymous_daily_cap":
+      return { kind: "daily" };
+  }
+}

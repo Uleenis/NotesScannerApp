@@ -80,7 +80,6 @@ export const fr: Strings = {
   },
   shell: {
     page: "Page",
-    capture: "Capture",
     signIn: "Créer un compte",
     code: "Entre le code",
   },

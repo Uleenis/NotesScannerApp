@@ -78,7 +78,6 @@ export const en = {
   },
   shell: {
     page: "Page",
-    capture: "Capture",
     signIn: "Create an account",
     code: "Enter the code",
   },
