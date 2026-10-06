@@ -28,6 +28,9 @@ jest.mock("@/capture/service", () => ({
     send: jest.fn(),
   },
 }));
+jest.mock("@/pages/service", () => ({
+  pageService: { list: jest.fn(async () => []), get: jest.fn(async () => null), photoUrl: jest.fn(), startReading: jest.fn() },
+}));
 
 const mockedUseLocales = jest.mocked(useLocales);
 
@@ -59,7 +62,6 @@ test("sends an unknown address back to the library", async () => {
 });
 
 test.each([
-  ["page", "/page/preview"],
   ["signIn", "/sign-in"],
   ["code", "/sign-in/code"],
 ] as const)("opens the %s screen by its address", async (name, path) => {

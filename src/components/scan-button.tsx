@@ -1,41 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
-import { useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useAuth } from "@/auth/auth-provider";
-import { blockFor } from "@/capture/allowance";
-import { limitParams } from "@/capture/limit-route";
-import { freshAllowance, useAllowance } from "@/capture/queries";
+import { useOpenCapture } from "@/capture/use-open-capture";
 import { useStrings } from "@/i18n";
 import { colors, typography } from "@/theme";
 
 export function ScanButton({ notebookId }: { notebookId?: string }) {
   const t = useStrings();
   const insets = useSafeAreaInsets();
-  const { userId } = useAuth();
-  const queryClient = useQueryClient();
-  useAllowance();
-  const opening = useRef(false);
-
-  async function open() {
-    if (opening.current) {
-      return;
-    }
-    opening.current = true;
-    try {
-      const block = blockFor(await freshAllowance(queryClient, userId));
-      if (block !== null) {
-        router.push({ pathname: "/limit", params: limitParams(block) });
-        return;
-      }
-      router.push(notebookId === undefined ? "/capture" : { pathname: "/capture", params: { notebook: notebookId } });
-    } finally {
-      opening.current = false;
-    }
-  }
+  const open = useOpenCapture(notebookId);
 
   return (
     <View pointerEvents="box-none" style={[styles.container, { bottom: insets.bottom + 24 }]}>

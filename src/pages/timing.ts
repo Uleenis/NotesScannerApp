@@ -1,0 +1,7 @@
+export const PAGE_POLL_MS = 2_000;
+export const LIST_POLL_MS = 4_000;
+export const CAPTURE_GRACE_MS = 5_000;
+export const STROKE_CYCLE_MS = 2_000;
+export const MAX_FADE_WAIT_MS = 400;
+export const FADE_MS = 300;
+export const STROKE_DRAW_MS = 1_200;

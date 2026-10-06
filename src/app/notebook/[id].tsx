@@ -1,16 +1,19 @@
-import { Redirect, Stack, useLocalSearchParams } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { Redirect, Stack, router, useLocalSearchParams } from "expo-router";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { LoadError } from "@/components/load-error";
+import { PageRow } from "@/components/reading/page-row";
 import { ScanButton } from "@/components/scan-button";
 import { useStrings } from "@/i18n";
 import { useNotebook } from "@/notebooks/queries";
+import { usePages } from "@/pages/queries";
 import { colors, typography } from "@/theme";
 
 export default function NotebookScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const t = useStrings();
   const notebook = useNotebook(id);
+  const pages = usePages();
 
   if (notebook.data === null) {
     return <Redirect href="/" />;
@@ -20,6 +23,8 @@ export default function NotebookScreen() {
       <LoadError message={t.library.loadFailed} onRetry={() => notebook.refetch()} />
     ) : null;
   }
+
+  const notebookPages = (pages.data ?? []).filter((page) => page.notebookId === id).sort((a, b) => b.number - a.number);
 
   return (
     <>
@@ -31,7 +36,17 @@ export default function NotebookScreen() {
             <Text style={styles.emptyTitle}>{t.notebook.emptyTitle}</Text>
             <Text style={styles.emptyBody}>{t.notebook.emptyBody}</Text>
           </View>
-        ) : null}
+        ) : pages.data === undefined ? (
+          pages.isError ? (
+            <LoadError message={t.notebook.pagesLoadFailed} onRetry={() => pages.refetch()} />
+          ) : null
+        ) : (
+          <ScrollView contentContainerStyle={styles.list}>
+            {notebookPages.map((page) => (
+              <PageRow key={page.id} page={page} onPress={() => router.push(`/page/${page.id}`)} />
+            ))}
+          </ScrollView>
+        )}
       </View>
       <ScanButton notebookId={id} />
     </>
@@ -46,6 +61,9 @@ const styles = StyleSheet.create({
   count: {
     ...typography.interfaceSecondary,
     color: colors.inkSecondary,
+  },
+  list: {
+    paddingBottom: 140,
   },
   empty: {
     alignItems: "center",

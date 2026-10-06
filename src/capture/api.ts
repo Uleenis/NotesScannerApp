@@ -13,7 +13,7 @@ const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 export type PhotoFile = { bytes: () => Promise<Uint8Array>; delete: () => void };
 
-function isBlockReason(value: unknown): value is BlockReason {
+export function isBlockReason(value: unknown): value is BlockReason {
   return typeof value === "string" && BLOCK_REASONS.includes(value);
 }
 
@@ -21,7 +21,7 @@ function readNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function field(value: unknown, name: string): unknown {
+export function field(value: unknown, name: string): unknown {
   return typeof value === "object" && value !== null && name in value ? (value as Record<string, unknown>)[name] : undefined;
 }
 
@@ -45,7 +45,7 @@ export function parseAllowance(data: unknown): Allowance | null {
   };
 }
 
-function looksLikeNetworkFailure(error: unknown): boolean {
+export function looksLikeNetworkFailure(error: unknown): boolean {
   if (error instanceof TypeError) {
     return true;
   }
@@ -106,7 +106,7 @@ export async function markUploaded(client: CaptureClient, pageId: string, upload
   }
 }
 
-async function refusalCode(error: FunctionsHttpError): Promise<string | null> {
+export async function refusalCode(error: FunctionsHttpError): Promise<string | null> {
   try {
     const body: unknown = await error.context.json();
     const code = field(body, "error");
