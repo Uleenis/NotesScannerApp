@@ -1,18 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { useStrings } from "@/i18n";
 import type { NotebookSummary } from "@/notebooks/notebooks";
 import { colors, typography } from "@/theme";
 
-export function NotebookRow({ notebook, onPress }: { notebook: NotebookSummary; onPress: () => void }) {
-  const t = useStrings();
-
+export function NotebookRow({ notebook, detail, onPress }: { notebook: NotebookSummary; detail: string; onPress: () => void }) {
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={styles.row}>
       <View style={styles.texts}>
         <Text style={styles.name}>{notebook.name}</Text>
-        <Text style={styles.count}>{t.notebook.pageCount(notebook.pageCount)}</Text>
+        <Text style={styles.count}>{detail}</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.inkTertiary} />
     </Pressable>
