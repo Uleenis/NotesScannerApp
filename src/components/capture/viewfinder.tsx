@@ -11,7 +11,14 @@ const CORNER = 36;
 export const Viewfinder = forwardRef<CameraView, Props>(function Viewfinder({ flash, onReady }, ref) {
   return (
     <View style={styles.frame}>
-      <CameraView ref={ref} facing="back" flash={flash ? "on" : "off"} onCameraReady={onReady} style={StyleSheet.absoluteFill} />
+      <CameraView
+        autofocus="on"
+        facing="back"
+        flash={flash ? "on" : "off"}
+        onCameraReady={onReady}
+        ref={ref}
+        style={StyleSheet.absoluteFill}
+      />
       <View pointerEvents="none" style={[styles.corner, styles.topLeft]} />
       <View pointerEvents="none" style={[styles.corner, styles.topRight]} />
       <View pointerEvents="none" style={[styles.corner, styles.bottomLeft]} />

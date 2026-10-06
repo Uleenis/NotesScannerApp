@@ -1,15 +1,33 @@
 import { forwardRef, useEffect, useImperativeHandle } from "react";
 import { View } from "react-native";
 
-type FakeCameraProps = { onCameraReady?: () => void; flash?: string };
+type FakeCameraProps = { onCameraReady?: () => void; flash?: string; autofocus?: string };
 
 export const takePictureAsync = jest.fn();
 
+export const cameraRendered = jest.fn();
+
+export const cameraBehavior = { readyOnMount: true };
+
+const mountedCameras: (() => void)[] = [];
+
+export function signalCameraReady(): void {
+  mountedCameras.forEach((signal) => signal());
+}
+
 const FakeCameraView = forwardRef<{ takePictureAsync: typeof takePictureAsync }, FakeCameraProps>(function FakeCameraView(props, ref) {
   const { onCameraReady, flash } = props;
+  cameraRendered(props);
   useImperativeHandle(ref, () => ({ takePictureAsync }));
   useEffect(() => {
-    onCameraReady?.();
+    if (cameraBehavior.readyOnMount) {
+      onCameraReady?.();
+    }
+    const signal = () => onCameraReady?.();
+    mountedCameras.push(signal);
+    return () => {
+      mountedCameras.splice(mountedCameras.indexOf(signal), 1);
+    };
   }, [onCameraReady]);
   return <View testID="camera-view" accessibilityState={{ selected: flash === "on" }} />;
 });
@@ -33,5 +51,7 @@ export function installPermission(permission: FakePermission | null) {
   cameraModule.useCameraPermissions.mockReturnValue([permission, request, refresh]);
   takePictureAsync.mockReset();
   takePictureAsync.mockResolvedValue(PHOTO);
+  cameraRendered.mockReset();
+  cameraBehavior.readyOnMount = true;
   return { request, refresh };
 }

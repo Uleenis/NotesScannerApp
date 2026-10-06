@@ -1,5 +1,6 @@
 import { useLocales } from "expo-localization";
 import { useNetworkState } from "expo-network";
+import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen, waitFor } from "expo-router/testing-library";
 import { Linking } from "react-native";
 
@@ -8,8 +9,19 @@ import type { Allowance } from "@/capture/allowance";
 import type { SendResult } from "@/capture/send-page";
 import { captureService } from "@/capture/service";
 import { strings } from "@/i18n";
+import { notebookService } from "@/notebooks/service";
 import { deferred } from "./fake-auth-client";
-import { granted, installPermission, PHOTO, refused, takePictureAsync, undetermined } from "./fake-camera";
+import {
+  cameraBehavior,
+  cameraRendered,
+  granted,
+  installPermission,
+  PHOTO,
+  refused,
+  signalCameraReady,
+  takePictureAsync,
+  undetermined,
+} from "./fake-camera";
 import { histoire, installFakeNotebooks, sciences } from "./fake-notebook-service";
 import { phoneLocale } from "./phone-locale";
 
@@ -31,7 +43,7 @@ jest.mock("@/notebooks/service", () => ({
   notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn() },
 }));
 jest.mock("@/capture/service", () => ({
-  captureService: { allowance: jest.fn(), latestNotebookId: jest.fn(), send: jest.fn() },
+  captureService: { allowance: jest.fn(), latestNotebookId: jest.fn(), send: jest.fn(), preparePhoto: jest.fn(), discardPhoto: jest.fn() },
 }));
 
 const fr = strings.fr;
@@ -43,6 +55,9 @@ const trial: Allowance = { isAnonymous: true, used: 3, max: 3, remaining: 0, res
 const daily: Allowance = { isAnonymous: true, used: 0, max: 3, remaining: 3, resetsAt: null, blockedReason: "anonymous_daily_cap" };
 
 const online = { isConnected: true, isInternetReachable: true };
+const offline = { isConnected: false, isInternetReachable: false };
+
+const never = <T,>() => new Promise<T>(() => {});
 
 let openSettings: jest.SpyInstance;
 
@@ -54,6 +69,8 @@ beforeEach(() => {
   jest.mocked(captureService.allowance).mockReset().mockResolvedValue(open);
   jest.mocked(captureService.latestNotebookId).mockReset().mockResolvedValue(histoire.id);
   jest.mocked(captureService.send).mockReset().mockResolvedValue({ status: "sent", pageId: "page-1" });
+  jest.mocked(captureService.preparePhoto).mockReset().mockImplementation(async (picture) => picture.uri);
+  jest.mocked(captureService.discardPhoto).mockReset();
   installFakeNotebooks([histoire, sciences]);
   installPermission(granted);
   openSettings = jest.spyOn(Linking, "openSettings").mockResolvedValue();
@@ -92,6 +109,12 @@ async function openCapture(): Promise<() => string> {
 async function takePhoto(): Promise<void> {
   await fireEvent.press(await screen.findByLabelText(fr.capture.shutterLabel));
   await screen.findByText(fr.capture.read);
+}
+
+async function goBack(): Promise<void> {
+  await act(async () => {
+    router.back();
+  });
 }
 
 test("scan opens the camera when nothing blocks, in the notebook of the last page", async () => {
@@ -133,7 +156,7 @@ test("the three trial pages read open the account sheet before the camera [22]",
 
   expect(pathname()).toBe("/limit");
   expect(screen.getByText(fr.limit.accountTitle)).toBeTruthy();
-  expect(screen.getByText(fr.limit.trialBody)).toBeTruthy();
+  expect(screen.getByText(fr.limit.trialBody(3, 15))).toBeTruthy();
   expect(screen.getByText(fr.limit.createAccount)).toBeTruthy();
   expect(screen.getByText(fr.limit.later)).toBeTruthy();
   expect(screen.queryByTestId("camera-view")).toBeNull();
@@ -149,7 +172,7 @@ test("the daily cap of the anonymous accounts opens the account sheet with its o
   expect(pathname()).toBe("/limit");
   expect(screen.getByText(fr.limit.accountTitle)).toBeTruthy();
   expect(screen.getByText(fr.limit.dailyBody)).toBeTruthy();
-  expect(screen.queryByText(fr.limit.trialBody)).toBeNull();
+  expect(screen.queryByText(fr.limit.trialBody(3, 15))).toBeNull();
   expect(screen.queryByTestId("camera-view")).toBeNull();
 });
 
@@ -175,8 +198,60 @@ test("the sheets speak English on an English phone", async () => {
   expect(screen.getByText(en.limit.monthBody(10))).toHaveTextContent("November 1", { exact: false });
 });
 
+test("the limits are read again at the tap on scan: a limit reached since the last reading opens its sheet", async () => {
+  jest.mocked(captureService.allowance).mockResolvedValueOnce(open).mockResolvedValue(monthly);
+  const pathname = await openCapture();
+
+  expect(pathname()).toBe("/limit");
+  expect(screen.queryByTestId("camera-view")).toBeNull();
+});
+
+test("a limit that is gone since the last reading lets the camera open", async () => {
+  jest.mocked(captureService.allowance).mockResolvedValueOnce(monthly).mockResolvedValue(open);
+  const pathname = await openCapture();
+
+  expect(pathname()).toBe("/capture");
+});
+
+test("when the new reading of the limits fails, the limits known before are used", async () => {
+  jest.mocked(captureService.allowance).mockResolvedValueOnce(monthly).mockRejectedValue(new Error("offline"));
+  const pathname = await openCapture();
+
+  expect(pathname()).toBe("/limit");
+});
+
+test("when the new reading of the limits does not answer, the limits known before are used after a short wait", async () => {
+  jest.mocked(captureService.allowance).mockResolvedValueOnce(monthly).mockReturnValue(never());
+  const pathname = await openApp("/");
+  await screen.findByText(histoire.name);
+  await loaded();
+  await fireEvent.press(await screen.findByText(fr.common.scan));
+  expect(pathname()).toBe("/");
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(3000);
+  });
+
+  expect(pathname()).toBe("/limit");
+});
+
+test("two quick taps on scan open one capture", async () => {
+  const pathname = await openApp("/");
+  await screen.findByText(histoire.name);
+  await loaded();
+  const fetching = deferred<Allowance>();
+  jest.mocked(captureService.allowance).mockReturnValue(fetching.promise);
+  await fireEvent.press(await screen.findByText(fr.common.scan));
+  await fireEvent.press(screen.getByText(fr.common.scan));
+  await act(async () => fetching.resolve(open));
+  await act(async () => {});
+  expect(pathname()).toBe("/capture");
+
+  await goBack();
+  expect(pathname()).toBe("/");
+});
+
 test("without a network the capture is blocked with its message and no camera [28]", async () => {
-  jest.mocked(useNetworkState).mockReturnValue({ isConnected: false, isInternetReachable: false });
+  jest.mocked(useNetworkState).mockReturnValue(offline);
   const pathname = await openCapture();
 
   expect(pathname()).toBe("/capture");
@@ -185,17 +260,71 @@ test("without a network the capture is blocked with its message and no camera [2
   expect(screen.queryByLabelText(fr.capture.shutterLabel)).toBeNull();
 });
 
-test("a network that is connected but cannot reach the internet blocks the capture too [28]", async () => {
+test("a network that is connected is not taken for a lost one, even if the internet is not confirmed", async () => {
   jest.mocked(useNetworkState).mockReturnValue({ isConnected: true, isInternetReachable: false });
   await openCapture();
 
-  expect(await screen.findByText(fr.capture.noConnection)).toBeTruthy();
-  expect(screen.queryByTestId("camera-view")).toBeNull();
+  expect(await screen.findByTestId("camera-view")).toBeTruthy();
+  expect(screen.queryByText(fr.capture.noConnection)).toBeNull();
 });
 
 test("an unknown network state does not block the camera", async () => {
   jest.mocked(useNetworkState).mockReturnValue({});
   await openCapture();
+
+  expect(await screen.findByTestId("camera-view")).toBeTruthy();
+});
+
+test("offline, the message and the cancel button show at once, without waiting for the last notebook [28]", async () => {
+  jest.mocked(useNetworkState).mockReturnValue(offline);
+  jest.mocked(captureService.latestNotebookId).mockReturnValue(never());
+  await openCapture();
+
+  expect(await screen.findByText(fr.capture.noConnection)).toBeTruthy();
+  expect(screen.getByText(fr.common.cancel)).toBeTruthy();
+});
+
+test("a capture opened from a notebook does not wait for the last notebook", async () => {
+  jest.mocked(captureService.latestNotebookId).mockReturnValue(never());
+  await openApp(`/notebook/${sciences.id}`);
+  await screen.findByText(fr.notebook.emptyTitle);
+  await loaded();
+  await pressScan();
+
+  expect(await screen.findByLabelText(fr.capture.notebookLabel)).toHaveTextContent(sciences.name, { exact: false });
+});
+
+test("while the last notebook is awaited the cancel button is there, and after a short wait the first notebook is used", async () => {
+  jest.mocked(captureService.latestNotebookId).mockReturnValue(never());
+  await openCapture();
+
+  expect(screen.getByText(fr.common.cancel)).toBeTruthy();
+  expect(screen.queryByTestId("camera-view")).toBeNull();
+
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(3000);
+  });
+
+  expect(await screen.findByTestId("camera-view")).toBeTruthy();
+  expect(screen.getByLabelText(fr.capture.notebookLabel)).toHaveTextContent(histoire.name, { exact: false });
+});
+
+test("a last notebook that cannot be read opens the camera in the first notebook at once", async () => {
+  jest.mocked(captureService.latestNotebookId).mockRejectedValue(new Error("boom"));
+  await openCapture();
+
+  expect(await screen.findByLabelText(fr.capture.notebookLabel)).toHaveTextContent(histoire.name, { exact: false });
+});
+
+test("notebooks that cannot be read give a message with a cancel button and a retry, never a blank screen", async () => {
+  jest.mocked(notebookService.list).mockRejectedValue(new Error("boom"));
+  await openApp("/capture");
+
+  expect(await screen.findByText(fr.library.loadFailed)).toBeTruthy();
+  expect(screen.getByText(fr.common.cancel)).toBeTruthy();
+
+  jest.mocked(notebookService.list).mockResolvedValue([histoire, sciences]);
+  await fireEvent.press(screen.getByText(fr.common.retry));
 
   expect(await screen.findByTestId("camera-view")).toBeTruthy();
 });
@@ -256,6 +385,17 @@ test("the notebook of the capture can be changed with a tap", async () => {
   expect(screen.getByLabelText(fr.capture.notebookLabel)).toHaveTextContent(sciences.name, { exact: false });
 });
 
+test("a screen reader hears the destination notebook with its label, and the state of the flash", async () => {
+  await openCapture();
+  const chip = await screen.findByLabelText(fr.capture.notebookLabel);
+
+  expect(chip.props.accessibilityValue).toEqual({ text: histoire.name });
+  expect(screen.getByLabelText(fr.capture.flashLabel).props.accessibilityState).toMatchObject({ selected: false });
+
+  await fireEvent.press(screen.getByLabelText(fr.capture.flashLabel));
+  expect(screen.getByLabelText(fr.capture.flashLabel).props.accessibilityState).toMatchObject({ selected: true });
+});
+
 test("scan from a notebook opens the capture in that notebook", async () => {
   jest.mocked(captureService.latestNotebookId).mockResolvedValue(histoire.id);
   await openApp(`/notebook/${sciences.id}`);
@@ -281,6 +421,45 @@ test("the flash can be switched on", async () => {
   expect(screen.getByTestId("camera-view").props.accessibilityState).toEqual({ selected: true });
 });
 
+test("the camera keeps its focus on by itself, so handwriting is sharp", async () => {
+  await openCapture();
+  await screen.findByTestId("camera-view");
+
+  expect(cameraRendered.mock.calls.at(-1)?.[0]).toMatchObject({ autofocus: "on", facing: "back" });
+});
+
+test("the shutter does nothing until the camera is ready, after a retake as well", async () => {
+  cameraBehavior.readyOnMount = false;
+  await openCapture();
+  await screen.findByTestId("camera-view");
+  await fireEvent.press(screen.getByLabelText(fr.capture.shutterLabel));
+  expect(takePictureAsync).not.toHaveBeenCalled();
+
+  await act(async () => signalCameraReady());
+  await takePhoto();
+  expect(takePictureAsync).toHaveBeenCalledTimes(1);
+
+  await fireEvent.press(screen.getByText(fr.capture.retake));
+  await screen.findByTestId("camera-view");
+  await fireEvent.press(screen.getByLabelText(fr.capture.shutterLabel));
+  expect(takePictureAsync).toHaveBeenCalledTimes(1);
+
+  await act(async () => signalCameraReady());
+  await fireEvent.press(screen.getByLabelText(fr.capture.shutterLabel));
+  expect(takePictureAsync).toHaveBeenCalledTimes(2);
+});
+
+test("a photo that could not be taken says so and the shutter works again", async () => {
+  takePictureAsync.mockRejectedValueOnce(new Error("camera busy"));
+  await openCapture();
+  await fireEvent.press(await screen.findByLabelText(fr.capture.shutterLabel));
+
+  expect(await screen.findByText(fr.capture.shotFailed)).toBeTruthy();
+
+  await takePhoto();
+  expect(screen.queryByText(fr.capture.shotFailed)).toBeNull();
+});
+
 test("a photo is shown for checking with the page number and the notebook, and nothing is created yet", async () => {
   await openCapture();
   await takePhoto();
@@ -288,16 +467,38 @@ test("a photo is shown for checking with the page number and the notebook, and n
   expect(takePictureAsync).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.9, exif: false }));
   expect(screen.getByText(fr.capture.reviewTitle(histoire.pageCount + 1, histoire.name))).toBeTruthy();
   expect(screen.getByText(fr.capture.retake)).toBeTruthy();
+  expect(screen.queryByText(fr.common.cancel)).toBeNull();
   expect(captureService.send).not.toHaveBeenCalled();
 });
 
-test("retake goes back to the camera and sends nothing", async () => {
+test("a photo with too many pixels is shrunk before the check, and the shrunk photo is the one sent", async () => {
+  jest.mocked(captureService.preparePhoto).mockResolvedValue("file:///cache/shrunk.jpg");
+  await openCapture();
+  await takePhoto();
+
+  expect(captureService.preparePhoto).toHaveBeenCalledWith(PHOTO);
+
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  await waitFor(() => expect(captureService.send).toHaveBeenCalledTimes(1));
+  expect(captureService.send).toHaveBeenCalledWith({ notebookId: histoire.id, photoUri: "file:///cache/shrunk.jpg", pageId: null }, expect.any(Function));
+});
+
+test("retake goes back to the camera, sends nothing and deletes the photo that was thrown away", async () => {
   await openCapture();
   await takePhoto();
   await fireEvent.press(screen.getByText(fr.capture.retake));
 
   expect(await screen.findByTestId("camera-view")).toBeTruthy();
   expect(captureService.send).not.toHaveBeenCalled();
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
+});
+
+test("leaving the capture on the check of the photo deletes the photo", async () => {
+  await openCapture();
+  await takePhoto();
+  await goBack();
+
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
 });
 
 test("read the page sends the photo to the chosen notebook and opens the page [1]", async () => {
@@ -306,7 +507,18 @@ test("read the page sends the photo to the chosen notebook and opens the page [1
   await fireEvent.press(screen.getByText(fr.capture.read));
 
   await waitFor(() => expect(pathname()).toBe("/page/page-1"));
-  expect(captureService.send).toHaveBeenCalledWith({ notebookId: histoire.id, photoUri: PHOTO.uri, pageId: null });
+  expect(captureService.send).toHaveBeenCalledWith({ notebookId: histoire.id, photoUri: PHOTO.uri, pageId: null }, expect.any(Function));
+  expect(captureService.discardPhoto).not.toHaveBeenCalled();
+});
+
+test("the page replaces the capture: back from the page goes to the library, not to the camera", async () => {
+  const pathname = await openCapture();
+  await takePhoto();
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  await waitFor(() => expect(pathname()).toBe("/page/page-1"));
+
+  await goBack();
+  expect(pathname()).toBe("/");
 });
 
 test("a failed sending keeps the photo, says so, and the next try reuses the same page", async () => {
@@ -320,7 +532,7 @@ test("a failed sending keeps the photo, says so, and the next try reuses the sam
 
   await fireEvent.press(screen.getByText(fr.capture.read));
   await waitFor(() => expect(captureService.send).toHaveBeenCalledTimes(2));
-  expect(captureService.send).toHaveBeenLastCalledWith({ notebookId: histoire.id, photoUri: PHOTO.uri, pageId: "page-7" });
+  expect(captureService.send).toHaveBeenLastCalledWith({ notebookId: histoire.id, photoUri: PHOTO.uri, pageId: "page-7" }, expect.any(Function));
   await waitFor(() => expect(pathname()).toBe("/page/page-1"));
 });
 
@@ -343,7 +555,17 @@ test("a photo the server cannot read asks to retake it", async () => {
   expect(await screen.findByText(fr.capture.photoUnreadable)).toBeTruthy();
 });
 
-test("a limit refused by the server after the photo opens the matching sheet", async () => {
+test("a photo that is too heavy says so, in its own words", async () => {
+  jest.mocked(captureService.send).mockResolvedValueOnce({ status: "tooLarge", pageId: "page-7" });
+  await openCapture();
+  await takePhoto();
+  await fireEvent.press(screen.getByText(fr.capture.read));
+
+  expect(await screen.findByText(fr.capture.photoTooLarge)).toBeTruthy();
+  expect(screen.queryByText(fr.capture.photoUnreadable)).toBeNull();
+});
+
+test("a limit refused by the server after the photo closes the capture, opens the matching sheet and deletes the photo", async () => {
   jest.mocked(captureService.send).mockResolvedValueOnce({ status: "limit", reason: "anonymous_limit", pageId: "page-7" });
   const pathname = await openCapture();
   await takePhoto();
@@ -351,7 +573,12 @@ test("a limit refused by the server after the photo opens the matching sheet", a
 
   await waitFor(() => expect(pathname()).toBe("/limit"));
   expect(screen.getByText(fr.limit.accountTitle)).toBeTruthy();
-  expect(screen.getByText(fr.limit.trialBody)).toBeTruthy();
+  expect(screen.getByText(fr.limit.trialBody(3, 15))).toBeTruthy();
+  expect(screen.queryByTestId("camera-view")).toBeNull();
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
+
+  await fireEvent.press(screen.getByText(fr.limit.later));
+  expect(pathname()).toBe("/");
 });
 
 test("two quick presses on read the page send once, and the button says it is sending", async () => {
@@ -366,6 +593,70 @@ test("two quick presses on read the page send once, and the button says it is se
   expect(screen.queryByText(fr.capture.read)).toBeNull();
 
   await act(async () => sending.resolve({ status: "sent", pageId: "page-1" }));
+});
+
+test("while a page is being sent the cancel button is there, and cancel leaves the capture", async () => {
+  const sending = deferred<SendResult>();
+  jest.mocked(captureService.send).mockReturnValue(sending.promise);
+  const pathname = await openCapture();
+  await takePhoto();
+  await fireEvent.press(screen.getByText(fr.capture.read));
+
+  await fireEvent.press(await screen.findByText(fr.common.cancel));
+  expect(pathname()).toBe("/");
+  expect(captureService.discardPhoto).not.toHaveBeenCalled();
+
+  await act(async () => sending.resolve({ status: "failed", pageId: "page-1" }));
+});
+
+test("leaving the capture while a page is being sent does not bring the user to the page afterwards", async () => {
+  const sending = deferred<SendResult>();
+  jest.mocked(captureService.send).mockReturnValue(sending.promise);
+  const pathname = await openCapture();
+  await takePhoto();
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  await goBack();
+  expect(pathname()).toBe("/");
+
+  await act(async () => sending.resolve({ status: "sent", pageId: "page-1" }));
+  await act(async () => {});
+
+  expect(pathname()).toBe("/");
+});
+
+test("leaving the capture while a page is being sent does not open a sheet afterwards either", async () => {
+  const sending = deferred<SendResult>();
+  jest.mocked(captureService.send).mockReturnValue(sending.promise);
+  const pathname = await openCapture();
+  await takePhoto();
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  await goBack();
+
+  await act(async () => sending.resolve({ status: "limit", reason: "monthly_limit", pageId: "page-1" }));
+  await act(async () => {});
+
+  expect(pathname()).toBe("/");
+});
+
+test("after a page is sent the limits and the notebooks are read again, and the limits again when the reading answers", async () => {
+  let readingAnswered: () => void = () => {};
+  jest.mocked(captureService.send).mockImplementation(async (_input, onReadingSettled) => {
+    readingAnswered = onReadingSettled ?? readingAnswered;
+    return { status: "sent", pageId: "page-1" };
+  });
+  const pathname = await openCapture();
+  await takePhoto();
+  const limitsBefore = jest.mocked(captureService.allowance).mock.calls.length;
+  const notebooksBefore = jest.mocked(notebookService.list).mock.calls.length;
+
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  await waitFor(() => expect(pathname()).toBe("/page/page-1"));
+  await waitFor(() => expect(jest.mocked(captureService.allowance).mock.calls.length).toBeGreaterThan(limitsBefore));
+  await waitFor(() => expect(jest.mocked(notebookService.list).mock.calls.length).toBeGreaterThan(notebooksBefore));
+
+  const limitsAfterSending = jest.mocked(captureService.allowance).mock.calls.length;
+  await act(async () => readingAnswered());
+  await waitFor(() => expect(jest.mocked(captureService.allowance).mock.calls.length).toBeGreaterThan(limitsAfterSending));
 });
 
 test("the capture texts come from the English file on an English phone", async () => {
@@ -386,7 +677,9 @@ test("two presses in the same instant on read the page send once", async () => {
   await openCapture();
   await takePhoto();
   const button = screen.getByText(fr.capture.read);
+  const noise = jest.spyOn(console, "error").mockImplementation(() => undefined);
   await Promise.all([fireEvent.press(button), fireEvent.press(button)]);
+  noise.mockRestore();
 
   expect(captureService.send).toHaveBeenCalledTimes(1);
 

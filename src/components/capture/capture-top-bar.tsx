@@ -8,8 +8,8 @@ type Props = {
   notebookName: string | null;
   flash: boolean | null;
   onCancel: () => void;
-  onNotebook: () => void;
-  onFlash: () => void;
+  onNotebook?: () => void;
+  onFlash?: () => void;
 };
 
 export function CaptureTopBar({ notebookName, flash, onCancel, onNotebook, onFlash }: Props) {
@@ -21,7 +21,13 @@ export function CaptureTopBar({ notebookName, flash, onCancel, onNotebook, onFla
         <Text style={styles.cancel}>{t.common.cancel}</Text>
       </Pressable>
       {notebookName === null ? null : (
-        <Pressable accessibilityLabel={t.capture.notebookLabel} accessibilityRole="button" onPress={onNotebook} style={styles.chip}>
+        <Pressable
+          accessibilityLabel={t.capture.notebookLabel}
+          accessibilityRole="button"
+          accessibilityValue={{ text: notebookName }}
+          onPress={onNotebook}
+          style={styles.chip}
+        >
           <Text numberOfLines={1} style={styles.chipLabel}>
             {notebookName}
           </Text>
@@ -30,7 +36,13 @@ export function CaptureTopBar({ notebookName, flash, onCancel, onNotebook, onFla
       )}
       <View style={[styles.side, styles.right]}>
         {flash === null ? null : (
-          <Pressable accessibilityLabel={t.capture.flashLabel} accessibilityRole="button" hitSlop={12} onPress={onFlash}>
+          <Pressable
+            accessibilityLabel={t.capture.flashLabel}
+            accessibilityRole="button"
+            accessibilityState={{ selected: flash }}
+            hitSlop={12}
+            onPress={onFlash}
+          >
             <Ionicons name={flash ? "flash" : "flash-off-outline"} size={24} color={colors.ink} />
           </Pressable>
         )}
