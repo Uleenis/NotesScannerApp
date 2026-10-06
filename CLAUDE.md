@@ -20,7 +20,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/theme.ts`: colors, fonts and type sizes of the design direction.
 - `tests/`: Jest tests.
 - `supabase/migrations/`: the only way the schema changes.
-- `supabase/functions/`: Edge Functions (`prepare-page`, `read-page`), their shared code in `_shared/`, their Deno tests in `tests/`. Local secrets live in `supabase/functions/.env`, ignored by git.
+- `supabase/functions/`: Edge Functions (`prepare-page`, `read-page`, `relaunch-page`), their shared code in `_shared/`, their Deno tests in `tests/`. Local secrets (`GEMINI_API_KEY`, `RELAUNCH_SECRET`) live in `supabase/functions/.env`, ignored by git. The `pg_cron` task that calls `relaunch-page` reads its secret and address from Supabase Vault, never from the repository.
 - `supabase/tests/database/`: pgTAP tests.
 - `supabase/tests/concurrency/`: parallel-call tests.
 - `services/reading/`: reading service.
@@ -35,7 +35,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 | `npm run audit` | Dependency audit with the allowlist in `audit-ci.json` |
 | `npm run db:start` / `npm run db:stop` | Start or stop the local Supabase stack (Docker) |
 | `npm run db:test` | pgTAP tests on the local database |
-| `npm run db:test:concurrency` | Parallel `charge_page` calls on the local database (needs `db:start`) |
+| `npm run db:test:concurrency` | Parallel `charge_page` calls and parallel runs of the relaunch task on the local database (needs `db:start`) |
 | `npm run functions:check` | Deno type check of the Edge Functions |
 | `npm run functions:lint` | Deno lint of the Edge Functions |
 | `npm run functions:test` | Deno tests of the Edge Functions |

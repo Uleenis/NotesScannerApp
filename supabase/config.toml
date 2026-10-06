@@ -419,3 +419,6 @@ verify_jwt = true
 
 [functions.read-page]
 verify_jwt = true
+
+[functions.relaunch-page]
+verify_jwt = false

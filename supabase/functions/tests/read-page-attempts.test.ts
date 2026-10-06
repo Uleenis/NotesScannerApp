@@ -43,29 +43,21 @@ Deno.test("each failed relaunch is counted and the third one fails the page for 
   assertEquals(world.photos.size, 1);
 });
 
-Deno.test("a page that has failed for good is refused and Gemini is not asked again", async () => {
+Deno.test("a page that has failed for good is only read again by one relaunch of its owner, then refused until a day has passed", async () => {
   const world = new World();
   world.readyPage();
   world.page().queueReason = "read_error";
   world.page().retryCount = 2;
   await failedRead(world);
+  assertEquals(world.page().status, "failed");
+  const afterAutomatic = world.geminiImages.length;
+  await failedRead(world);
+  assertEquals(world.geminiImages.length, afterAutomatic + 2);
   const calls = world.geminiImages.length;
   const response = await call(world);
-  assertEquals(response.status, 409);
-  assertEquals(await readJson(response), { error: "page_failed" });
+  assertEquals(response.status, 429);
+  assertEquals(await readJson(response), { error: "relaunch_too_soon" });
   assertEquals(world.geminiImages.length, calls);
-});
-
-Deno.test("calls repeated on a page that always fails reach Gemini eight times at most and charge once", async () => {
-  const world = new World();
-  world.readyPage();
-  for (let i = 0; i < 20; i++) {
-    world.push(world.failGemini(), world.failGemini());
-    await call(world);
-  }
-  assertEquals(world.geminiImages.length, 8);
-  assertEquals(world.charges.length, 1);
-  assertEquals(world.page().status, "failed");
 });
 
 Deno.test("a relaunch that works reads the page and leaves retry_count alone", async () => {
@@ -111,7 +103,7 @@ Deno.test("the claim names the queue reason and relaunch count that were read, s
   world.page().queueReason = "read_error";
   world.page().retryCount = 1;
   await call(world);
-  assertEquals(world.claimArguments, [[ALICE, PAGE_ID, { queueReason: "read_error", retryCount: 1 }]]);
+  assertEquals(world.claimArguments, [[ALICE, PAGE_ID, { status: "queued", queueReason: "read_error", retryCount: 1 }]]);
 });
 
 Deno.test("a page whose counters changed since they were read is not claimed", async () => {

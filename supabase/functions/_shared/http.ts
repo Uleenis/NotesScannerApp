@@ -37,7 +37,22 @@ export async function pageIdFrom(request: Request): Promise<string | null> {
   return typeof pageId === "string" && UUID.test(pageId) ? pageId.toLowerCase() : null;
 }
 
+const RELAUNCH_SECRET_HEADER = "x-relaunch-secret";
+
+async function digest(value: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+}
+
+async function sameSecret(given: string, expected: string): Promise<boolean> {
+  const [a, b] = await Promise.all([digest(given), digest(expected)]);
+  let difference = a.length ^ b.length;
+  for (let i = 0; i < a.length; i++) difference |= a[i] ^ b[i];
+  return difference === 0;
+}
+
 export type Entry = { token: string; caller: Caller; pageId: string };
+
+export type SchedulerEntry = { pageId: string };
 
 export async function admit(request: Request, auth: Auth, log: Logger): Promise<Entry | Response> {
   if (request.method !== "POST") return refuse(log, { status: 405, code: "method_not_allowed" });
@@ -47,4 +62,13 @@ export async function admit(request: Request, auth: Auth, log: Logger): Promise<
   const pageId = await pageIdFrom(request);
   if (!pageId) return refuse(log, { status: 400, code: "invalid_request" });
   return { token, caller, pageId };
+}
+
+export async function admitScheduler(request: Request, secret: string, log: Logger): Promise<SchedulerEntry | Response> {
+  if (request.method !== "POST") return refuse(log, { status: 405, code: "method_not_allowed" });
+  const given = request.headers.get(RELAUNCH_SECRET_HEADER);
+  if (!secret || !given || !(await sameSecret(given, secret))) return refuse(log, { status: 401, code: "unauthenticated" });
+  const pageId = await pageIdFrom(request);
+  if (!pageId) return refuse(log, { status: 400, code: "invalid_request" });
+  return { pageId };
 }

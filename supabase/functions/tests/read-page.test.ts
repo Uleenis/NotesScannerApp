@@ -113,17 +113,14 @@ Deno.test("read-page refuses a page already in processing and counts nothing [14
   assertUntouched(world, "processing");
 });
 
-Deno.test("read-page refuses a page already read and a page that failed for good", async () => {
-  const expected = { read: "page_already_read", failed: "page_failed" } as const;
-  for (const [status, code] of Object.entries(expected)) {
-    const world = new World();
-    world.readyPage();
-    world.page().status = status as keyof typeof expected;
-    const response = await call(world, TOKEN_ALICE);
-    assertEquals(response.status, 409);
-    assertEquals(await readJson(response), { error: code });
-    assertUntouched(world, status as keyof typeof expected);
-  }
+Deno.test("read-page refuses a page already read", async () => {
+  const world = new World();
+  world.readyPage();
+  world.page().status = "read";
+  const response = await call(world, TOKEN_ALICE);
+  assertEquals(response.status, 409);
+  assertEquals(await readJson(response), { error: "page_already_read" });
+  assertUntouched(world, "read");
 });
 
 Deno.test("read-page refuses an absent photo [14]", async () => {

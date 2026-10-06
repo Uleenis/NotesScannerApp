@@ -6,6 +6,8 @@ export type LogEvent =
   | "read_done"
   | "read_queued"
   | "read_failed"
+  | "manual_relaunch"
+  | "page_abandoned"
   | "unexpected_error";
 
 export type LogFields = {

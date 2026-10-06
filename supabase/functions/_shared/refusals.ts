@@ -1,4 +1,8 @@
-import type { Allowance, ChargeReason, PageStatus } from "./ports.ts";
+import type { Allowance, ChargeReason, PageRow, PageStatus } from "./ports.ts";
+
+export const MANUAL_RELAUNCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+export type ReadingCaller = "owner" | "scheduler";
 
 export type Refusal = { status: number; code: string };
 
@@ -31,4 +35,15 @@ export function refusalForStatus(status: PageStatus): Refusal | null {
     case "failed":
       return { status: 409, code: "page_failed" };
   }
+}
+
+export function refusalForReading(page: PageRow, caller: ReadingCaller, nowMs: number): Refusal | null {
+  if (caller === "scheduler") {
+    return page.status === "queued" && page.queueReason === "read_error" ? null : { status: 409, code: "page_not_relaunchable" };
+  }
+  if (page.status === "failed") {
+    const last = page.manualRelaunchedAt === null ? null : Date.parse(page.manualRelaunchedAt);
+    return last !== null && !Number.isNaN(last) && nowMs - last < MANUAL_RELAUNCH_INTERVAL_MS ? { status: 429, code: "relaunch_too_soon" } : null;
+  }
+  return refusalForStatus(page.status);
 }
