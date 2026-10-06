@@ -13,12 +13,12 @@ export function useNotebooks() {
   });
 }
 
-export function useNotebook(id: string) {
+export function useNotebook(id: string | null) {
   const { status, userId } = useAuth();
   return useQuery({
     queryKey: ["notebook", userId, id],
-    queryFn: () => notebookService.get(id),
-    enabled: status === "ready",
+    queryFn: () => (id === null ? Promise.resolve(null) : notebookService.get(id)),
+    enabled: status === "ready" && id !== null,
   });
 }
 
