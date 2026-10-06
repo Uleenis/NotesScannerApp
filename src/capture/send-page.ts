@@ -11,14 +11,18 @@ export type PrepareResult =
   | { status: "network" }
   | { status: "failed" };
 
-export type UploadResult = "uploaded" | "network" | "refused" | "failed";
+export type UploadResult = "uploaded" | "tooLarge" | "network" | "refused" | "failed";
+
+export type MarkResult = "marked" | "network" | "failed";
 
 export type SendDeps = {
   createPage: (notebookId: string, capturedAt: string) => Promise<CreatePageResult>;
   preparePage: (pageId: string) => Promise<PrepareResult>;
   upload: (path: string, token: string, photoUri: string) => Promise<UploadResult>;
+  markUploaded: (pageId: string, uploadedAt: string) => Promise<MarkResult>;
   startReading: (pageId: string) => void;
   now: () => string;
+  timeoutMs: number;
 };
 
 export type SendInput = { notebookId: string; photoUri: string; pageId: string | null };
@@ -27,6 +31,7 @@ export type SendResult =
   | { status: "sent"; pageId: string }
   | { status: "limit"; reason: BlockReason; pageId: string }
   | { status: "photo"; pageId: string }
+  | { status: "tooLarge"; pageId: string }
   | { status: "network"; pageId: string | null }
   | { status: "failed"; pageId: string | null };
 
@@ -46,6 +51,7 @@ async function send(deps: SendDeps, input: SendInput, track: (pageId: string) =>
   track(pageId);
 
   const prepared = await deps.preparePage(pageId);
+  let reading = true;
   switch (prepared.status) {
     case "limit":
       return { status: "limit", reason: prepared.reason, pageId };
@@ -54,7 +60,8 @@ async function send(deps: SendDeps, input: SendInput, track: (pageId: string) =>
       return { status: prepared.status, pageId };
     case "processing":
     case "read":
-      return { status: "sent", pageId };
+      reading = false;
+      break;
     case "exists":
       break;
     case "ready": {
@@ -69,17 +76,32 @@ async function send(deps: SendDeps, input: SendInput, track: (pageId: string) =>
     }
   }
 
-  deps.startReading(pageId);
+  const marked = await deps.markUploaded(pageId, deps.now());
+  if (marked !== "marked") {
+    return { status: marked, pageId };
+  }
+  if (reading) {
+    deps.startReading(pageId);
+  }
   return { status: "sent", pageId };
 }
 
 export async function sendPage(deps: SendDeps, input: SendInput): Promise<SendResult> {
   let pageId = input.pageId;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<SendResult>((resolve) => {
+    timer = setTimeout(() => resolve({ status: "failed", pageId }), deps.timeoutMs);
+  });
   try {
-    return await send(deps, input, (id) => {
-      pageId = id;
-    });
+    return await Promise.race([
+      send(deps, input, (id) => {
+        pageId = id;
+      }),
+      timeout,
+    ]);
   } catch {
     return { status: "failed", pageId };
+  } finally {
+    clearTimeout(timer);
   }
 }

@@ -1,13 +1,17 @@
 import { FunctionsFetchError, FunctionsHttpError, type SupabaseClient } from "@supabase/supabase-js";
 
 import type { Allowance, BlockReason } from "./allowance";
-import type { CreatePageResult, PrepareResult, UploadResult } from "./send-page";
+import type { CreatePageResult, MarkResult, PrepareResult, UploadResult } from "./send-page";
 
 export type CaptureClient = Pick<SupabaseClient, "from" | "rpc" | "functions" | "storage">;
 
 const BLOCK_REASONS: readonly string[] = ["monthly_limit", "anonymous_limit", "anonymous_daily_cap"];
 
 const NETWORK_MESSAGE = /network|fetch|timed? ?out|offline|connection/i;
+
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+export type PhotoFile = { bytes: () => Promise<Uint8Array>; delete: () => void };
 
 function isBlockReason(value: unknown): value is BlockReason {
   return typeof value === "string" && BLOCK_REASONS.includes(value);
@@ -60,7 +64,12 @@ export async function fetchAllowance(client: CaptureClient): Promise<Allowance |
 }
 
 export async function fetchLatestNotebookId(client: CaptureClient): Promise<string | null> {
-  const { data, error } = await client.from("pages").select("notebook_id").order("captured_at", { ascending: false }).limit(1);
+  const { data, error } = await client
+    .from("pages")
+    .select("notebook_id")
+    .not("uploaded_at", "is", null)
+    .order("captured_at", { ascending: false })
+    .limit(1);
   if (error || !Array.isArray(data)) {
     throw new Error("The last notebook could not be loaded.");
   }
@@ -82,6 +91,18 @@ export async function insertPage(client: CaptureClient, notebookId: string, capt
     return { status: "created", pageId: id };
   } catch (error) {
     return { status: looksLikeNetworkFailure(error) ? "network" : "failed" };
+  }
+}
+
+export async function markUploaded(client: CaptureClient, pageId: string, uploadedAt: string): Promise<MarkResult> {
+  try {
+    const { error } = await client.from("pages").update({ uploaded_at: uploadedAt }).eq("id", pageId);
+    if (!error) {
+      return "marked";
+    }
+    return looksLikeNetworkFailure(error) ? "network" : "failed";
+  } catch (error) {
+    return looksLikeNetworkFailure(error) ? "network" : "failed";
   }
 }
 
@@ -140,17 +161,45 @@ export async function callRead(client: CaptureClient, pageId: string): Promise<v
 }
 
 export async function uploadPhoto(client: CaptureClient, path: string, token: string, bytes: Uint8Array): Promise<UploadResult> {
+  if (bytes.length > MAX_PHOTO_BYTES) {
+    return "tooLarge";
+  }
   try {
     const { error } = await client.storage.from("photos").uploadToSignedUrl(path, token, bytes, { contentType: "image/jpeg" });
     if (!error) {
       return "uploaded";
     }
     const statusCode = String(field(error, "statusCode") ?? "");
-    if (statusCode === "413" || statusCode === "415") {
+    if (statusCode === "413") {
+      return "tooLarge";
+    }
+    if (statusCode === "415") {
       return "refused";
     }
     return looksLikeNetworkFailure(error) ? "network" : "failed";
   } catch (error) {
     return looksLikeNetworkFailure(error) ? "network" : "failed";
   }
+}
+
+function discard(file: PhotoFile): void {
+  try {
+    file.delete();
+  } catch {
+    return;
+  }
+}
+
+export async function uploadPhotoFile(client: CaptureClient, file: PhotoFile, path: string, token: string): Promise<UploadResult> {
+  let bytes: Uint8Array;
+  try {
+    bytes = await file.bytes();
+  } catch {
+    return "failed";
+  }
+  const result = await uploadPhoto(client, path, token, bytes);
+  if (result === "uploaded") {
+    discard(file);
+  }
+  return result;
 }

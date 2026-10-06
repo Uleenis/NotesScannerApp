@@ -6,8 +6,10 @@ import {
   fetchAllowance,
   fetchLatestNotebookId,
   insertPage,
+  markUploaded,
   parseAllowance,
   uploadPhoto,
+  uploadPhotoFile,
   type CaptureClient,
 } from "@/capture/api";
 
@@ -59,11 +61,14 @@ test("an allowance request that fails is an error, not a missing limit", async (
 function pagesClient(outcome: Outcome) {
   const limit = jest.fn(async () => outcome);
   const order = jest.fn(() => ({ limit }));
-  const select = jest.fn(() => ({ order }));
+  const not = jest.fn(() => ({ order }));
+  const select = jest.fn(() => ({ not, order }));
   const insertSingle = jest.fn(async () => outcome);
   const insert = jest.fn(() => ({ select: () => ({ single: insertSingle }) }));
-  const from = jest.fn(() => ({ select, insert }));
-  return { from, select, order, limit, insert };
+  const eq = jest.fn(async () => outcome);
+  const update = jest.fn(() => ({ eq }));
+  const from = jest.fn(() => ({ select, insert, update }));
+  return { from, select, not, order, limit, insert, update, eq };
 }
 
 test("the last notebook used is the one of the most recent page", async () => {
@@ -72,6 +77,7 @@ test("the last notebook used is the one of the most recent page", async () => {
 
   expect(fake.from).toHaveBeenCalledWith("pages");
   expect(fake.select).toHaveBeenCalledWith("notebook_id");
+  expect(fake.not).toHaveBeenCalledWith("uploaded_at", "is", null);
   expect(fake.order).toHaveBeenCalledWith("captured_at", { ascending: false });
   expect(fake.limit).toHaveBeenCalledWith(1);
   expect(id).toBe("notebook-7");
@@ -179,11 +185,96 @@ test("the photo is uploaded to the prepared path with its token, as a JPEG", asy
   expect(result).toBe("uploaded");
 });
 
-test("a photo the storage refuses for its size or type is refused, other failures are failures", async () => {
-  for (const statusCode of ["413", "415"]) {
-    const fake = storageClient({ data: null, error: { statusCode, message: "refused" } });
-    expect(await uploadPhoto(client(fake), "p", "t", BYTES)).toBe("refused");
-  }
+test("a photo the storage refuses for its size is too large, for its type is refused, other failures are failures", async () => {
+  const tooLarge = storageClient({ data: null, error: { statusCode: "413", message: "refused" } });
+  expect(await uploadPhoto(client(tooLarge), "p", "t", BYTES)).toBe("tooLarge");
+  const wrongType = storageClient({ data: null, error: { statusCode: "415", message: "refused" } });
+  expect(await uploadPhoto(client(wrongType), "p", "t", BYTES)).toBe("refused");
   expect(await uploadPhoto(client(storageClient({ data: null, error: { statusCode: "500", message: "broken" } })), "p", "t", BYTES)).toBe("failed");
   expect(await uploadPhoto(client(storageClient({ data: null, error: { message: "Network request failed" } })), "p", "t", BYTES)).toBe("network");
+});
+
+test("a photo over the limit of the storage is not even sent", async () => {
+  const fake = storageClient({ data: { path: "p" }, error: null });
+  const heavy = new Uint8Array(10 * 1024 * 1024 + 1);
+
+  expect(await uploadPhoto(client(fake), "p", "t", heavy)).toBe("tooLarge");
+  expect(fake.uploadToSignedUrl).not.toHaveBeenCalled();
+});
+
+test("a photo of exactly the limit is sent", async () => {
+  const fake = storageClient({ data: { path: "p" }, error: null });
+
+  expect(await uploadPhoto(client(fake), "p", "t", new Uint8Array(10 * 1024 * 1024))).toBe("uploaded");
+});
+
+test("a failure that is a TypeError is a network failure whatever its words", async () => {
+  const insertThrows = { from: () => ({ insert: () => ({ select: () => ({ single: () => Promise.reject(new TypeError("Load failed")) }) }) }) };
+  expect(await insertPage(client(insertThrows), "n", "t")).toEqual({ status: "network" });
+  const prepareThrows = { functions: { invoke: () => Promise.reject(new TypeError("Load failed")) } };
+  expect(await callPrepare(client(prepareThrows), "p")).toEqual({ status: "network" });
+  const uploadThrows = { storage: { from: () => ({ uploadToSignedUrl: () => Promise.reject(new TypeError("Load failed")) }) } };
+  expect(await uploadPhoto(client(uploadThrows), "p", "t", BYTES)).toBe("network");
+});
+
+test("a database error with a code is never taken for a network failure", async () => {
+  const error = { code: "42501", message: "connection to the database was denied" };
+  expect(await insertPage(client(pagesClient({ data: null, error })), "n", "t")).toEqual({ status: "failed" });
+});
+
+test("the page is marked as uploaded with the moment, and only that field is written", async () => {
+  const fake = pagesClient({ data: null, error: null });
+  const result = await markUploaded(client(fake), "page-1", "2026-10-06T10:00:00.000Z");
+
+  expect(fake.from).toHaveBeenCalledWith("pages");
+  expect(fake.update).toHaveBeenCalledWith({ uploaded_at: "2026-10-06T10:00:00.000Z" });
+  expect(fake.eq).toHaveBeenCalledWith("id", "page-1");
+  expect(result).toBe("marked");
+});
+
+test("a page that cannot be marked is a failure, a lost network is a network failure", async () => {
+  expect(await markUploaded(client(pagesClient({ data: null, error: { code: "42501", message: "denied" } })), "p", "t")).toBe("failed");
+  expect(await markUploaded(client(pagesClient({ data: null, error: { message: "TypeError: Network request failed" } })), "p", "t")).toBe("network");
+  const throwing = { from: () => ({ update: () => ({ eq: () => Promise.reject(new TypeError("Network request failed")) }) }) };
+  expect(await markUploaded(client(throwing), "p", "t")).toBe("network");
+});
+
+function photoFile(bytes: () => Promise<Uint8Array>) {
+  const remove = jest.fn();
+  return { file: { bytes, delete: remove }, remove };
+}
+
+test("the file of the photo is deleted once the photo is uploaded", async () => {
+  const fake = storageClient({ data: { path: "p" }, error: null });
+  const { file, remove } = photoFile(async () => BYTES);
+
+  expect(await uploadPhotoFile(client(fake), file, "u/p/original.jpg", "token")).toBe("uploaded");
+  expect(fake.uploadToSignedUrl).toHaveBeenCalledWith("u/p/original.jpg", "token", BYTES, { contentType: "image/jpeg" });
+  expect(remove).toHaveBeenCalledTimes(1);
+});
+
+test("the file of the photo is kept when the upload fails, so the next try can send it again", async () => {
+  for (const error of [{ statusCode: "500", message: "broken" }, { statusCode: "413", message: "big" }, { message: "Network request failed" }]) {
+    const { file, remove } = photoFile(async () => BYTES);
+    await uploadPhotoFile(client(storageClient({ data: null, error })), file, "p", "t");
+
+    expect(remove).not.toHaveBeenCalled();
+  }
+});
+
+test("a file that cannot be deleted does not turn a sent photo into a failure", async () => {
+  const { file, remove } = photoFile(async () => BYTES);
+  remove.mockImplementation(() => {
+    throw new Error("already gone");
+  });
+
+  expect(await uploadPhotoFile(client(storageClient({ data: { path: "p" }, error: null })), file, "p", "t")).toBe("uploaded");
+});
+
+test("a file that cannot be read is a failure and nothing is uploaded", async () => {
+  const fake = storageClient({ data: { path: "p" }, error: null });
+  const { file } = photoFile(async () => Promise.reject(new Error("gone")));
+
+  expect(await uploadPhotoFile(client(fake), file, "p", "t")).toBe("failed");
+  expect(fake.uploadToSignedUrl).not.toHaveBeenCalled();
 });

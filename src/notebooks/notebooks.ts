@@ -53,6 +53,7 @@ export async function listNotebooks(client: NotebookClient): Promise<NotebookSum
   const { data, error } = await client
     .from("notebooks")
     .select("id, name, position, pages(count)")
+    .not("pages.uploaded_at", "is", null)
     .order("position")
     .order("id");
   const notebooks = Array.isArray(data) ? data.map(readNotebook) : null;
@@ -63,7 +64,12 @@ export async function listNotebooks(client: NotebookClient): Promise<NotebookSum
 }
 
 export async function getNotebook(client: NotebookClient, id: string): Promise<NotebookSummary | null> {
-  const { data, error } = await client.from("notebooks").select("id, name, pages(count)").eq("id", id).maybeSingle();
+  const { data, error } = await client
+    .from("notebooks")
+    .select("id, name, pages(count)")
+    .not("pages.uploaded_at", "is", null)
+    .eq("id", id)
+    .maybeSingle();
   if (error) {
     throw new Error("The notebook could not be loaded.");
   }

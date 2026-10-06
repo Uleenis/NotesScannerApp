@@ -40,6 +40,10 @@ function fakeClient(script: Script) {
     },
   });
   const selection = Object.assign(settled(script.rows), {
+    not: (column: string, operator: string, value: unknown) => {
+      record("not", column, operator, value);
+      return selection;
+    },
     order: (column: string, options?: { ascending: boolean }) => {
       record("order", column, options);
       return sorted;
@@ -149,6 +153,17 @@ test("lists the notebooks in position order with their number of pages", async (
     { id: "c", name: "Journal", pageCount: 0 },
   ]);
   expect(calls.filter((call) => call.operation === "order").map((call) => call.args[0])).toEqual(["position", "id"]);
+});
+
+test("counts only the pages whose photo was uploaded, in the list and for one notebook", async () => {
+  const listed = fakeClient({ rows: { data: [], error: null } });
+  await listNotebooks(listed.client);
+  const one = fakeClient({ row: { data: { id: "a", name: "Histoire", pages: [{ count: 1 }] }, error: null } });
+  await getNotebook(one.client, "a");
+
+  for (const { calls } of [listed, one]) {
+    expect(calls.find((call) => call.operation === "not")?.args).toEqual(["pages.uploaded_at", "is", null]);
+  }
 });
 
 test("lists nothing for an account without notebooks", async () => {

@@ -21,21 +21,26 @@ function makeDeps(change: Partial<SendDeps> = {}): { deps: SendDeps; calls: Call
       calls.push("upload");
       return "uploaded" as const;
     }),
+    markUploaded: jest.fn(async () => {
+      calls.push("markUploaded");
+      return "marked" as const;
+    }),
     startReading: jest.fn(() => {
       calls.push("startReading");
     }),
     now: () => NOW,
+    timeoutMs: 1000,
     ...change,
   };
   return { deps, calls };
 }
 
-test("a page is created, prepared, uploaded, then sent to reading, in that order", async () => {
+test("a page is created, prepared, uploaded, marked as uploaded, then sent to reading, in that order", async () => {
   const { deps, calls } = makeDeps();
   const result = await sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
 
   expect(result).toEqual({ status: "sent", pageId: "page-1" });
-  expect(calls).toEqual(["createPage", "preparePage", "upload", "startReading"]);
+  expect(calls).toEqual(["createPage", "preparePage", "upload", "markUploaded", "startReading"]);
 });
 
 test("the page is created in the chosen notebook with the moment of the capture", async () => {
@@ -96,7 +101,73 @@ test("a page already being read or already read counts as sent, without a second
     expect(result).toEqual({ status: "sent", pageId: "page-9" });
     expect(deps.upload).not.toHaveBeenCalled();
     expect(deps.startReading).not.toHaveBeenCalled();
+    expect(deps.markUploaded).toHaveBeenCalledWith("page-9", NOW);
   }
+});
+
+test("the page is marked as uploaded with the moment of the sending, once the photo is in the storage", async () => {
+  const { deps } = makeDeps();
+  await sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
+
+  expect(deps.markUploaded).toHaveBeenCalledTimes(1);
+  expect(deps.markUploaded).toHaveBeenCalledWith("page-1", NOW);
+});
+
+test("a photo already in the storage is marked as uploaded too, so a retried page shows up", async () => {
+  const { deps, calls } = makeDeps({ preparePage: jest.fn(async (): Promise<PrepareResult> => ({ status: "exists" })) });
+  await sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: "page-9" });
+
+  expect(calls).toEqual(["markUploaded", "startReading"]);
+});
+
+test("a page that cannot be marked as uploaded is not read and keeps its id for the next try", async () => {
+  for (const marked of ["failed", "network"] as const) {
+    const { deps } = makeDeps({ markUploaded: jest.fn(async () => marked) });
+    const result = await sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
+
+    expect(result).toEqual({ status: marked, pageId: "page-1" });
+    expect(deps.startReading).not.toHaveBeenCalled();
+  }
+});
+
+test("a refused page or a failed upload is never marked as uploaded", async () => {
+  const limit = makeDeps({ preparePage: jest.fn(async (): Promise<PrepareResult> => ({ status: "limit", reason: "monthly_limit" })) });
+  await sendPage(limit.deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
+  const lost = makeDeps({ upload: jest.fn(async () => "network" as const) });
+  await sendPage(lost.deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
+
+  expect(limit.deps.markUploaded).not.toHaveBeenCalled();
+  expect(lost.deps.markUploaded).not.toHaveBeenCalled();
+});
+
+test("a photo that is too heavy is reported on its own and never marked", async () => {
+  const { deps } = makeDeps({ upload: jest.fn(async () => "tooLarge" as const) });
+  const result = await sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
+
+  expect(result).toEqual({ status: "tooLarge", pageId: "page-1" });
+  expect(deps.markUploaded).not.toHaveBeenCalled();
+  expect(deps.startReading).not.toHaveBeenCalled();
+});
+
+describe("a step that never answers", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  test("ends as a failure after the time allowed, with the page kept for the next try", async () => {
+    const { deps } = makeDeps({ upload: jest.fn(() => new Promise<never>(() => {})) });
+    const sending = sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
+    await jest.advanceTimersByTimeAsync(1000);
+
+    expect(await sending).toEqual({ status: "failed", pageId: "page-1" });
+    expect(deps.startReading).not.toHaveBeenCalled();
+  });
+
+  test("a sending that answers in time leaves no timer behind", async () => {
+    const { deps } = makeDeps();
+    await sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
+
+    expect(jest.getTimerCount()).toBe(0);
+  });
 });
 
 test("each limit the server refuses is reported with its reason and nothing is uploaded", async () => {
