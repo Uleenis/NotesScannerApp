@@ -15,6 +15,12 @@ const MONTHS = [
   "décembre",
 ];
 
+const SHORT_MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+
+const withYear = (text: string, year: number | null) => (year === null ? text : `${text} ${year}`);
+
+const longDate = (day: number, month: number, year: number | null) => withYear(`${day === 1 ? "1er" : day} ${MONTHS[month]}`, year);
+
 export const fr: Strings = {
   common: {
     cancel: "Annuler",
@@ -28,6 +34,9 @@ export const fr: Strings = {
     notebooks: "Carnets",
     newNotebook: "Nouveau carnet",
     loadFailed: "Tes carnets n'ont pas pu être chargés.",
+    latestPages: "Dernières pages",
+    cardMeta: (notebook: string, date: string) => `${notebook} · ${date}`,
+    anonymousReminder: "Tes pages ne sont liées à aucun compte. Crée-en un pour les garder.",
     firstLaunch: {
       title: "Tes notes, au propre",
       body: "Crée un carnet pour ton premier cours, puis photographie une page : l'app la recopie pour toi.",
@@ -44,6 +53,8 @@ export const fr: Strings = {
   },
   notebook: {
     pageCount: (count: number) => (count === 0 ? "Aucune page" : count === 1 ? "1 page" : `${count} pages`),
+    pageCountAndDate: (count: string, date: string) => `${count} · ${date}`,
+    pagesLoadFailed: "Tes pages n'ont pas pu être chargées.",
     emptyTitle: "Ta première page",
     emptyBody: "Photographie une page de ton cours : elle apparaîtra ici, recopiée au propre.",
   },
@@ -77,6 +88,44 @@ export const fr: Strings = {
     dailyBody: "Les essais sans compte sont complets pour aujourd'hui. Avec un compte gratuit, tu scannes tout de suite.",
     createAccount: "Créer un compte",
     later: "Plus tard",
+  },
+  dates: {
+    short: (day: number, month: number, year: number | null) => withYear(`${day} ${SHORT_MONTHS[month]}`, year),
+    long: longDate,
+    takenAt: (day: number, month: number, year: number | null, time: string) => `Prise le ${longDate(day, month, year)} à ${time}`,
+  },
+  reading: {
+    waitingTitle: "Lecture de ta page",
+    waitingBody: (notebook: string) => `Tu peux quitter cet écran : la page continue d'être lue et t'attendra dans ${notebook}.`,
+    scanNext: "Scanner la page suivante",
+    backTo: (notebook: string) => `Retour à ${notebook}`,
+    deferredTitle: "La lecture n'a pas abouti",
+    deferredBody: (minutes: number) =>
+      `Le service de lecture n'a pas répondu. Ta photo est enregistrée, l'app réessaie dans ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
+    failedTitle: "La lecture a échoué",
+    failedBody: "La lecture n'a pas pu se faire après plusieurs essais. Ta photo reste enregistrée.",
+    relaunch: "Relancer la lecture",
+    relaunchTooSoon: "Tu as déjà relancé cette page aujourd'hui. Réessaie demain.",
+    relaunchFailed: "La relance n'a pas abouti. Réessaie.",
+    heldTitle: "Page en attente",
+    heldBody: "Ta limite de pages est atteinte. Cette page sera lue quand tu la rouvriras, une fois ta limite renouvelée.",
+    unreadableTitle: "La photo n'a pas pu être lue",
+    unreadableBody: "Reprends la page en photo.",
+    loadFailed: "Cette page n'a pas pu être chargée.",
+  },
+  document: {
+    pageNumber: (number: number) => `Page ${number}`,
+    info: (number: number, date: string) => `Page ${number} · ${date}`,
+    openPhoto: "Voir la photo d'origine",
+    stateInProgress: "Lecture en cours",
+    stateDeferred: (minutes: number) => `Lecture reportée · nouvel essai dans ${minutes} min`,
+    stateFailed: "La lecture a échoué",
+  },
+  photo: {
+    title: "Photo d'origine",
+    close: "Fermer",
+    loadFailed: "La photo n'a pas pu être chargée.",
+    label: "La page telle qu'elle a été prise",
   },
   account: {
     title: "Compte",
