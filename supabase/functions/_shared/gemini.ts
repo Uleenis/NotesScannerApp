@@ -20,11 +20,13 @@ export type GeminiFailureKind =
 
 export class GeminiFailure extends Error {
   readonly kind: GeminiFailureKind;
+  readonly status: number | undefined;
 
-  constructor(kind: GeminiFailureKind) {
+  constructor(kind: GeminiFailureKind, status?: number) {
     super(kind);
     this.name = "GeminiFailure";
     this.kind = kind;
+    this.status = status;
   }
 }
 
@@ -100,7 +102,7 @@ export function createGeminiReader(options: GeminiOptions): (image: Uint8Array) 
     }
     if (!response.ok) {
       await response.body?.cancel();
-      throw new GeminiFailure("http_error");
+      throw new GeminiFailure("http_error", response.status);
     }
     let body: unknown;
     try {

@@ -29,7 +29,12 @@ async function attemptReading(deps: ReadingDeps, pageId: string, image: Uint8Arr
       const reading = await deps.gemini(image);
       return { reading, durationMs: deps.clock.now() - started };
     } catch (error) {
-      deps.log.event("gemini_attempt_failed", { pageId, attempt, kind: error instanceof GeminiFailure ? error.kind : "unknown" });
+      deps.log.event("gemini_attempt_failed", {
+        pageId,
+        attempt,
+        kind: error instanceof GeminiFailure ? error.kind : "unknown",
+        status: error instanceof GeminiFailure ? error.status : undefined,
+      });
     }
   }
   return null;

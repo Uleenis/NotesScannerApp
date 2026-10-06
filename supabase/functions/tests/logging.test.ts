@@ -74,6 +74,31 @@ Deno.test("the logs of a failed reading hold neither the text nor Gemini's error
   assert(logged.length > 0);
 });
 
+Deno.test("the log of a failed attempt gives the status code of Gemini's answer, a number and nothing else of it", async () => {
+  const logged = await everythingLogged(
+    (world) => read(world),
+    (world) => {
+      world.readyPage();
+      world.push(new GeminiFailure("http_error", 429), new GeminiFailure("http_error", 503));
+    },
+  );
+  const attempts = logged.split(String.fromCharCode(10)).map((line) => JSON.parse(line)).filter((record) => record.event === "gemini_attempt_failed");
+  assertEquals(attempts.map((record) => [record.attempt, record.kind, record.status]), [[1, "http_error", 429], [2, "http_error", 503]]);
+  assertClean(logged);
+});
+
+Deno.test("the log of a failed attempt that is not an HTTP answer has no status", async () => {
+  const logged = await everythingLogged(
+    (world) => read(world),
+    (world) => {
+      world.readyPage();
+      world.push(new GeminiFailure("timeout"), new TypeError("boom"));
+    },
+  );
+  const attempts = logged.split(String.fromCharCode(10)).map((line) => JSON.parse(line)).filter((record) => record.event === "gemini_attempt_failed");
+  assertEquals(attempts.map((record) => "status" in record), [false, false]);
+});
+
 Deno.test("the logs of every refusal hold neither the text nor the image [16]", async () => {
   const refusals: ((world: World) => void)[] = [
     (world) => world.addPage(BOB),

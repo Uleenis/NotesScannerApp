@@ -113,6 +113,25 @@ for (const [name, respond, kind] of FAILURES) {
   });
 }
 
+const STATUSES: [number, string][] = [[400, "a 400"], [429, "a 429"], [500, "a 500"], [503, "a 503"]];
+
+for (const [status, name] of STATUSES) {
+  Deno.test(`${name} carries its status code and nothing else of the response`, async () => {
+    const { fetch } = recorder(() => new Response(JSON.stringify({ error: { message: CANARY_GEMINI_ERROR } }), { status }));
+    const error = await assertRejects(() => createGeminiReader({ apiKey: "k", fetch })(JPEG_BYTES), GeminiFailure);
+    assertEquals(error.kind, "http_error");
+    assertEquals(error.status, status);
+    assertEquals(error.message, "http_error");
+    assert(!JSON.stringify(error).includes(CANARY_GEMINI_ERROR));
+  });
+}
+
+Deno.test("a failure that is not an HTTP answer carries no status", async () => {
+  const { fetch } = recorder(() => Promise.reject(new TypeError("connection reset")));
+  const error = await assertRejects(() => createGeminiReader({ apiKey: "k", fetch })(JPEG_BYTES), GeminiFailure);
+  assertEquals(error.status, undefined);
+});
+
 Deno.test("an attempt that takes longer than the limit fails with kind timeout", async () => {
   const hanging = ((_input: string | URL | Request, init?: RequestInit) =>
     new Promise<Response>((_resolve, reject) => {
