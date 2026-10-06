@@ -129,7 +129,6 @@ export const en = {
     title: "Account",
   },
   shell: {
-    page: "Page",
     signIn: "Create an account",
     code: "Enter the code",
   },

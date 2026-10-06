@@ -131,7 +131,6 @@ export const fr: Strings = {
     title: "Compte",
   },
   shell: {
-    page: "Page",
     signIn: "Créer un compte",
     code: "Entre le code",
   },

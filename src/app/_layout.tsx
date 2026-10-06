@@ -4,6 +4,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { StyleSheet } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthProvider } from "@/auth/auth-provider";
 import { defaultAuthServices } from "@/auth/default-services";
@@ -33,27 +35,46 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider services={defaultAuthServices}>
-      <QueryClientProvider client={queryClient}>
-        <StatusBar style="dark" />
-        <Stack screenOptions={stackScreenOptions}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="capture" options={{ presentation: "fullScreenModal", headerShown: false }} />
-          <Stack.Screen
-            name="limit"
-            options={{
-              presentation: "formSheet",
-              headerShown: false,
-              sheetAllowedDetents: "fitToContents",
-              sheetGrabberVisible: true,
-              contentStyle: { backgroundColor: colors.sheet },
-            }}
-          />
-          <Stack.Screen name="account" options={{ presentation: "modal" }} />
-          <Stack.Screen name="new-notebook" options={{ presentation: "modal" }} />
-          <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />
-        </Stack>
-      </QueryClientProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <AuthProvider services={defaultAuthServices}>
+        <QueryClientProvider client={queryClient}>
+          <StatusBar style="dark" />
+          <Stack screenOptions={stackScreenOptions}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="capture" options={{ presentation: "fullScreenModal", headerShown: false }} />
+            <Stack.Screen
+              name="limit"
+              options={{
+                presentation: "formSheet",
+                headerShown: false,
+                sheetAllowedDetents: "fitToContents",
+                sheetGrabberVisible: true,
+                contentStyle: { backgroundColor: colors.sheet },
+              }}
+            />
+            <Stack.Screen
+              name="page/[id]/photo"
+              options={{
+                presentation: "formSheet",
+                headerShown: false,
+                sheetAllowedDetents: [0.5, 1],
+                sheetLargestUndimmedDetentIndex: 0,
+                sheetGrabberVisible: true,
+                contentStyle: { backgroundColor: colors.sheet },
+              }}
+            />
+            <Stack.Screen name="account" options={{ presentation: "modal" }} />
+            <Stack.Screen name="new-notebook" options={{ presentation: "modal" }} />
+            <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />
+          </Stack>
+        </QueryClientProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});
