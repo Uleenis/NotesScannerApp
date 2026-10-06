@@ -7,12 +7,14 @@ import type {
   ChargeReason,
   ChargeResult,
   PageRow,
+  PageReader,
   PageStatus,
   PhotoInfo,
   PreparePageDeps,
   QueueReason,
   ReadingInput,
   ReadPageDeps,
+  RelaunchPageDeps,
   ServerStore,
 } from "../_shared/ports.ts";
 import type { LogEvent, LogFields, Logger } from "../_shared/log.ts";
@@ -29,6 +31,10 @@ export const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x
 export const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
 
 export const MAX_BYTES = 10 * 1024 * 1024;
+
+export const RELAUNCH_SECRET = "relaunch-".repeat(6);
+export const DAY_MS = 24 * 60 * 60 * 1000;
+export const START_OF_TEST = Date.UTC(2026, 9, 6, 10, 0, 0);
 
 export const CANARY_PAGE_TEXT = "ZEBRA-CANARY-PAGE-TEXT";
 export const CANARY_GEMINI_ERROR = "GIRAFFE-CANARY-GEMINI-ERROR";
@@ -59,6 +65,7 @@ type FakePage = {
   queueReason: QueueReason | null;
   retryCount: number;
   readAt: string | null;
+  manualRelaunchedAt: string | null;
 };
 
 type FakePhoto = { bytes: Uint8Array; mimeType: string | null; size: number };
@@ -84,14 +91,15 @@ export class World {
   failOn = new Set<string>();
   calls: string[] = [];
   deletedPhotos = 0;
-  clock = 1_000_000;
+  abandoned: string[] = [];
+  clock = START_OF_TEST;
   geminiDurationMs = 250;
   logs: LogRecord[] = [];
   brokenRowLevelSecurity = false;
   loggerOverride: Logger | null = null;
 
   addPage(userId: string, status: PageStatus = "queued", id: string = PAGE_ID): void {
-    this.pages.set(id, { id, userId, status, queueReason: null, retryCount: 0, readAt: null });
+    this.pages.set(id, { id, userId, status, queueReason: null, retryCount: 0, readAt: null, manualRelaunchedAt: null });
   }
 
   addPhoto(userId: string, pageId: string, bytes: Uint8Array = JPEG_BYTES, mimeType: string | null = "image/jpeg", size?: number): void {
@@ -153,7 +161,14 @@ export class World {
         await this.tick("getPage");
         const page = this.pages.get(pageId);
         if (!page || !visible(page.userId)) return null;
-        return { id: page.id, userId: page.userId, status: page.status, queueReason: page.queueReason, retryCount: page.retryCount };
+        return {
+          id: page.id,
+          userId: page.userId,
+          status: page.status,
+          queueReason: page.queueReason,
+          retryCount: page.retryCount,
+          manualRelaunchedAt: page.manualRelaunchedAt,
+        };
       },
       allowance: async (): Promise<Allowance | null> => {
         await this.tick("allowance");
@@ -199,8 +214,13 @@ export class World {
         this.claimArguments.push([userId, pageId, expected]);
         await this.tick("claim");
         const page = this.pages.get(pageId);
-        if (!page || page.userId !== userId || page.status !== "queued") return false;
-        if (page.queueReason !== expected.queueReason || page.retryCount !== expected.retryCount) return false;
+        if (!page || page.userId !== userId || page.status !== expected.status || page.retryCount !== expected.retryCount) return false;
+        if (expected.status === "queued") {
+          if (page.queueReason !== expected.queueReason) return false;
+        } else if (page.manualRelaunchedAt !== null && page.manualRelaunchedAt > expected.relaunchedBefore) {
+          return false;
+        }
+        if (page.status === "failed") page.manualRelaunchedAt = new Date(this.clock).toISOString();
         page.queueReason = null;
         page.status = "processing";
         return true;
@@ -241,10 +261,45 @@ export class World {
         page.queueReason = null;
         page.retryCount = retryCount;
       },
+      abandonQueued: async (userId, pageId) => {
+        await this.tick("abandonQueued");
+        const page = this.pages.get(pageId);
+        if (!page || page.userId !== userId || page.status !== "queued" || page.queueReason !== "read_error") throw new Error("write for another owner or state");
+        page.status = "failed";
+        page.queueReason = null;
+        this.abandoned.push(pageId);
+      },
       createUploadUrl: async (path) => {
         await this.tick("createUploadUrl");
         this.uploadPaths.push(path);
         return { signedUrl: `http://storage.test/upload/${path}?token=${CANARY_UPLOAD_TOKEN}`, token: CANARY_UPLOAD_TOKEN };
+      },
+    };
+  }
+
+  reader(): PageReader {
+    return {
+      getPage: async (pageId): Promise<PageRow | null> => {
+        await this.tick("getPage");
+        const page = this.pages.get(pageId);
+        if (!page) return null;
+        return {
+          id: page.id,
+          userId: page.userId,
+          status: page.status,
+          queueReason: page.queueReason,
+          retryCount: page.retryCount,
+          manualRelaunchedAt: page.manualRelaunchedAt,
+        };
+      },
+      photoInfo: async (path): Promise<PhotoInfo | null> => {
+        await this.tick("photoInfo");
+        const photo = this.photos.get(path);
+        return photo ? { size: photo.size, mimeType: photo.mimeType } : null;
+      },
+      downloadPhoto: async (path): Promise<Uint8Array | null> => {
+        await this.tick("download");
+        return this.photos.get(path)?.bytes ?? null;
       },
     };
   }
@@ -272,6 +327,17 @@ export class World {
     };
   }
 
+  relaunchDeps(secret: string = RELAUNCH_SECRET): RelaunchPageDeps {
+    return {
+      secret,
+      reader: this.reader(),
+      server: this.server(),
+      gemini: this.gemini(),
+      clock: { now: () => this.clock },
+      log: this.logger(),
+    };
+  }
+
   prepareDeps(): PreparePageDeps {
     const { auth, forCaller, server, log } = this.readDeps();
     return { auth, forCaller, server, log };
@@ -281,6 +347,16 @@ export class World {
 export function post(token: string | null, body: unknown, method: string = "POST"): Request {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (token !== null) headers.authorization = `Bearer ${token}`;
+  return new Request("http://functions.test/fn", {
+    method,
+    headers,
+    body: method === "GET" ? undefined : typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+
+export function relaunch(secret: string | null, body: unknown, method: string = "POST"): Request {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (secret !== null) headers["x-relaunch-secret"] = secret;
   return new Request("http://functions.test/fn", {
     method,
     headers,

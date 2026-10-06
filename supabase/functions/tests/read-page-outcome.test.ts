@@ -2,7 +2,7 @@ import { assertEquals } from "jsr:@std/assert@1";
 import { handleReadPage } from "../read-page/handler.ts";
 import { GeminiFailure } from "../_shared/gemini.ts";
 import type { GeminiFailureKind } from "../_shared/gemini.ts";
-import { ALICE, DEFAULT_READING, PAGE_ID, post, readJson, TOKEN_ALICE, World } from "./fakes.ts";
+import { ALICE, DEFAULT_READING, PAGE_ID, post, readJson, START_OF_TEST, TOKEN_ALICE, World } from "./fakes.ts";
 
 function call(world: World) {
   return handleReadPage(post(TOKEN_ALICE, { page_id: PAGE_ID }), world.readDeps());
@@ -141,7 +141,7 @@ Deno.test("the page is marked read with its reading date, and queue_reason is cl
   await call(world);
   assertEquals(world.page().status, "read");
   assertEquals(world.page().queueReason, null);
-  assertEquals(world.page().readAt, new Date(1_001_000).toISOString());
+  assertEquals(world.page().readAt, new Date(START_OF_TEST + 1_000).toISOString());
 });
 
 Deno.test("every write of the server is made in the name of the verified caller", async () => {

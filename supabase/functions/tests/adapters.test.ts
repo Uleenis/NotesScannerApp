@@ -45,7 +45,7 @@ Deno.test("an unknown charge reason is an error, never a pass", async () => {
 
 Deno.test("claiming a page filters by owner and by the queued state, and clears queue_reason", async () => {
   const { fetch, calls } = stub(() => [{ id: PAGE_ID }]);
-  assertEquals(await createServerStore(KEYS, fetch).claimForReading(ALICE, PAGE_ID, { queueReason: null, retryCount: 0 }), true);
+  assertEquals(await createServerStore(KEYS, fetch).claimForReading(ALICE, PAGE_ID, { status: "queued", queueReason: null, retryCount: 0 }), true);
   assertEquals(calls[0].method, "PATCH");
   assertEquals(calls[0].url.pathname, "/rest/v1/pages");
   assertEquals(calls[0].url.searchParams.get("id"), `eq.${PAGE_ID}`);
@@ -58,14 +58,44 @@ Deno.test("claiming a page filters by owner and by the queued state, and clears 
 
 Deno.test("claiming a relaunched page filters by its queue reason and its relaunch count", async () => {
   const { fetch, calls } = stub(() => [{ id: PAGE_ID }]);
-  await createServerStore(KEYS, fetch).claimForReading(ALICE, PAGE_ID, { queueReason: "read_error", retryCount: 2 });
+  await createServerStore(KEYS, fetch).claimForReading(ALICE, PAGE_ID, { status: "queued", queueReason: "read_error", retryCount: 2 });
   assertEquals(calls[0].url.searchParams.get("queue_reason"), "eq.read_error");
   assertEquals(calls[0].url.searchParams.get("retry_count"), "eq.2");
 });
 
+Deno.test("claiming a failed page filters by the failed state, its count and the cut-off of its last relaunch", async () => {
+  const { fetch, calls } = stub(() => [{ id: PAGE_ID }]);
+  const claimed = await createServerStore(KEYS, fetch).claimForReading(ALICE, PAGE_ID, {
+    status: "failed",
+    retryCount: 3,
+    relaunchedBefore: "2026-10-05T10:00:00.000Z",
+  });
+  assertEquals(claimed, true);
+  assertEquals(calls[0].method, "PATCH");
+  assertEquals(calls[0].url.searchParams.get("id"), `eq.${PAGE_ID}`);
+  assertEquals(calls[0].url.searchParams.get("user_id"), `eq.${ALICE}`);
+  assertEquals(calls[0].url.searchParams.get("status"), "eq.failed");
+  assertEquals(calls[0].url.searchParams.get("retry_count"), "eq.3");
+  assertEquals(calls[0].url.searchParams.get("or"), "(manual_relaunched_at.is.null,manual_relaunched_at.lte.2026-10-05T10:00:00.000Z)");
+  assertEquals(calls[0].url.searchParams.get("queue_reason"), null);
+  assertEquals(calls[0].body, { status: "processing", queue_reason: null });
+});
+
+Deno.test("abandoning a queued page filters by owner, by the queued state and by its cause, and fails it", async () => {
+  const { fetch, calls } = stub(() => [{ id: PAGE_ID }]);
+  await createServerStore(KEYS, fetch).abandonQueued(ALICE, PAGE_ID);
+  assertEquals(calls[0].method, "PATCH");
+  assertEquals(calls[0].url.pathname, "/rest/v1/pages");
+  assertEquals(calls[0].url.searchParams.get("id"), `eq.${PAGE_ID}`);
+  assertEquals(calls[0].url.searchParams.get("user_id"), `eq.${ALICE}`);
+  assertEquals(calls[0].url.searchParams.get("status"), "eq.queued");
+  assertEquals(calls[0].url.searchParams.get("queue_reason"), "eq.read_error");
+  assertEquals(calls[0].body, { status: "failed", queue_reason: null });
+});
+
 Deno.test("a claim that changes no row is not a claim", async () => {
   const { fetch } = stub(() => []);
-  assertEquals(await createServerStore(KEYS, fetch).claimForReading(ALICE, PAGE_ID, { queueReason: null, retryCount: 0 }), false);
+  assertEquals(await createServerStore(KEYS, fetch).claimForReading(ALICE, PAGE_ID, { status: "queued", queueReason: null, retryCount: 0 }), false);
 });
 
 Deno.test("marking a page read filters by owner and by the processing state", async () => {
@@ -98,7 +128,12 @@ Deno.test("failing a page filters by owner and by the processing state, clears q
 Deno.test("a write that changes no row is an error", async () => {
   const { fetch } = stub(() => []);
   const store = createServerStore(KEYS, fetch);
-  for (const write of [() => store.markRead(ALICE, PAGE_ID, "2026-10-05T10:00:00.000Z"), () => store.releaseToQueue(ALICE, PAGE_ID, "read_error", 1), () => store.markFailed(ALICE, PAGE_ID, 3)]) {
+  for (const write of [
+    () => store.markRead(ALICE, PAGE_ID, "2026-10-05T10:00:00.000Z"),
+    () => store.releaseToQueue(ALICE, PAGE_ID, "read_error", 1),
+    () => store.markFailed(ALICE, PAGE_ID, 3),
+    () => store.abandonQueued(ALICE, PAGE_ID),
+  ]) {
     let thrown: unknown = null;
     try {
       await write();
@@ -134,10 +169,24 @@ Deno.test("the reading, the text and the image are written in the name of the gi
 });
 
 Deno.test("the caller's store speaks with the caller's token and the publishable key, never the secret one", async () => {
-  const { fetch, calls } = stub(() => ({ id: PAGE_ID, user_id: ALICE, status: "queued", queue_reason: "read_error", retry_count: 2 }));
+  const { fetch, calls } = stub(() => ({
+    id: PAGE_ID,
+    user_id: ALICE,
+    status: "queued",
+    queue_reason: "read_error",
+    retry_count: 2,
+    manual_relaunched_at: "2026-10-05T10:00:00+00:00",
+  }));
   const page = await createCallerStore(KEYS, "caller-token", fetch).getPage(PAGE_ID);
-  assertEquals(page, { id: PAGE_ID, userId: ALICE, status: "queued", queueReason: "read_error", retryCount: 2 });
-  assertEquals(calls[0].url.searchParams.get("select"), "id,user_id,status,queue_reason,retry_count");
+  assertEquals(page, {
+    id: PAGE_ID,
+    userId: ALICE,
+    status: "queued",
+    queueReason: "read_error",
+    retryCount: 2,
+    manualRelaunchedAt: "2026-10-05T10:00:00+00:00",
+  });
+  assertEquals(calls[0].url.searchParams.get("select"), "id,user_id,status,queue_reason,retry_count,manual_relaunched_at");
   assertEquals(calls[0].method, "GET");
   assertEquals(calls[0].url.pathname, "/rest/v1/pages");
   assertEquals(calls[0].url.searchParams.get("id"), `eq.${PAGE_ID}`);
