@@ -379,3 +379,16 @@ test("the capture texts come from the English file on an English phone", async (
 
   expect(await screen.findByText(en.capture.hint)).toBeTruthy();
 });
+
+test("two presses in the same instant on read the page send once", async () => {
+  const sending = deferred<SendResult>();
+  jest.mocked(captureService.send).mockReturnValue(sending.promise);
+  await openCapture();
+  await takePhoto();
+  const button = screen.getByText(fr.capture.read);
+  await Promise.all([fireEvent.press(button), fireEvent.press(button)]);
+
+  expect(captureService.send).toHaveBeenCalledTimes(1);
+
+  await act(async () => sending.resolve({ status: "sent", pageId: "page-1" }));
+});
