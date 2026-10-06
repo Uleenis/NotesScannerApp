@@ -127,7 +127,7 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
     busy.current = true;
     setShotFailed(false);
     try {
-      const picture = await camera.current.takePictureAsync({ quality: PHOTO_QUALITY, exif: false, shutterSound: true });
+      const picture = await camera.current.takePictureAsync({ quality: PHOTO_QUALITY, exif: false, shutterSound: false });
       const uri = await captureService.preparePhoto(picture);
       if (!mounted.current) {
         captureService.discardPhoto(uri);
@@ -154,7 +154,7 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
   }
 
   async function submit() {
-    if (busy.current || photoUri === null) {
+    if (busy.current || photoUri === null || offline) {
       return;
     }
     busy.current = true;
@@ -196,7 +196,7 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
   if (photoUri !== null) {
     body = (
       <PhotoReview
-        message={failure === null ? null : failureMessages[failure]}
+        message={offline ? t.capture.noConnection : failure === null ? null : failureMessages[failure]}
         onRead={() => void submit()}
         onRetake={retake}
         photoUri={photoUri}

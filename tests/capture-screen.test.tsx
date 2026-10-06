@@ -464,7 +464,7 @@ test("a photo is shown for checking with the page number and the notebook, and n
   await openCapture();
   await takePhoto();
 
-  expect(takePictureAsync).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.9, exif: false }));
+  expect(takePictureAsync).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.9, exif: false, shutterSound: false }));
   expect(screen.getByText(fr.capture.reviewTitle(histoire.pageCount + 1, histoire.name))).toBeTruthy();
   expect(screen.getByText(fr.capture.retake)).toBeTruthy();
   expect(screen.queryByText(fr.common.cancel)).toBeNull();
@@ -553,6 +553,31 @@ test("a photo the server cannot read asks to retake it", async () => {
   await fireEvent.press(screen.getByText(fr.capture.read));
 
   expect(await screen.findByText(fr.capture.photoUnreadable)).toBeTruthy();
+});
+
+test("when the network is lost on the check of the photo, the message shows at once and the sending is not tried", async () => {
+  await openCapture();
+  await takePhoto();
+  jest.mocked(useNetworkState).mockReturnValue(offline);
+  await act(async () => {
+    router.setParams({ refresh: "1" });
+  });
+
+  expect(await screen.findByText(fr.capture.noConnection)).toBeTruthy();
+  expect(screen.getByText(fr.capture.read)).toBeTruthy();
+
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  expect(captureService.send).not.toHaveBeenCalled();
+  expect(screen.getByText(fr.capture.noConnection)).toBeTruthy();
+
+  jest.mocked(useNetworkState).mockReturnValue(online);
+  await act(async () => {
+    router.setParams({ refresh: "2" });
+  });
+  expect(screen.queryByText(fr.capture.noConnection)).toBeNull();
+
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  await waitFor(() => expect(captureService.send).toHaveBeenCalledTimes(1));
 });
 
 test("a photo that is too heavy says so, in its own words", async () => {
