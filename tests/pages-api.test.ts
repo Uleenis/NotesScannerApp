@@ -1,8 +1,8 @@
 import { FunctionsFetchError, FunctionsHttpError } from "@supabase/supabase-js";
 
-import { getPage, listPages, newestFirst, numberPages, photoUrl, startReading, type PageRecord, type PagesClient } from "@/pages/pages";
+import { countPages, getPage, listPages, newestFirst, numberPages, photoUrl, startReading, type PageRecord, type PagesClient } from "@/pages/pages";
 
-type Outcome = { data: unknown; error: unknown };
+type Outcome = { data: unknown; error: unknown; count?: number | null };
 type Call = [string, unknown[]];
 
 function query(outcome: Outcome) {
@@ -308,5 +308,37 @@ describe("startReading", () => {
   test("any other failure is an error and never throws", async () => {
     const thrown = functionsClient(() => Promise.reject(new Error("boom")));
     expect(await startReading(thrown.client, "p")).toEqual({ status: "error" });
+  });
+});
+
+describe("counting the pages of the account", () => {
+  test("counts the pages whose photo arrived, and nothing else", async () => {
+    const { client, from, queries } = database({ data: null, error: null, count: 3 });
+
+    expect(await countPages(client)).toBe(3);
+
+    expect(from).toHaveBeenCalledWith("pages");
+    expect(queries[0].calls).toEqual([
+      ["select", ["id", { count: "exact", head: true }]],
+      ["not", ["uploaded_at", "is", null]],
+    ]);
+  });
+
+  test("counts zero pages", async () => {
+    const { client } = database({ data: null, error: null, count: 0 });
+
+    expect(await countPages(client)).toBe(0);
+  });
+
+  test("fails rather than saying zero when the database does not answer", async () => {
+    const { client } = database({ data: null, error: new Error("offline"), count: null });
+
+    await expect(countPages(client)).rejects.toThrow("The pages could not be counted.");
+  });
+
+  test("fails rather than saying zero when there is no count in the answer", async () => {
+    const { client } = database({ data: null, error: null, count: null });
+
+    await expect(countPages(client)).rejects.toThrow("The pages could not be counted.");
   });
 });
