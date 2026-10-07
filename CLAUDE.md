@@ -14,7 +14,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/app/`: routes (Expo Router) and their `_layout.tsx`, nothing else.
 - `src/components/`: shared components.
 - `src/i18n/`: language files (`en.ts`, `fr.ts`) and the choice of language.
-- `src/auth/`: the anonymous account, the provider that opens it when the app starts and follows every change of account (sign-up, sign-in, sign-out), and the actions of the account by e-mail code (`account.ts`, `account-errors.ts`, `account-service.ts`). A sign-in from an anonymous account that has pages is refused until the transfer exists (branch 11).
+- `src/auth/`: the anonymous account, the provider that opens it when the app starts and follows every change of account (sign-up, sign-in, sign-out), and the actions of the account by e-mail code (`account.ts`, `account-errors.ts`, `account-service.ts`). A sign-in from an anonymous account that has pages checks its code on a second client that keeps nothing (`getStatelessSupabase`), calls `transfer-account` with both tokens, and only then gives the account found to the client of the phone.
 - `src/lib/`: the Supabase client, its config, the secure session storage, the addresses of the terms and the privacy policy (`legal-links.ts`), the opening of a web address (`open-link.ts`) and the forgetting of the data of other accounts.
 - `src/notebooks/`: reading, creating and caching notebooks.
 - `src/capture/`: the limits shown before the camera and the hook that opens the camera or the limit sheet, sending a page (create, prepare, upload, mark it uploaded, start the reading), shrinking the photo, the camera and network hooks. A page only counts for the user (notebook counts, last notebook, page lists) once its `uploaded_at` is set, so a page created for a photo that never arrived stays invisible.
@@ -25,7 +25,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `tests/`: Jest tests. `tests/fixtures/b1-line-shapes.json` holds only the shape of the lines of the 18 B1 readings of the Thinking Spike (every letter is `x` or `X`, every digit `0`), with the verdict of the ground truth for each line break; no text of a page may enter the repository.
 - `supabase/migrations/`: the only way the schema changes.
 - `supabase/templates/`: the e-mail templates (sign-up, sign-in, confirmation). Each one shows `{{ .Token }}`, the code, and never a link; `config.toml` references them and sets the code at 6 digits, valid 10 minutes, a new one after 30 seconds, and the proof of the address before an account keeps it.
-- `supabase/functions/`: Edge Functions (`prepare-page`, `read-page`, `relaunch-page`, `delete-account`), their shared code in `_shared/`, their Deno tests in `tests/`. Local secrets (`GEMINI_API_KEY`, `RELAUNCH_SECRET`) live in `supabase/functions/.env`, ignored by git. The `pg_cron` task that calls `relaunch-page` reads its secret and address from Supabase Vault, never from the repository.
+- `supabase/functions/`: Edge Functions (`prepare-page`, `read-page`, `relaunch-page`, `delete-account`, `transfer-account`), their shared code in `_shared/`, their Deno tests in `tests/`. Local secrets (`GEMINI_API_KEY`, `RELAUNCH_SECRET`) live in `supabase/functions/.env`, ignored by git. The `pg_cron` task that calls `relaunch-page` reads its secret and address from Supabase Vault, never from the repository.
 - `supabase/tests/database/`: pgTAP tests.
 - `supabase/tests/concurrency/`: parallel-call tests.
 - `services/reading/`: reading service.
@@ -40,7 +40,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 | `npm run audit` | Dependency audit with the allowlist in `audit-ci.json` |
 | `npm run db:start` / `npm run db:stop` | Start or stop the local Supabase stack (Docker) |
 | `npm run db:test` | pgTAP tests on the local database |
-| `npm run db:test:concurrency` | Parallel `charge_page` calls and parallel runs of the relaunch task on the local database (needs `db:start`) |
+| `npm run db:test:concurrency` | Parallel `charge_page` calls, parallel runs of the relaunch task and parallel transfers on the local database (needs `db:start`, and a `db reset` just before) |
 | `npm run functions:check` | Deno type check of the Edge Functions |
 | `npm run functions:lint` | Deno lint of the Edge Functions |
 | `npm run functions:test` | Deno tests of the Edge Functions |
@@ -78,6 +78,7 @@ All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitle
 - An e-mail address is kept by an account only once its code is proven (`enable_confirmations = true`, local and production).
 - No account is created in advance for an address: the hook `private.refuse_email_signup` (`[auth.hook.before_user_created]`, local and production) refuses every new account that comes from an e-mail or a phone number. Without it, anyone could create an account for someone else's address with a password they know, and keep access to it once the owner signs in by code. The signup settings stay open: turning off `enable_signup` blocks the anonymous accounts, turning off the e-mail one blocks the sign-in by code.
 - `delete-account` takes the account from the verified token alone, never from the request, erases the files of the account before the account, and logs no identifier.
+- `transfer-account` takes both accounts from the two verified tokens alone (the first must be anonymous, the second registered), never from the request. It copies the files, then moves the rows in one transaction (`transfer_account_rows`), then erases the old files and the anonymous account; every step can be played again. It refuses while a page of the anonymous account is being read, is never stopped by a usage limit, and logs no identifier.
 
 ## Dependency audit allowlist
 
