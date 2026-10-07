@@ -3,6 +3,7 @@ import { createLogger } from "../_shared/log.ts";
 import type { LogFields } from "../_shared/log.ts";
 import { handleReadPage } from "../read-page/handler.ts";
 import { handlePreparePage } from "../prepare-page/handler.ts";
+import { handleDeleteAccount } from "../delete-account/handler.ts";
 import { GeminiFailure } from "../_shared/gemini.ts";
 import {
   ALICE,
@@ -190,4 +191,50 @@ Deno.test("a reading logs its usage and duration but never the content [16]", as
   const done = world.logs.find((l) => l.event === "read_done");
   assertEquals(done?.fields, { pageId: PAGE_ID, durationMs: 321, inputTokens: 1100, outputTokens: 216, thoughtsTokens: 0 });
   assert(world.logs.every((l) => !JSON.stringify(l).includes("First line")));
+});
+
+const remove = (world: World, token: string = TOKEN_ALICE) =>
+  handleDeleteAccount(post(token, { user_id: BOB }), world.accountDeps()).then(() => undefined);
+
+function assertNoAccountData(text: string) {
+  assertClean(text);
+  for (const word of [ALICE, BOB, "original.jpg", "@example.test"]) {
+    assert(!text.includes(word), `the logs contain ${word}`);
+  }
+}
+
+Deno.test("the logs of an account deletion hold no id, no file name, no token and no text [16]", async () => {
+  const logged = await everythingLogged(
+    (world) => remove(world),
+    (world) => {
+      world.readyPage(ALICE);
+      world.pageTexts.set(PAGE_ID, { userId: ALICE, text: CANARY_PAGE_TEXT, pipelineVersion: "1" });
+    },
+  );
+  assertNoAccountData(logged);
+  assert(logged.includes("account_deleted"));
+});
+
+Deno.test("the logs of an account deletion that fails hold the name of the error and nothing of its message [16]", async () => {
+  const logged = await everythingLogged(
+    (world) => remove(world),
+    (world) => {
+      world.readyPage(ALICE);
+      world.failOn.add("removePhotos");
+    },
+  );
+  assertNoAccountData(logged);
+  assert(logged.includes("unexpected_error"));
+});
+
+Deno.test("the logs of a refused account deletion hold no token", async () => {
+  const logged = await everythingLogged(
+    async (world) => {
+      await remove(world, "token-forged");
+      await handleDeleteAccount(post(null, {}), world.accountDeps());
+    },
+    (world) => world.readyPage(ALICE),
+  );
+  assertNoAccountData(logged);
+  assert(!logged.includes("token-forged"));
 });

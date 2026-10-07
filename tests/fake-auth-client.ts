@@ -14,12 +14,18 @@ export function noSession(): GetSessionResult {
   return { data: { session: null }, error: null };
 }
 
-export function sessionOf(userId: string): GetSessionResult {
-  return { data: { session: { user: { id: userId } } }, error: null };
+export function sessionOf(userId: string, details: { email?: string; isAnonymous?: boolean } = {}): GetSessionResult {
+  return {
+    data: { session: { user: { id: userId, email: details.email, is_anonymous: details.isAnonymous ?? true } } },
+    error: null,
+  };
 }
 
 export function created(userId: string): SignInResult {
-  return { data: { user: { id: userId }, session: { user: { id: userId } } }, error: null };
+  return {
+    data: { user: { id: userId, is_anonymous: true }, session: { user: { id: userId, is_anonymous: true } } },
+    error: null,
+  };
 }
 
 export function failed(): SignInResult {

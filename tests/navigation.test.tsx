@@ -10,10 +10,13 @@ import { phoneLocale } from "./phone-locale";
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
 jest.mock("@/auth/default-services", () => ({
   defaultAuthServices: {
-    ensureSession: async () => ({ status: "ready", userId: "test-user" }),
+    watch: () => () => undefined,
+    ensureSession: async () => ({ status: "ready", userId: "test-user", email: null, isAnonymous: true }),
     syncLanguage: async () => true,
   },
 }));
+
+jest.mock("@/auth/account-service", () => require("./account-service-module").accountServiceModule);
 
 jest.mock("@/notebooks/service", () => ({
   notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn() },
@@ -62,12 +65,12 @@ test("sends an unknown address back to the library", async () => {
 });
 
 test.each([
-  ["signIn", "/sign-in"],
-  ["code", "/sign-in/code"],
-] as const)("opens the %s screen by its address", async (name, path) => {
+  ["signIn", "/sign-in", strings.fr.signIn.signUpTitle],
+  ["code", "/sign-in/code", strings.fr.code.title],
+] as const)("opens the %s screen by its address", async (_name, path, title) => {
   const pathname = await openApp("fr", path);
   expect(pathname()).toBe(path);
-  expect(screen.getByText(strings.fr.shell[name])).toBeTruthy();
+  expect(screen.getByText(title)).toBeTruthy();
 });
 
 test("opens a notebook from the library", async () => {

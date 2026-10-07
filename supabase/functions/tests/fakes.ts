@@ -2,8 +2,10 @@ import { GeminiFailure } from "../_shared/gemini.ts";
 import type { GeminiFailureKind, GeminiReading } from "../_shared/gemini.ts";
 import { photoPath } from "../_shared/photo.ts";
 import type {
+  AccountStore,
   Allowance,
   CallerStore,
+  DeleteAccountDeps,
   ChargeReason,
   ChargeResult,
   PageRow,
@@ -91,6 +93,7 @@ export class World {
   failOn = new Set<string>();
   calls: string[] = [];
   deletedPhotos = 0;
+  deletedUsers: string[] = [];
   abandoned: string[] = [];
   clock = START_OF_TEST;
   geminiDurationMs = 250;
@@ -304,6 +307,30 @@ export class World {
     };
   }
 
+  accounts(): AccountStore {
+    return {
+      removePhotos: async (userId) => {
+        await this.tick("removePhotos");
+        for (const path of [...this.photos.keys()]) {
+          if (path.startsWith(`${userId}/`)) this.photos.delete(path);
+        }
+      },
+      deleteUser: async (userId) => {
+        await this.tick("deleteUser");
+        this.deletedUsers.push(userId);
+        for (const [id, page] of [...this.pages]) {
+          if (page.userId === userId) {
+            this.pages.delete(id);
+            this.pageTexts.delete(id);
+          }
+        }
+        this.readings = this.readings.filter((reading) => reading.userId !== userId);
+        this.pageImages = this.pageImages.filter((image) => image.userId !== userId);
+        this.charges = this.charges.filter((charge) => charge.userId !== userId);
+      },
+    };
+  }
+
   gemini() {
     return async (image: Uint8Array): Promise<GeminiReading> => {
       this.calls.push("gemini");
@@ -334,6 +361,14 @@ export class World {
       server: this.server(),
       gemini: this.gemini(),
       clock: { now: () => this.clock },
+      log: this.logger(),
+    };
+  }
+
+  accountDeps(): DeleteAccountDeps {
+    return {
+      auth: { verify: (token) => Promise.resolve(this.userFor(token) ? { userId: this.userFor(token) as string } : null) },
+      accounts: this.accounts(),
       log: this.logger(),
     };
   }

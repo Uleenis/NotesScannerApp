@@ -31,6 +31,7 @@ jest.mock("expo-camera", () => require("./fake-camera").cameraModule);
 jest.mock("expo-network", () => ({ useNetworkState: jest.fn() }));
 jest.mock("@/auth/default-services", () => ({
   defaultAuthServices: {
+    watch: () => () => undefined,
     ensureSession: jest.fn(),
     syncLanguage: jest.fn(),
   },
@@ -69,7 +70,7 @@ let openSettings: jest.SpyInstance;
 beforeEach(() => {
   jest.mocked(useLocales).mockReturnValue([phoneLocale("fr")]);
   jest.mocked(useNetworkState).mockReturnValue(online);
-  jest.mocked(defaultAuthServices.ensureSession).mockResolvedValue({ status: "ready", userId: "test-user" });
+  jest.mocked(defaultAuthServices.ensureSession).mockResolvedValue({ status: "ready", userId: "test-user", email: null, isAnonymous: true });
   jest.mocked(defaultAuthServices.syncLanguage).mockResolvedValue(true);
   jest.mocked(captureService.allowance).mockReset().mockResolvedValue(open);
   jest.mocked(captureService.latestNotebookId).mockReset().mockResolvedValue(histoire.id);

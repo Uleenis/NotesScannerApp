@@ -2,16 +2,17 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { AppState } from "react-native";
 
 import { useLanguage, type Language } from "@/i18n";
-import type { AuthResult } from "./session";
+import type { AccountChange, AccountUser, AuthResult } from "./session";
 
 export type AuthState =
   | { status: "loading"; userId: null }
   | { status: "unavailable"; userId: null }
-  | { status: "ready"; userId: string };
+  | ({ status: "ready" } & AccountUser);
 
 export type AuthServices = {
   ensureSession: () => Promise<AuthResult>;
   syncLanguage: (userId: string, language: Language) => Promise<boolean>;
+  watch: (listener: (change: AccountChange) => void) => () => void;
 };
 
 const RETRY_DELAYS_MS = [2000, 4000, 8000, 30000];
@@ -26,6 +27,23 @@ export function useAuth(): AuthState {
 
 function retryDelay(failures: number): number {
   return RETRY_DELAYS_MS[Math.min(failures, RETRY_DELAYS_MS.length - 1)];
+}
+
+function readyOf(account: AccountUser): AuthResult {
+  return { status: "ready", userId: account.userId, email: account.email, isAnonymous: account.isAnonymous };
+}
+
+function keepsAccount(current: AuthResult | null, next: AuthResult): AuthResult {
+  if (
+    current?.status === "ready" &&
+    next.status === "ready" &&
+    current.userId === next.userId &&
+    current.email === next.email &&
+    current.isAnonymous === next.isAnonymous
+  ) {
+    return current;
+  }
+  return next;
 }
 
 export function AuthProvider({ children, services }: { children: ReactNode; services: AuthServices }) {
@@ -52,13 +70,29 @@ export function AuthProvider({ children, services }: { children: ReactNode; serv
       }
       if (outcome.status === "ready") {
         ready = true;
-        setResult(outcome);
+        setResult((current) => keepsAccount(current, outcome));
         return;
       }
       setResult(outcome);
       timer = setTimeout(attempt, retryDelay(failures));
       failures += 1;
     }
+
+    const stopWatching = services.watch((change) => {
+      if (!active) {
+        return;
+      }
+      if (change === null) {
+        ready = false;
+        failures = 0;
+        setResult(null);
+        attempt();
+        return;
+      }
+      ready = true;
+      clearTimeout(timer);
+      setResult((current) => keepsAccount(current, readyOf(change)));
+    });
 
     attempt();
     const subscription = AppState.addEventListener("change", (state) => {
@@ -70,6 +104,7 @@ export function AuthProvider({ children, services }: { children: ReactNode; serv
     return () => {
       active = false;
       clearTimeout(timer);
+      stopWatching();
       subscription.remove();
     };
   }, [services]);
@@ -87,7 +122,7 @@ export function AuthProvider({ children, services }: { children: ReactNode; serv
       return LOADING;
     }
     return result.status === "ready"
-      ? { status: "ready", userId: result.userId }
+      ? { status: "ready", userId: result.userId, email: result.email, isAnonymous: result.isAnonymous }
       : { status: "unavailable", userId: null };
   }, [result]);
 

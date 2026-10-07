@@ -114,6 +114,14 @@ export async function listPages(client: PagesClient): Promise<NumberedPage[]> {
   return numberPages(data.map(readPage));
 }
 
+export async function countPages(client: Pick<SupabaseClient, "from">): Promise<number> {
+  const { count, error } = await client.from("pages").select("id", { count: "exact", head: true }).not("uploaded_at", "is", null);
+  if (error || typeof count !== "number") {
+    throw new Error("The pages could not be counted.");
+  }
+  return count;
+}
+
 export async function getPage(client: PagesClient, id: string): Promise<NumberedPage | null> {
   const found = await client.from("pages").select(PAGE_COLUMNS).eq("id", id).not("uploaded_at", "is", null).maybeSingle();
   if (found.error) {

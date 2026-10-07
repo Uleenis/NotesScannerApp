@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createAuth, createCallerStore, createServerStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAccountStore, createAuth, createCallerStore, createServerStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -272,4 +272,92 @@ Deno.test("an accounts service that cannot answer is an error, never a rejected 
 Deno.test("a valid token gives the id of its account", async () => {
   const auth = createAuth(KEYS, answer(200, { id: ALICE, aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-10-01T00:00:00Z" }));
   assertEquals(await auth.verify("token"), { userId: ALICE });
+});
+
+type Entry = { name: string; id: string | null };
+
+function storageWith(initial: string[], options: { keepFiles?: boolean; failList?: boolean } = {}): { fetch: typeof fetch; files: Set<string>; lists: { prefix: string; offset: number; limit: number }[]; removals: string[][] } {
+  const files = new Set(initial);
+  const lists: { prefix: string; offset: number; limit: number }[] = [];
+  const removals: string[][] = [];
+  const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = new URL(String(input));
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+    const json = (status: number, value: unknown) => Promise.resolve(new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } }));
+    if (url.pathname === "/storage/v1/object/list/photos") {
+      lists.push({ prefix: body.prefix, offset: body.offset, limit: body.limit });
+      if (options.failList) return json(500, { message: "boom" });
+      const prefix = `${body.prefix}/`;
+      const entries = new Map<string, Entry>();
+      for (const path of [...files].sort()) {
+        if (!path.startsWith(prefix)) continue;
+        const rest = path.slice(prefix.length);
+        const slash = rest.indexOf("/");
+        if (slash === -1) entries.set(rest, { name: rest, id: `id-${path}` });
+        else entries.set(rest.slice(0, slash), { name: rest.slice(0, slash), id: null });
+      }
+      return json(200, [...entries.values()].slice(body.offset, body.offset + body.limit));
+    }
+    if (url.pathname === "/storage/v1/object/photos" && init?.method === "DELETE") {
+      removals.push(body.prefixes);
+      if (!options.keepFiles) for (const path of body.prefixes) files.delete(path);
+      return json(200, body.prefixes.map((name: string) => ({ name })));
+    }
+    return json(404, { message: "unexpected call" });
+  };
+  return { fetch: fetcher as typeof fetch, files, lists, removals };
+}
+
+const ALICE_FILES = Array.from({ length: 250 }, (_, index) => `${ALICE}/page-${String(index).padStart(3, "0")}/original.jpg`);
+
+Deno.test("erasing the photos of an account lists its folders and removes every file under it, 100 at most at a time", async () => {
+  const storage = storageWith([...ALICE_FILES, `${BOB}/page-1/original.jpg`]);
+  await createAccountStore(KEYS, storage.fetch).removePhotos(ALICE);
+  assertEquals([...storage.files], [`${BOB}/page-1/original.jpg`]);
+  assertEquals(storage.removals.flat().length, 250);
+  assertEquals(storage.removals.every((paths) => paths.length <= 100), true);
+  assertEquals(storage.removals.flat().every((path) => path.startsWith(`${ALICE}/`)), true);
+  assertEquals(storage.lists.every((list) => list.prefix === ALICE || list.prefix.startsWith(`${ALICE}/`)), true);
+});
+
+Deno.test("the listing of a folder with more than 100 entries goes on page after page", async () => {
+  const storage = storageWith(ALICE_FILES);
+  await createAccountStore(KEYS, storage.fetch).removePhotos(ALICE);
+  const offsets = storage.lists.filter((list) => list.prefix === ALICE).map((list) => list.offset);
+  assertEquals(offsets.slice(0, 3), [0, 100, 200]);
+});
+
+Deno.test("an account with no file removes nothing", async () => {
+  const storage = storageWith([`${BOB}/page-1/original.jpg`]);
+  await createAccountStore(KEYS, storage.fetch).removePhotos(ALICE);
+  assertEquals(storage.removals, []);
+  assertEquals(storage.files.size, 1);
+});
+
+Deno.test("a file that is still there after the removal is an error, never a pass", async () => {
+  const storage = storageWith([`${ALICE}/page-1/original.jpg`], { keepFiles: true });
+  const error = await thrownBy(() => createAccountStore(KEYS, storage.fetch).removePhotos(ALICE));
+  assertEquals(error instanceof StoreError, true);
+});
+
+Deno.test("a listing that fails is an error, never an empty account", async () => {
+  const storage = storageWith([`${ALICE}/page-1/original.jpg`], { failList: true });
+  const error = await thrownBy(() => createAccountStore(KEYS, storage.fetch).removePhotos(ALICE));
+  assertEquals(error instanceof StoreError, true);
+  assertEquals(storage.removals, []);
+});
+
+Deno.test("deleting the account calls the administration of accounts with the id given, as the service, and no soft delete", async () => {
+  const { fetch, calls } = stub(() => ({}));
+  await createAccountStore(KEYS, fetch).deleteUser(ALICE);
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].method, "DELETE");
+  assertEquals(calls[0].url.pathname, `/auth/v1/admin/users/${ALICE}`);
+  assertEquals(calls[0].headers.get("authorization"), "Bearer secret-key");
+  assertEquals((calls[0].body as { should_soft_delete?: boolean }).should_soft_delete, false);
+});
+
+Deno.test("an account that cannot be deleted is an error", async () => {
+  const error = await thrownBy(() => createAccountStore(KEYS, answer(500, { message: "boom" })).deleteUser(ALICE));
+  assertEquals(error instanceof StoreError, true);
 });

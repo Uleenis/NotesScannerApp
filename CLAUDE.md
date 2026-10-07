@@ -14,16 +14,18 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/app/`: routes (Expo Router) and their `_layout.tsx`, nothing else.
 - `src/components/`: shared components.
 - `src/i18n/`: language files (`en.ts`, `fr.ts`) and the choice of language.
-- `src/auth/`: the anonymous account and the provider that opens it when the app starts.
-- `src/lib/`: the Supabase client, its config and the secure session storage.
+- `src/auth/`: the anonymous account, the provider that opens it when the app starts and follows every change of account (sign-up, sign-in, sign-out), and the actions of the account by e-mail code (`account.ts`, `account-errors.ts`, `account-service.ts`). A sign-in from an anonymous account that has pages is refused until the transfer exists (branch 11).
+- `src/lib/`: the Supabase client, its config, the secure session storage, the addresses of the terms and the privacy policy (`legal-links.ts`), the opening of a web address (`open-link.ts`) and the forgetting of the data of other accounts.
 - `src/notebooks/`: reading, creating and caching notebooks.
 - `src/capture/`: the limits shown before the camera and the hook that opens the camera or the limit sheet, sending a page (create, prepare, upload, mark it uploaded, start the reading), shrinking the photo, the camera and network hooks. A page only counts for the user (notebook counts, last notebook, page lists) once its `uploaded_at` is set, so a page created for a photo that never arrived stays invisible.
 - `src/pages/`: the pages a user sees (list, one page with its number and text, signed address of its photo, starting or restarting a reading), what a page shows according to its status, the title of a page and the gluing of its cut lines at display time (the text itself is never changed), dates without `Intl`, and the polling delays. Every query here keeps to pages whose `uploaded_at` is set.
+- `src/components/account/`: the groups and rows of the account screen.
 - `src/components/reading/`: the screens' parts for a reading: ink stroke, waiting view, document, original photo with its zoom, page rows and cards.
 - `src/theme.ts`: colors, fonts and type sizes of the design direction.
 - `tests/`: Jest tests. `tests/fixtures/b1-line-shapes.json` holds only the shape of the lines of the 18 B1 readings of the Thinking Spike (every letter is `x` or `X`, every digit `0`), with the verdict of the ground truth for each line break; no text of a page may enter the repository.
 - `supabase/migrations/`: the only way the schema changes.
-- `supabase/functions/`: Edge Functions (`prepare-page`, `read-page`, `relaunch-page`), their shared code in `_shared/`, their Deno tests in `tests/`. Local secrets (`GEMINI_API_KEY`, `RELAUNCH_SECRET`) live in `supabase/functions/.env`, ignored by git. The `pg_cron` task that calls `relaunch-page` reads its secret and address from Supabase Vault, never from the repository.
+- `supabase/templates/`: the e-mail templates (sign-up, sign-in, confirmation). Each one shows `{{ .Token }}`, the code, and never a link; `config.toml` references them and sets the code at 6 digits, valid 10 minutes, a new one after 30 seconds, and the proof of the address before an account keeps it.
+- `supabase/functions/`: Edge Functions (`prepare-page`, `read-page`, `relaunch-page`, `delete-account`), their shared code in `_shared/`, their Deno tests in `tests/`. Local secrets (`GEMINI_API_KEY`, `RELAUNCH_SECRET`) live in `supabase/functions/.env`, ignored by git. The `pg_cron` task that calls `relaunch-page` reads its secret and address from Supabase Vault, never from the repository.
 - `supabase/tests/database/`: pgTAP tests.
 - `supabase/tests/concurrency/`: parallel-call tests.
 - `services/reading/`: reading service.
@@ -73,6 +75,9 @@ All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitle
 - Logs never contain page text or images.
 - Model output is text, never code: never executed, rendered without HTML or active links.
 - Usage limits are enforced by Edge Functions, never by the app.
+- An e-mail address is kept by an account only once its code is proven (`enable_confirmations = true`, local and production).
+- No account is created in advance for an address: the hook `private.refuse_email_signup` (`[auth.hook.before_user_created]`, local and production) refuses every new account that comes from an e-mail or a phone number. Without it, anyone could create an account for someone else's address with a password they know, and keep access to it once the owner signs in by code. The signup settings stay open: turning off `enable_signup` blocks the anonymous accounts, turning off the e-mail one blocks the sign-in by code.
+- `delete-account` takes the account from the verified token alone, never from the request, erases the files of the account before the account, and logs no identifier.
 
 ## Dependency audit allowlist
 
