@@ -56,6 +56,17 @@ test.each([
   expect(html).not.toMatch(/href=/i);
 });
 
+test("no account can be created by e-mail and password: the hook that refuses it is on", () => {
+  const hook = section("auth.hook.before_user_created");
+  expect(hook.enabled).toBe("true");
+  expect(hook.uri).toBe('"pg-functions://postgres/private/refuse_email_signup"');
+});
+
+test("the project keeps its signups open, since the anonymous accounts and the sign-in by code depend on them", () => {
+  expect(section("auth").enable_signup).toBe("true");
+  expect(section("auth.email").enable_signup).toBe("true");
+});
+
 test("the delete-account function checks the token of the caller", () => {
   expect(section("functions.delete-account").verify_jwt).toBe("true");
 });

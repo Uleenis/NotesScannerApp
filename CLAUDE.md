@@ -76,6 +76,7 @@ All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitle
 - Model output is text, never code: never executed, rendered without HTML or active links.
 - Usage limits are enforced by Edge Functions, never by the app.
 - An e-mail address is kept by an account only once its code is proven (`enable_confirmations = true`, local and production).
+- No account is created in advance for an address: the hook `private.refuse_email_signup` (`[auth.hook.before_user_created]`, local and production) refuses every new account that comes from an e-mail or a phone number. Without it, anyone could create an account for someone else's address with a password they know, and keep access to it once the owner signs in by code. The signup settings stay open: turning off `enable_signup` blocks the anonymous accounts, turning off the e-mail one blocks the sign-in by code.
 - `delete-account` takes the account from the verified token alone, never from the request, erases the files of the account before the account, and logs no identifier.
 
 ## Dependency audit allowlist

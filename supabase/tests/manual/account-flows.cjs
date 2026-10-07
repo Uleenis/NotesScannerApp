@@ -159,12 +159,21 @@ async function callDelete(token) {
 
   console.log("Address already taken, unknown address");
   const taker = visitor();
-  await taker.auth.signInAnonymously();
+  const takerId = (await taker.auth.signInAnonymously()).data.user.id;
   const taken = await taker.auth.updateUser({ email: emailA });
   check("an address that has an account is refused at sign-up", taken.error?.code === "email_exists", JSON.stringify(taken.error));
   await taker.auth.signOut({ scope: "local" });
   const stranger = await visitor().auth.signInWithOtp({ email: emailNobody, options: { shouldCreateUser: false } });
   check("a sign-in to an address without an account is refused", stranger.error?.code === "otp_disabled", JSON.stringify(stranger.error));
+
+  console.log("No account can be created in advance for an address");
+  const emailSquat = `flows-squat-${stamp}@example.test`;
+  const squat = await visitor().auth.signUp({ email: emailSquat, password: "Flows-squat-1" });
+  check("a sign-up with an e-mail and a password is refused", squat.error?.status === 400 && !squat.data.user, JSON.stringify(squat.error));
+  const created = await visitor().auth.signInWithOtp({ email: emailSquat });
+  check("a sign-in by code that would create the account is refused", created.error?.status === 400, JSON.stringify(created.error));
+  const listed = (await server.auth.admin.listUsers({ perPage: 1000 })).data.users;
+  check("no account exists for that address", !listed.some((user) => user.email === emailSquat));
 
   console.log("Sign-in from a fresh anonymous phone, with a second registered account");
   const phoneB = visitor();
@@ -204,7 +213,7 @@ async function callDelete(token) {
   const deletedB = await callDelete(sessionB.access_token);
   check("account B can be deleted in its turn", deletedB.status === 200 && (await rowsOf(b.userId)) === 0 && (await filesOf(b.userId)) === 0, JSON.stringify(deletedB));
 
-  const leftovers = [emptyPhone.data.user.id];
+  const leftovers = [emptyPhone.data.user.id, takerId];
   for (const id of leftovers) await server.auth.admin.deleteUser(id);
   await clearMailbox([emailA, emailB, emailNobody]);
 
