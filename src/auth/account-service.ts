@@ -15,6 +15,7 @@ function deps(): AccountDeps {
   return {
     auth: {
       getSession: () => client.auth.getSession(),
+      getUser: () => client.auth.getUser(),
       updateUser: (attributes) => client.auth.updateUser(attributes),
       signInWithOtp: (credentials) => client.auth.signInWithOtp(credentials),
       verifyOtp: (params) => client.auth.verifyOtp(params),

@@ -1,4 +1,4 @@
-import { failureFor, isEmailAddress, type Outcome } from "./account-errors";
+import { failureFor, isAccountGone, isEmailAddress, isUnauthorized, type Outcome } from "./account-errors";
 import type { GetSessionResult } from "./session";
 
 type Answer = { error: unknown };
@@ -6,6 +6,7 @@ type Answer = { error: unknown };
 export type AccountDeps = {
   auth: {
     getSession: () => Promise<GetSessionResult>;
+    getUser: () => Promise<Answer>;
     updateUser: (attributes: { email: string }) => Promise<Answer>;
     signInWithOtp: (credentials: { email: string; options: { shouldCreateUser: false } }) => Promise<Answer>;
     verifyOtp: (params: { email: string; token: string; type: "email" | "email_change" }) => Promise<Answer>;
@@ -94,11 +95,19 @@ export function signOut(deps: AccountDeps): Promise<Outcome> {
   return guarded(async () => answered(await deps.auth.signOut({ scope: "local" })));
 }
 
+async function alreadyDeleted(deps: AccountDeps, error: unknown): Promise<boolean> {
+  if (!isUnauthorized(error)) {
+    return false;
+  }
+  const { error: userError } = await deps.auth.getUser();
+  return userError !== null && userError !== undefined && isAccountGone(userError);
+}
+
 export function deleteAccount(deps: AccountDeps): Promise<Outcome> {
   return guarded(async () => {
-    const deleted = answered(await deps.functions.invoke("delete-account"));
-    if (!deleted.ok) {
-      return deleted;
+    const asked = await deps.functions.invoke("delete-account");
+    if (asked.error && !(await alreadyDeleted(deps, asked.error))) {
+      return { ok: false, reason: failureFor(asked.error) };
     }
     try {
       await deps.auth.signOut({ scope: "local" });

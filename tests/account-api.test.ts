@@ -20,6 +20,7 @@ function authError(code: string, status = 422, name = "AuthApiError"): Error & {
 
 function fakeDeps() {
   const getSession = jest.fn(async () => sessionOf("anonymous-user"));
+  const getUser = jest.fn(async (): Promise<Outcome> => OK);
   const updateUser = jest.fn(async (_attributes: { email: string }): Promise<Outcome> => OK);
   const signInWithOtp = jest.fn(async (_credentials: { email: string; options: { shouldCreateUser: false } }): Promise<Outcome> => OK);
   const verifyOtp = jest.fn(async (_params: { email: string; token: string; type: "email" | "email_change" }): Promise<Outcome> => OK);
@@ -27,11 +28,11 @@ function fakeDeps() {
   const invoke = jest.fn(async (_name: string): Promise<Outcome> => OK);
   const countPages = jest.fn(async () => 0);
   const deps: AccountDeps = {
-    auth: { getSession, updateUser, signInWithOtp, verifyOtp, signOut: signOutCall },
+    auth: { getSession, getUser, updateUser, signInWithOtp, verifyOtp, signOut: signOutCall },
     functions: { invoke },
     countPages,
   };
-  return { deps, getSession, updateUser, signInWithOtp, verifyOtp, signOut: signOutCall, invoke, countPages };
+  return { deps, getSession, getUser, updateUser, signInWithOtp, verifyOtp, signOut: signOutCall, invoke, countPages };
 }
 
 describe("starting a sign-up", () => {
@@ -286,6 +287,46 @@ describe("deleting the account", () => {
 
     expect(await deleteAccount(deps)).toEqual({ ok: false, reason: "offline" });
     expect(signOutCall).not.toHaveBeenCalled();
+  });
+
+  function unauthorized(): Error {
+    return Object.assign(new Error("unauthorized"), { name: "FunctionsHttpError", context: { status: 401 } });
+  }
+
+  test("is done when the server answers 401 because the account is already gone: the session ends", async () => {
+    const { deps, invoke, getUser, signOut: signOutCall } = fakeDeps();
+    invoke.mockResolvedValue({ error: unauthorized() });
+    getUser.mockResolvedValue({ error: authError("user_not_found", 403) });
+
+    expect(await deleteAccount(deps)).toEqual({ ok: true });
+
+    expect(getUser).toHaveBeenCalledTimes(1);
+    expect(signOutCall).toHaveBeenCalledWith({ scope: "local" });
+  });
+
+  test("keeps the session when the server answers 401 but the account still exists", async () => {
+    const { deps, invoke, signOut: signOutCall } = fakeDeps();
+    invoke.mockResolvedValue({ error: unauthorized() });
+
+    expect(await deleteAccount(deps)).toEqual({ ok: false, reason: "failed" });
+    expect(signOutCall).not.toHaveBeenCalled();
+  });
+
+  test("keeps the session when the account cannot be checked because the network is down", async () => {
+    const { deps, invoke, getUser, signOut: signOutCall } = fakeDeps();
+    invoke.mockResolvedValue({ error: unauthorized() });
+    getUser.mockResolvedValue({ error: Object.assign(new Error("offline"), { name: "AuthRetryableFetchError", status: 0 }) });
+
+    expect(await deleteAccount(deps)).toEqual({ ok: false, reason: "failed" });
+    expect(signOutCall).not.toHaveBeenCalled();
+  });
+
+  test("does not look for the account when the failure is not a 401", async () => {
+    const { deps, invoke, getUser } = fakeDeps();
+    invoke.mockResolvedValue({ error: Object.assign(new Error("boom"), { name: "FunctionsHttpError", context: { status: 500 } }) });
+
+    expect(await deleteAccount(deps)).toEqual({ ok: false, reason: "failed" });
+    expect(getUser).not.toHaveBeenCalled();
   });
 
   test("is done once the server deleted the account, even if ending the local session fails", async () => {

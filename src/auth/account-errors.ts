@@ -18,6 +18,14 @@ function field(value: unknown, name: string): unknown {
   return typeof value === "object" && value !== null && name in value ? (value as Record<string, unknown>)[name] : undefined;
 }
 
+export function isUnauthorized(error: unknown): boolean {
+  return field(field(error, "context"), "status") === 401;
+}
+
+export function isAccountGone(error: unknown): boolean {
+  return [401, 403, 404].includes(Number(field(error, "status")));
+}
+
 export function isEmailAddress(value: string): boolean {
   return EMAIL.test(value);
 }
