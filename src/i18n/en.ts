@@ -181,10 +181,6 @@ export const en = {
     deleteOffline: "No connection. The account was not deleted.",
     signOutFailed: "You could not be signed out. Try again.",
   },
-  shell: {
-    signIn: "Create an account",
-    code: "Enter the code",
-  },
 };
 
 export type Strings = typeof en;

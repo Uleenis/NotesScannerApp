@@ -184,8 +184,4 @@ export const fr: Strings = {
     deleteOffline: "Pas de connexion. Le compte n'a pas été supprimé.",
     signOutFailed: "La déconnexion n'a pas abouti. Réessaie.",
   },
-  shell: {
-    signIn: "Créer un compte",
-    code: "Entre le code",
-  },
 };
