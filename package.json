@@ -41,7 +41,7 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:test": "supabase test db",
-    "db:test:concurrency": "bash supabase/tests/concurrency/charge-page.sh && bash supabase/tests/concurrency/relaunch-pages.sh",
+    "db:test:concurrency": "bash supabase/tests/concurrency/charge-page.sh && bash supabase/tests/concurrency/relaunch-pages.sh && bash supabase/tests/concurrency/transfer-account.sh",
     "functions:test": "deno test --node-modules-dir=none --allow-env --allow-net --permit-no-files supabase/functions",
     "functions:check": "deno check --node-modules-dir=none \"supabase/functions/**/*.ts\"",
     "functions:lint": "deno lint --rules-exclude=no-import-prefix supabase/functions",
