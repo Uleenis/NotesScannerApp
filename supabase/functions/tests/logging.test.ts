@@ -4,21 +4,28 @@ import type { LogFields } from "../_shared/log.ts";
 import { handleReadPage } from "../read-page/handler.ts";
 import { handlePreparePage } from "../prepare-page/handler.ts";
 import { handleDeleteAccount } from "../delete-account/handler.ts";
+import { handleTransferAccount } from "../transfer-account/handler.ts";
 import { GeminiFailure } from "../_shared/gemini.ts";
 import {
   ALICE,
   BOB,
+  CANARY_EMAIL,
   CANARY_EXCEPTION,
   CANARY_GEMINI_ERROR,
+  CANARY_NOTEBOOK_NAME,
   CANARY_PAGE_TEXT,
   CANARY_UPLOAD_TOKEN,
   capture,
+  CAROL,
   JPEG_BYTES,
   MAX_BYTES,
+  OTHER_PAGE_ID,
   PAGE_ID,
   post,
   TOKEN_ALICE,
   TOKEN_BOB,
+  TOKEN_CAROL,
+  transferRequest,
   World,
 } from "./fakes.ts";
 
@@ -237,4 +244,66 @@ Deno.test("the logs of a refused account deletion hold no token", async () => {
   );
   assertNoAccountData(logged);
   assert(!logged.includes("token-forged"));
+});
+
+const FORBIDDEN_TRANSFER = [CANARY_NOTEBOOK_NAME, CANARY_EMAIL, CANARY_PAGE_TEXT, CAROL, TOKEN_CAROL];
+
+function transferScene(world: World): void {
+  world.anonymousUsers.add(ALICE);
+  world.readyPage(ALICE);
+  world.addNotebook(ALICE, CANARY_NOTEBOOK_NAME);
+  world.pageTexts.set(PAGE_ID, { userId: ALICE, text: CANARY_PAGE_TEXT, pipelineVersion: "1" });
+  world.readyPage(BOB, OTHER_PAGE_ID);
+  world.readyPage(CAROL, "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+}
+
+function transfer(world: World, anonymousToken: string | null = TOKEN_ALICE, accountToken: string | null = TOKEN_BOB): Promise<void> {
+  const request = transferRequest(anonymousToken, accountToken, { email: CANARY_EMAIL, notebook: CANARY_NOTEBOOK_NAME });
+  request.headers.set("x-user-email", CANARY_EMAIL);
+  return handleTransferAccount(request, world.transferDeps()).then(() => undefined);
+}
+
+function assertNoTransferData(text: string) {
+  assertNoAccountData(text);
+  for (const word of FORBIDDEN_TRANSFER) {
+    assert(!text.includes(word), `the logs contain ${word}`);
+  }
+}
+
+Deno.test("the logs of an account transfer hold no id, no token, no e-mail, no file name, no notebook name and no text [16]", async () => {
+  const logged = await everythingLogged((world) => transfer(world), transferScene);
+  assertNoTransferData(logged);
+  assert(logged.includes("account_transferred"));
+});
+
+Deno.test("the logs of an account transfer that fails hold the name of the error and nothing of its message [16]", async () => {
+  for (const name of ["copyPhoto", "moveRows", "removePhotos", "deleteUser"]) {
+    const logged = await everythingLogged(
+      (world) => transfer(world),
+      (world) => {
+        transferScene(world);
+        world.failOn.add(name);
+      },
+    );
+    assertNoTransferData(logged);
+    assert(logged.includes("unexpected_error"));
+  }
+});
+
+Deno.test("the logs of a refused account transfer hold no token and no id [16]", async () => {
+  const logged = await everythingLogged(
+    async (world) => {
+      await transfer(world, "token-forged", TOKEN_BOB);
+      await transfer(world, TOKEN_ALICE, "token-forged");
+      await transfer(world, TOKEN_ALICE, null);
+      await transfer(world, TOKEN_ALICE, TOKEN_ALICE);
+      await transfer(world, TOKEN_CAROL, TOKEN_BOB);
+      world.page(PAGE_ID).status = "processing";
+      await transfer(world);
+    },
+    transferScene,
+  );
+  assertNoTransferData(logged);
+  assert(!logged.includes("token-forged"));
+  assert(logged.includes("page_processing"));
 });
