@@ -248,6 +248,24 @@ describe("asking for the code again", () => {
   });
 });
 
+describe("closing the sign-in after the code is right", () => {
+  test.each([
+    ["the account screen", "/account", () => router.push("/account")],
+    ["a notebook", `/notebook/${histoire.id}`, () => router.push({ pathname: "/notebook/[id]", params: { id: histoire.id } })],
+  ])("goes back to %s when the sign-in was opened from there", async (_name, expected, openOrigin) => {
+    const pathname = await openLibrary();
+    await act(async () => openOrigin());
+    await act(async () => router.push("/sign-in"));
+    await fireEvent.changeText(screen.getByLabelText(fr.signIn.emailLabel), EMAIL);
+    await fireEvent.press(screen.getByText(fr.signIn.receiveCode));
+    await waitFor(() => expect(pathname()).toBe("/sign-in/code"));
+
+    await typeCode("123456");
+
+    await waitFor(() => expect(pathname()).toBe(expected));
+  });
+});
+
 describe("after the sign-up", () => {
   test("the reminder of the library goes away and the limits are read again for the same account", async () => {
     installFakePages([page({ id: "kept-page", notebookId: histoire.id, number: 1 })]);

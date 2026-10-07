@@ -105,10 +105,10 @@ describe("creating an account", () => {
     const pathname = await openSignIn();
     await typeEmail("reader@example.test");
 
-    const button = screen.getByText(fr.signIn.receiveCode);
+    const button = screen.getByRole("button", { name: fr.signIn.receiveCode });
     await act(async () => {
-      fireEvent.press(button);
-      fireEvent.press(button);
+      button.props.onClick({ nativeEvent: {} });
+      button.props.onClick({ nativeEvent: {} });
     });
     await act(async () => finish({ ok: true }));
 

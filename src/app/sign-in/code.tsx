@@ -72,7 +72,7 @@ export default function CodeScreen() {
   }
 
   async function sendAgain() {
-    if (resending.current || seconds > 0) {
+    if (resending.current) {
       return;
     }
     resending.current = true;
