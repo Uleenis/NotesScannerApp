@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createAccountStore, createAuth, createCallerStore, createServerStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAccountStore, createAuth, createCallerStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -271,19 +271,54 @@ Deno.test("an accounts service that cannot answer is an error, never a rejected 
 
 Deno.test("a valid token gives the id of its account", async () => {
   const auth = createAuth(KEYS, answer(200, { id: ALICE, aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-10-01T00:00:00Z" }));
-  assertEquals(await auth.verify("token"), { userId: ALICE });
+  assertEquals(await auth.verify("token"), { userId: ALICE, isAnonymous: false });
+});
+
+Deno.test("a token of an anonymous account says so, as the accounts service reports it", async () => {
+  const auth = createAuth(KEYS, answer(200, { id: ALICE, aud: "authenticated", role: "authenticated", is_anonymous: true, app_metadata: {}, user_metadata: {}, created_at: "2026-10-01T00:00:00Z" }));
+  assertEquals(await auth.verify("token"), { userId: ALICE, isAnonymous: true });
+});
+
+Deno.test("a token of an account that is not marked anonymous is not anonymous", async () => {
+  const auth = createAuth(KEYS, answer(200, { id: ALICE, aud: "authenticated", role: "authenticated", is_anonymous: false, email: "reader@example.test", app_metadata: {}, user_metadata: {}, created_at: "2026-10-01T00:00:00Z" }));
+  assertEquals(await auth.verify("token"), { userId: ALICE, isAnonymous: false });
+});
+
+Deno.test("a token of an account that has been deleted is no caller", async () => {
+  const auth = createAuth(KEYS, answer(403, { code: 403, error_code: "user_not_found", msg: "User from sub claim in JWT does not exist" }));
+  assertEquals(await auth.verify("token"), null);
 });
 
 type Entry = { name: string; id: string | null };
 
-function storageWith(initial: string[], options: { keepFiles?: boolean; failList?: boolean } = {}): { fetch: typeof fetch; files: Set<string>; lists: { prefix: string; offset: number; limit: number }[]; removals: string[][] } {
+type Storage = {
+  fetch: typeof fetch;
+  files: Set<string>;
+  lists: { prefix: string; offset: number; limit: number }[];
+  removals: string[][];
+  copies: { bucketId: string; sourceKey: string; destinationKey: string }[];
+  headers: Headers[];
+};
+
+function storageWith(initial: string[], options: { keepFiles?: boolean; failList?: boolean; failCopy?: boolean } = {}): Storage {
   const files = new Set(initial);
   const lists: { prefix: string; offset: number; limit: number }[] = [];
   const removals: string[][] = [];
+  const copies: { bucketId: string; sourceKey: string; destinationKey: string }[] = [];
+  const headers: Headers[] = [];
   const fetcher = (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(String(input));
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
     const json = (status: number, value: unknown) => Promise.resolve(new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } }));
+    headers.push(new Headers(init?.headers));
+    if (url.pathname === "/storage/v1/object/copy" && init?.method === "POST") {
+      copies.push(body);
+      if (options.failCopy) return json(500, { statusCode: "500", error: "internal", message: "Internal error" });
+      if (files.has(body.destinationKey)) return json(400, { statusCode: "409", error: "Duplicate", message: "The resource already exists" });
+      if (!files.has(body.sourceKey)) return json(400, { statusCode: "404", error: "not_found", message: "Object not found" });
+      files.add(body.destinationKey);
+      return json(200, { Key: `photos/${body.destinationKey}` });
+    }
     if (url.pathname === "/storage/v1/object/list/photos") {
       lists.push({ prefix: body.prefix, offset: body.offset, limit: body.limit });
       if (options.failList) return json(500, { message: "boom" });
@@ -305,7 +340,7 @@ function storageWith(initial: string[], options: { keepFiles?: boolean; failList
     }
     return json(404, { message: "unexpected call" });
   };
-  return { fetch: fetcher as typeof fetch, files, lists, removals };
+  return { fetch: fetcher as typeof fetch, files, lists, removals, copies, headers };
 }
 
 const ALICE_FILES = Array.from({ length: 250 }, (_, index) => `${ALICE}/page-${String(index).padStart(3, "0")}/original.jpg`);
@@ -360,4 +395,98 @@ Deno.test("deleting the account calls the administration of accounts with the id
 Deno.test("an account that cannot be deleted is an error", async () => {
   const error = await thrownBy(() => createAccountStore(KEYS, answer(500, { message: "boom" })).deleteUser(ALICE));
   assertEquals(error instanceof StoreError, true);
+});
+
+Deno.test("listing the photos of an account walks every folder and goes on page after page [9]", async () => {
+  const storage = storageWith([...ALICE_FILES, `${BOB}/page-1/original.jpg`]);
+  const paths = await createTransferStore(KEYS, storage.fetch).listPhotos(ALICE);
+  assertEquals([...paths].sort(), [...ALICE_FILES].sort());
+  const offsets = storage.lists.filter((list) => list.prefix === ALICE).map((list) => list.offset);
+  assertEquals(offsets.slice(0, 3), [0, 100, 200]);
+  assertEquals(storage.lists.every((list) => list.prefix === ALICE || list.prefix.startsWith(`${ALICE}/`)), true);
+  assertEquals(storage.headers.every((headers) => headers.get("authorization") === "Bearer secret-key"), true);
+});
+
+Deno.test("an account with no file lists no photo [9]", async () => {
+  const storage = storageWith([`${BOB}/page-1/original.jpg`]);
+  assertEquals(await createTransferStore(KEYS, storage.fetch).listPhotos(ALICE), []);
+});
+
+Deno.test("a listing that fails is an error, never an empty account [9]", async () => {
+  const storage = storageWith([`${ALICE}/page-1/original.jpg`], { failList: true });
+  assertEquals((await thrownBy(() => createTransferStore(KEYS, storage.fetch).listPhotos(ALICE))) instanceof StoreError, true);
+});
+
+Deno.test("copying a photo asks the storage to copy the old path to the new path, in the same bucket, as the service [9]", async () => {
+  const from = `${ALICE}/page-1/original.jpg`;
+  const to = `${BOB}/page-1/original.jpg`;
+  const storage = storageWith([from]);
+  await createTransferStore(KEYS, storage.fetch).copyPhoto(from, to);
+  assertEquals(storage.copies, [{ bucketId: "photos", sourceKey: from, destinationKey: to }]);
+  assertEquals(storage.files.has(to), true);
+  assertEquals(storage.files.has(from), true);
+  assertEquals(storage.headers[0].get("authorization"), "Bearer secret-key");
+});
+
+Deno.test("a photo that is already at its new path counts as copied [9]", async () => {
+  const from = `${ALICE}/page-1/original.jpg`;
+  const to = `${BOB}/page-1/original.jpg`;
+  const storage = storageWith([from, to]);
+  await createTransferStore(KEYS, storage.fetch).copyPhoto(from, to);
+  assertEquals(storage.copies.length, 1);
+});
+
+Deno.test("a copy that fails for another reason is an error [9]", async () => {
+  const from = `${ALICE}/page-1/original.jpg`;
+  const failing = storageWith([from], { failCopy: true });
+  assertEquals((await thrownBy(() => createTransferStore(KEYS, failing.fetch).copyPhoto(from, `${BOB}/page-1/original.jpg`))) instanceof StoreError, true);
+  const missing = storageWith([]);
+  assertEquals((await thrownBy(() => createTransferStore(KEYS, missing.fetch).copyPhoto(from, `${BOB}/page-1/original.jpg`))) instanceof StoreError, true);
+});
+
+Deno.test("moving the rows calls transfer_account_rows with the two ids alone, as the service, and reads the counts back [9]", async () => {
+  const { fetch, calls } = stub(() => [{ pages: 3, notebooks_merged: 1 }]);
+  const result = await createTransferStore(KEYS, fetch).moveRows(ALICE, BOB);
+  assertEquals(result, { ok: true, pages: 3, notebooksMerged: 1 });
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].method, "POST");
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/transfer_account_rows");
+  assertEquals(calls[0].body, { p_from: ALICE, p_to: BOB });
+  assertEquals(calls[0].headers.get("apikey"), "secret-key");
+});
+
+Deno.test("a page that is being read refuses the move, and that is an answer, not an error [8]", async () => {
+  const store = createTransferStore(KEYS, answer(400, { code: "P0001", details: null, hint: null, message: "page_processing" }));
+  assertEquals(await store.moveRows(ALICE, BOB), { ok: false, reason: "page_processing" });
+});
+
+Deno.test("any other refusal or failure of the move is an error [8]", async () => {
+  for (const message of ["not_anonymous", "same_account", "target_anonymous", "account_not_found", "boom"]) {
+    const store = createTransferStore(KEYS, answer(400, { code: "P0001", details: null, hint: null, message }));
+    assertEquals((await thrownBy(() => store.moveRows(ALICE, BOB))) instanceof StoreError, true);
+  }
+  const broken = createTransferStore(KEYS, answer(500, { message: "boom" }));
+  assertEquals((await thrownBy(() => broken.moveRows(ALICE, BOB))) instanceof StoreError, true);
+});
+
+Deno.test("an answer of the move that holds no counts is an error, never a pass [9]", async () => {
+  for (const body of [[], [{ pages: "three", notebooks_merged: 0 }], [{ pages: 1 }], {}]) {
+    const store = createTransferStore(KEYS, answer(200, body));
+    assertEquals((await thrownBy(() => store.moveRows(ALICE, BOB))) instanceof StoreError, true);
+  }
+});
+
+Deno.test("looking for a page that is being read filters by owner and by the processing state [8]", async () => {
+  const { fetch, calls } = stub(() => [{ id: PAGE_ID }]);
+  assertEquals(await createTransferStore(KEYS, fetch).hasProcessingPage(ALICE), true);
+  assertEquals(calls[0].method, "GET");
+  assertEquals(calls[0].url.pathname, "/rest/v1/pages");
+  assertEquals(calls[0].url.searchParams.get("user_id"), `eq.${ALICE}`);
+  assertEquals(calls[0].url.searchParams.get("status"), "eq.processing");
+  assertEquals(calls[0].headers.get("apikey"), "secret-key");
+});
+
+Deno.test("no page being read gives false, and a failed lookup is an error, never false [8]", async () => {
+  assertEquals(await createTransferStore(KEYS, answer(200, [])).hasProcessingPage(ALICE), false);
+  assertEquals((await thrownBy(() => createTransferStore(KEYS, answer(500, { message: "boom" })).hasProcessingPage(ALICE))) instanceof StoreError, true);
 });

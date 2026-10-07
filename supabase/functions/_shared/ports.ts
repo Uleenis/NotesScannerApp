@@ -47,7 +47,7 @@ export type ReadingInput = {
   durationMs: number;
 };
 
-export type Caller = { userId: string };
+export type Caller = { userId: string; isAnonymous: boolean };
 
 export type Auth = {
   verify: (token: string) => Promise<Caller | null>;
@@ -79,6 +79,22 @@ export type ServerStore = {
 export type AccountStore = {
   removePhotos: (userId: string) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
+};
+
+export type MoveResult = { ok: true; pages: number; notebooksMerged: number } | { ok: false; reason: "page_processing" };
+
+export type TransferStore = {
+  hasProcessingPage: (userId: string) => Promise<boolean>;
+  listPhotos: (userId: string) => Promise<string[]>;
+  copyPhoto: (from: string, to: string) => Promise<void>;
+  moveRows: (fromId: string, toId: string) => Promise<MoveResult>;
+};
+
+export type TransferAccountDeps = {
+  auth: Auth;
+  transfers: TransferStore;
+  accounts: AccountStore;
+  log: Logger;
 };
 
 export type DeleteAccountDeps = {
