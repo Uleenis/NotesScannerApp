@@ -54,14 +54,22 @@ export type Entry = { token: string; caller: Caller; pageId: string };
 
 export type SchedulerEntry = { pageId: string };
 
-export async function admit(request: Request, auth: Auth, log: Logger): Promise<Entry | Response> {
+export type CallerEntry = { token: string; caller: Caller };
+
+export async function admitCaller(request: Request, auth: Auth, log: Logger): Promise<CallerEntry | Response> {
   if (request.method !== "POST") return refuse(log, { status: 405, code: "method_not_allowed" });
   const token = bearerToken(request);
   const caller = token ? await auth.verify(token) : null;
   if (!token || !caller) return refuse(log, { status: 401, code: "unauthenticated" });
+  return { token, caller };
+}
+
+export async function admit(request: Request, auth: Auth, log: Logger): Promise<Entry | Response> {
+  const entry = await admitCaller(request, auth, log);
+  if (entry instanceof Response) return entry;
   const pageId = await pageIdFrom(request);
   if (!pageId) return refuse(log, { status: 400, code: "invalid_request" });
-  return { token, caller, pageId };
+  return { ...entry, pageId };
 }
 
 export async function admitScheduler(request: Request, secret: string, log: Logger): Promise<SchedulerEntry | Response> {

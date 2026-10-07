@@ -8,6 +8,7 @@ export type LogEvent =
   | "read_failed"
   | "manual_relaunch"
   | "page_abandoned"
+  | "account_deleted"
   | "unexpected_error";
 
 export type LogFields = {

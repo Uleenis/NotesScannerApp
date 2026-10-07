@@ -429,3 +429,6 @@ verify_jwt = true
 
 [functions.relaunch-page]
 verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = true

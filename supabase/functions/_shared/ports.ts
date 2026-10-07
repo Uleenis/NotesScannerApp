@@ -76,6 +76,17 @@ export type ServerStore = {
   createUploadUrl: (path: string) => Promise<{ signedUrl: string; token: string }>;
 };
 
+export type AccountStore = {
+  removePhotos: (userId: string) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
+};
+
+export type DeleteAccountDeps = {
+  auth: Auth;
+  accounts: AccountStore;
+  log: Logger;
+};
+
 export type PreparePageDeps = {
   auth: Auth;
   forCaller: (token: string) => CallerStore;

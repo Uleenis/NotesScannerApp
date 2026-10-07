@@ -55,3 +55,7 @@ test.each([
   expect(html).not.toContain("TokenHash");
   expect(html).not.toMatch(/href=/i);
 });
+
+test("the delete-account function checks the token of the caller", () => {
+  expect(section("functions.delete-account").verify_jwt).toBe("true");
+});

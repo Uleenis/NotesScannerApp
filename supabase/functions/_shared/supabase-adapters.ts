@@ -1,6 +1,7 @@
 import { createClient, isAuthRetryableFetchError } from "npm:@supabase/supabase-js@2";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type {
+  AccountStore,
   Allowance,
   Auth,
   BlockReason,
@@ -152,6 +153,45 @@ export function createCallerStore(keys: Keys, token: string, fetchImpl?: typeof 
         resetsAt: typeof found.resets_at === "string" ? found.resets_at : null,
         blockedReason: typeof blocked === "string" && BLOCK_REASONS.includes(blocked) ? blocked as BlockReason : null,
       };
+    },
+  };
+}
+
+const LIST_PAGE_SIZE = 100;
+const REMOVE_BATCH_SIZE = 100;
+
+async function listFiles(client: SupabaseClient, root: string): Promise<string[]> {
+  const files: string[] = [];
+  const folders = [root];
+  for (let folder = folders.pop(); folder !== undefined; folder = folders.pop()) {
+    for (let offset = 0;; offset += LIST_PAGE_SIZE) {
+      const { data, error } = await client.storage.from(BUCKET).list(folder, { limit: LIST_PAGE_SIZE, offset });
+      if (error || !Array.isArray(data)) throw new StoreError("listPhotos");
+      for (const entry of data) {
+        if (typeof entry.name !== "string") throw new StoreError("listPhotos");
+        if (entry.id === null) folders.push(`${folder}/${entry.name}`);
+        else files.push(`${folder}/${entry.name}`);
+      }
+      if (data.length < LIST_PAGE_SIZE) break;
+    }
+  }
+  return files;
+}
+
+export function createAccountStore(keys: Keys, fetchImpl?: typeof fetch): AccountStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    removePhotos: async (userId) => {
+      const files = await listFiles(client, userId);
+      for (let start = 0; start < files.length; start += REMOVE_BATCH_SIZE) {
+        const { error } = await client.storage.from(BUCKET).remove(files.slice(start, start + REMOVE_BATCH_SIZE));
+        if (error) throw new StoreError("removePhotos");
+      }
+      if ((await listFiles(client, userId)).length > 0) throw new StoreError("photosRemain");
+    },
+    deleteUser: async (userId) => {
+      const { error } = await client.auth.admin.deleteUser(userId, false);
+      if (error) throw new StoreError("deleteUser");
     },
   };
 }
