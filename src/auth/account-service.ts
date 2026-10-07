@@ -1,6 +1,7 @@
 import { pageService } from "@/pages/service";
-import { getSupabase } from "@/lib/supabase";
+import { getStatelessSupabase, getSupabase } from "@/lib/supabase";
 import {
+  completeTransfer,
   confirmSignIn,
   confirmSignUp,
   deleteAccount,
@@ -8,6 +9,7 @@ import {
   startSignIn,
   startSignUp,
   type AccountDeps,
+  type PendingTransfer,
 } from "./account";
 
 function deps(): AccountDeps {
@@ -19,18 +21,21 @@ function deps(): AccountDeps {
       updateUser: (attributes) => client.auth.updateUser(attributes),
       signInWithOtp: (credentials) => client.auth.signInWithOtp(credentials),
       verifyOtp: (params) => client.auth.verifyOtp(params),
+      setSession: (tokens) => client.auth.setSession(tokens),
       signOut: (options) => client.auth.signOut(options),
     },
-    functions: { invoke: (name) => client.functions.invoke(name) },
+    stateless: { verifyOtp: (params) => getStatelessSupabase().auth.verifyOtp(params) },
+    functions: { invoke: (name, options) => client.functions.invoke(name, options) },
     countPages: () => pageService.count(),
   };
 }
 
 export const accountService = {
   startSignUp: (email: string) => startSignUp(deps(), email),
-  startSignIn: (email: string, isAnonymous: boolean) => startSignIn(deps(), email, isAnonymous),
+  startSignIn: (email: string) => startSignIn(deps(), email),
   confirmSignUp: (email: string, code: string) => confirmSignUp(deps(), email, code),
   confirmSignIn: (email: string, code: string, isAnonymous: boolean) => confirmSignIn(deps(), email, code, isAnonymous),
+  completeTransfer: (pending: PendingTransfer) => completeTransfer(deps(), pending),
   signOut: () => signOut(deps()),
   deleteAccount: () => deleteAccount(deps()),
 };

@@ -151,6 +151,9 @@ export const en = {
     resendIn: (seconds: number) => `Resend in ${seconds} s`,
     resend: "Resend the code",
     resent: "A new code is on its way.",
+    transferring: (pages: number) =>
+      pages === 1 ? "The page on this phone is joining your account." : `The ${pages} pages on this phone are joining your account.`,
+    transferKept: "Nothing is lost: your pages are still on this phone.",
   },
   accountErrors: {
     invalid_email: "Enter a valid e-mail address.",
@@ -158,7 +161,7 @@ export const en = {
     unknown_account: "No account exists with this address.",
     wrong_code: "This code is wrong or has expired.",
     too_many: "Too many tries. Try again in a few minutes.",
-    has_pages: "This phone holds pages that are not in an account yet. Create an account with another address, or wait for the next update.",
+    reading_in_progress: "A page is being read. Try again in a moment.",
     offline: "No connection. Try again.",
     failed: "Something went wrong. Try again.",
   },

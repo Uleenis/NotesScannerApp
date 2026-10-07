@@ -6,15 +6,30 @@ import { readSupabaseConfig } from "./config";
 import { createChunkedStorage } from "./secure-session-storage";
 
 let client: SupabaseClient | null = null;
+let statelessClient: SupabaseClient | null = null;
+
+function config() {
+  return readSupabaseConfig({
+    url: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    publishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  });
+}
+
+export function getStatelessSupabase(): SupabaseClient {
+  if (statelessClient === null) {
+    const { url, publishableKey } = config();
+    statelessClient = createClient(url, publishableKey, {
+      auth: { storageKey: "code-check", persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+  }
+  return statelessClient;
+}
 
 export function getSupabase(): SupabaseClient {
   if (client !== null) {
     return client;
   }
-  const { url, publishableKey } = readSupabaseConfig({
-    url: process.env.EXPO_PUBLIC_SUPABASE_URL,
-    publishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-  });
+  const { url, publishableKey } = config();
   const created = createClient(url, publishableKey, {
     auth: {
       storage: createChunkedStorage(SecureStore),

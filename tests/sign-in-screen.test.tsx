@@ -198,14 +198,13 @@ describe("signing in to an existing account", () => {
     await fireEvent.press(screen.getByText(fr.signIn.receiveCode));
 
     expect(service.startSignIn).toHaveBeenCalledTimes(1);
-    expect(service.startSignIn).toHaveBeenCalledWith("reader@example.test", true);
+    expect(service.startSignIn).toHaveBeenCalledWith("reader@example.test");
     expect(service.startSignUp).not.toHaveBeenCalled();
     await waitFor(() => expect(pathname()).toBe("/sign-in/code"));
   });
 
   test.each([
     ["unknown_account", fr.accountErrors.unknown_account],
-    ["has_pages", fr.accountErrors.has_pages],
     ["too_many", fr.accountErrors.too_many],
   ] as const)("says why no code was sent: %s", async (reason, message) => {
     service.startSignIn.mockResolvedValue(refused(reason));

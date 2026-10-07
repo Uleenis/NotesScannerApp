@@ -4,6 +4,7 @@ export const accountServiceModule = {
     startSignIn: jest.fn(),
     confirmSignUp: jest.fn(),
     confirmSignIn: jest.fn(),
+    completeTransfer: jest.fn(),
     signOut: jest.fn(),
     deleteAccount: jest.fn(),
   },
