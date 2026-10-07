@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthProvider } from "@/auth/auth-provider";
 import { defaultAuthServices } from "@/auth/default-services";
+import { ForgetOtherAccounts } from "@/components/forget-other-accounts";
 import { createQueryClient, followAppFocus } from "@/lib/query-client";
 import { stackScreenOptions } from "@/navigation-options";
 import { colors, fontAssets } from "@/theme";
@@ -38,6 +39,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <AuthProvider services={defaultAuthServices}>
         <QueryClientProvider client={queryClient}>
+          <ForgetOtherAccounts />
           <StatusBar style="dark" />
           <Stack screenOptions={stackScreenOptions}>
             <Stack.Screen name="index" />

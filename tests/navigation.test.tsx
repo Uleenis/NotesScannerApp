@@ -10,7 +10,8 @@ import { phoneLocale } from "./phone-locale";
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
 jest.mock("@/auth/default-services", () => ({
   defaultAuthServices: {
-    ensureSession: async () => ({ status: "ready", userId: "test-user" }),
+    watch: () => () => undefined,
+    ensureSession: async () => ({ status: "ready", userId: "test-user", email: null, isAnonymous: true }),
     syncLanguage: async () => true,
   },
 }));

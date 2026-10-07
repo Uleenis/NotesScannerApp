@@ -14,6 +14,7 @@ import { phoneLocale } from "./phone-locale";
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
 jest.mock("@/auth/default-services", () => ({
   defaultAuthServices: {
+    watch: () => () => undefined,
     ensureSession: jest.fn(),
     syncLanguage: jest.fn(),
   },
@@ -40,7 +41,7 @@ const fr = strings.fr;
 
 beforeEach(() => {
   jest.mocked(useLocales).mockReturnValue([phoneLocale("fr")]);
-  jest.mocked(defaultAuthServices.ensureSession).mockResolvedValue({ status: "ready", userId: "test-user" });
+  jest.mocked(defaultAuthServices.ensureSession).mockResolvedValue({ status: "ready", userId: "test-user", email: null, isAnonymous: true });
   jest.mocked(defaultAuthServices.syncLanguage).mockResolvedValue(true);
   jest.mocked(notebookService.list).mockReset();
   jest.mocked(notebookService.get).mockReset();

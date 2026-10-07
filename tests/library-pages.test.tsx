@@ -18,6 +18,7 @@ jest.mock("expo-network", () => ({ useNetworkState: jest.fn(() => ({ isConnected
 jest.mock("@/pages/timing", () => require("./fake-page-service").timing);
 jest.mock("@/auth/default-services", () => ({
   defaultAuthServices: {
+    watch: () => () => undefined,
     ensureSession: jest.fn(),
     syncLanguage: jest.fn(),
   },
@@ -84,7 +85,7 @@ let pages: ReturnType<typeof installFakePages>;
 
 beforeEach(() => {
   jest.mocked(useLocales).mockReturnValue([phoneLocale("fr")]);
-  jest.mocked(defaultAuthServices.ensureSession).mockResolvedValue({ status: "ready", userId: "test-user" });
+  jest.mocked(defaultAuthServices.ensureSession).mockResolvedValue({ status: "ready", userId: "test-user", email: null, isAnonymous: true });
   jest.mocked(defaultAuthServices.syncLanguage).mockResolvedValue(true);
   jest.mocked(captureService.allowance).mockReset().mockResolvedValue(registered);
   jest.mocked(captureService.latestNotebookId).mockReset().mockResolvedValue(histoire.id);
