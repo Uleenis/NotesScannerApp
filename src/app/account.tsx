@@ -1,6 +1,6 @@
 import { Stack, router } from "expo-router";
 import { useRef, useState } from "react";
-import { Alert, Linking, ScrollView, StyleSheet, Text } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text } from "react-native";
 
 import { accountService } from "@/auth/account-service";
 import type { AccountFailure } from "@/auth/account-errors";
@@ -11,6 +11,7 @@ import { AccountRow } from "@/components/account/account-row";
 import { HeaderTextButton } from "@/components/header-text-button";
 import { useStrings } from "@/i18n";
 import { legalLinks } from "@/lib/legal-links";
+import { openLink } from "@/lib/open-link";
 import { colors, typography } from "@/theme";
 
 type Problem = "sign_out" | "delete" | "delete_offline";
@@ -89,8 +90,8 @@ export default function AccountScreen() {
           <AccountRow label={registered ? t.account.pagesMonth : t.account.pagesTrial} value={counts ?? ""} last />
         </AccountGroup>
         <AccountGroup>
-          <AccountRow label={t.account.terms} onPress={() => Linking.openURL(legalLinks.terms)} />
-          <AccountRow label={t.account.privacy} onPress={() => Linking.openURL(legalLinks.privacy)} last />
+          <AccountRow label={t.account.terms} onPress={() => openLink(legalLinks.terms)} />
+          <AccountRow label={t.account.privacy} onPress={() => openLink(legalLinks.privacy)} last />
         </AccountGroup>
         <AccountGroup>
           {registered ? (

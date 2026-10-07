@@ -1,6 +1,6 @@
 import { Stack, router } from "expo-router";
 import { useRef, useState } from "react";
-import { Linking, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { accountService } from "@/auth/account-service";
 import type { AccountFailure } from "@/auth/account-errors";
@@ -9,6 +9,7 @@ import { HeaderTextButton } from "@/components/header-text-button";
 import { PrimaryButton } from "@/components/primary-button";
 import { useStrings } from "@/i18n";
 import { legalLinks } from "@/lib/legal-links";
+import { openLink } from "@/lib/open-link";
 import { colors, radius, typography } from "@/theme";
 
 type Mode = "signup" | "signin";
@@ -101,11 +102,11 @@ export default function SignInScreen() {
         </Text>
         <Text style={styles.legal}>
           {t.signIn.legalBefore}
-          <Text accessibilityRole="link" onPress={() => Linking.openURL(legalLinks.terms)} style={styles.link}>
+          <Text accessibilityRole="link" onPress={() => openLink(legalLinks.terms)} style={styles.link}>
             {t.signIn.terms}
           </Text>
           {t.signIn.legalMiddle}
-          <Text accessibilityRole="link" onPress={() => Linking.openURL(legalLinks.privacy)} style={styles.link}>
+          <Text accessibilityRole="link" onPress={() => openLink(legalLinks.privacy)} style={styles.link}>
             {t.signIn.privacy}
           </Text>
           {t.signIn.legalAfter}
