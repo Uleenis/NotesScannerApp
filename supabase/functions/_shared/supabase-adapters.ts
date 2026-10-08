@@ -15,6 +15,7 @@ import type {
   PhotoInfo,
   QueueReason,
   ServerStore,
+  TransferStore,
 } from "./ports.ts";
 
 const BUCKET = "photos";
@@ -58,6 +59,11 @@ function isNotFound(error: unknown): boolean {
   return String(code) === "404";
 }
 
+function isDuplicate(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null ? (error as Record<string, unknown>).statusCode : null;
+  return String(code) === "409";
+}
+
 const NO_SESSION = { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false };
 
 function row(value: unknown): Row | null {
@@ -77,7 +83,7 @@ export function createAuth(keys: Keys, fetchImpl?: typeof fetch): Auth {
         if (isAuthRetryableFetchError(error) || (error.status ?? 0) >= 500) throw new StoreError("verify");
         return null;
       }
-      return data.user ? { userId: data.user.id } : null;
+      return data.user ? { userId: data.user.id, isAnonymous: data.user.is_anonymous === true } : null;
     },
   };
 }
@@ -192,6 +198,32 @@ export function createAccountStore(keys: Keys, fetchImpl?: typeof fetch): Accoun
     deleteUser: async (userId) => {
       const { error } = await client.auth.admin.deleteUser(userId, false);
       if (error) throw new StoreError("deleteUser");
+    },
+  };
+}
+
+export function createTransferStore(keys: Keys, fetchImpl?: typeof fetch): TransferStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    hasProcessingPage: async (userId) => {
+      const { data, error } = await client.from("pages").select("id").eq("user_id", userId).eq("status", "processing").limit(1);
+      if (error || !Array.isArray(data)) throw new StoreError("hasProcessingPage");
+      return data.length > 0;
+    },
+    listPhotos: (userId) => listFiles(client, userId),
+    copyPhoto: async (from, to) => {
+      const { error } = await client.storage.from(BUCKET).copy(from, to);
+      if (error && !isDuplicate(error)) throw new StoreError("copyPhoto");
+    },
+    moveRows: async (fromId, toId) => {
+      const { data, error } = await client.rpc("transfer_account_rows", { p_from: fromId, p_to: toId });
+      if (error) {
+        if (error.message === "page_processing") return { ok: false, reason: "page_processing" };
+        throw new StoreError("moveRows");
+      }
+      const found = first(data);
+      if (!found || !Number.isInteger(found.pages) || !Number.isInteger(found.notebooks_merged)) throw new StoreError("moveRows");
+      return { ok: true, pages: found.pages as number, notebooksMerged: found.notebooks_merged as number };
     },
   };
 }

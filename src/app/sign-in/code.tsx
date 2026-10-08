@@ -1,12 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { accountService } from "@/auth/account-service";
+import type { PendingTransfer } from "@/auth/account";
 import type { AccountFailure } from "@/auth/account-errors";
 import { useAuth } from "@/auth/auth-provider";
 import { CodeField } from "@/components/code-field";
+import { PrimaryButton } from "@/components/primary-button";
 import { useStrings } from "@/i18n";
 import { refreshPages } from "@/pages/queries";
 import { colors, typography } from "@/theme";
@@ -23,10 +25,13 @@ export default function CodeScreen() {
   const [failure, setFailure] = useState<AccountFailure | null>(null);
   const [checking, setChecking] = useState(false);
   const [resent, setResent] = useState(false);
+  const [transfer, setTransfer] = useState<PendingTransfer | null>(null);
+  const [joining, setJoining] = useState(false);
   const [seconds, setSeconds] = useState(RESEND_MS / 1000);
   const startedAt = useRef(0);
   const checkingNow = useRef(false);
   const resending = useRef(false);
+  const joiningNow = useRef(false);
 
   const email = typeof params.email === "string" ? params.email : "";
   const signingUp = params.mode !== "signin";
@@ -46,6 +51,38 @@ export default function CodeScreen() {
     setResent(false);
   }
 
+  function close() {
+    router.dismissAll();
+    router.dismiss();
+  }
+
+  async function join(pending: PendingTransfer) {
+    if (joiningNow.current) {
+      return;
+    }
+    joiningNow.current = true;
+    setJoining(true);
+    setFailure(null);
+    try {
+      const outcome = await accountService.completeTransfer(pending);
+      if (outcome.ok) {
+        void refreshPages(queryClient, outcome.userId);
+        close();
+      } else {
+        setFailure(outcome.reason);
+      }
+    } finally {
+      joiningNow.current = false;
+      setJoining(false);
+    }
+  }
+
+  function tryAgain() {
+    if (transfer !== null) {
+      void join(transfer);
+    }
+  }
+
   async function check(digits: string) {
     if (checkingNow.current) {
       return;
@@ -55,15 +92,17 @@ export default function CodeScreen() {
     setFailure(null);
     try {
       const outcome = signingUp
-        ? await accountService.confirmSignUp(email, digits)
+        ? { ...(await accountService.confirmSignUp(email, digits)), transfer: null }
         : await accountService.confirmSignIn(email, digits, isAnonymous);
-      if (outcome.ok) {
-        void refreshPages(queryClient, auth.userId);
-        router.dismissAll();
-        router.dismiss();
-      } else {
+      if (!outcome.ok) {
         setFailure(outcome.reason);
         setCode("");
+      } else if (outcome.transfer !== null) {
+        setTransfer(outcome.transfer);
+        void join(outcome.transfer);
+      } else {
+        void refreshPages(queryClient, auth.userId);
+        close();
       }
     } finally {
       checkingNow.current = false;
@@ -77,7 +116,7 @@ export default function CodeScreen() {
     }
     resending.current = true;
     try {
-      const outcome = signingUp ? await accountService.startSignUp(email) : await accountService.startSignIn(email, isAnonymous);
+      const outcome = signingUp ? await accountService.startSignUp(email) : await accountService.startSignIn(email);
       if (outcome.ok) {
         startedAt.current = Date.now();
         setSeconds(RESEND_MS / 1000);
@@ -94,37 +133,58 @@ export default function CodeScreen() {
     <>
       <Stack.Screen options={{ headerBackTitle: t.common.back }} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{t.code.title}</Text>
-        <Text style={styles.body}>{t.code.body(email)}</Text>
-        <CodeField
-          label={t.code.label}
-          value={code}
-          onChange={edit}
-          onComplete={(digits) => {
-            void check(digits);
-          }}
-          disabled={checking}
-        />
-        {failure === null ? null : <Text style={styles.error}>{t.accountErrors[failure]}</Text>}
-        {resent ? <Text style={styles.resent}>{t.code.resent}</Text> : null}
-        <View style={styles.resendRow}>
-          <Text style={styles.resend}>
-            {t.code.nothingReceived}{" "}
-            {seconds > 0 ? (
-              <Text style={styles.wait}>{t.code.resendIn(seconds)}</Text>
+        {transfer !== null ? (
+          <View style={styles.joining}>
+            {joining ? (
+              <>
+                <ActivityIndicator color={colors.ink} />
+                <Text style={styles.joiningText}>{t.code.transferring(transfer.pages)}</Text>
+              </>
             ) : (
-              <Text
-                accessibilityRole="link"
-                onPress={() => {
-                  void sendAgain();
-                }}
-                style={styles.link}
-              >
-                {t.code.resend}
-              </Text>
+              <>
+                {failure === null ? null : <Text style={styles.error}>{t.accountErrors[failure]}</Text>}
+                <Text style={styles.kept}>{t.code.transferKept}</Text>
+                <View style={styles.retry}>
+                  <PrimaryButton label={t.common.retry} onPress={tryAgain} />
+                </View>
+              </>
             )}
-          </Text>
-        </View>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.title}>{t.code.title}</Text>
+            <Text style={styles.body}>{t.code.body(email)}</Text>
+            <CodeField
+              label={t.code.label}
+              value={code}
+              onChange={edit}
+              onComplete={(digits) => {
+                void check(digits);
+              }}
+              disabled={checking}
+            />
+            {failure === null ? null : <Text style={styles.error}>{t.accountErrors[failure]}</Text>}
+            {resent ? <Text style={styles.resent}>{t.code.resent}</Text> : null}
+            <View style={styles.resendRow}>
+              <Text style={styles.resend}>
+                {t.code.nothingReceived}{" "}
+                {seconds > 0 ? (
+                  <Text style={styles.wait}>{t.code.resendIn(seconds)}</Text>
+                ) : (
+                  <Text
+                    accessibilityRole="link"
+                    onPress={() => {
+                      void sendAgain();
+                    }}
+                    style={styles.link}
+                  >
+                    {t.code.resend}
+                  </Text>
+                )}
+              </Text>
+            </View>
+          </>
+        )}
       </ScrollView>
     </>
   );
@@ -154,6 +214,25 @@ const styles = StyleSheet.create({
     ...typography.interfaceSecondary,
     color: colors.inkSecondary,
     paddingTop: 16,
+  },
+  joining: {
+    alignItems: "center",
+    gap: 16,
+    paddingTop: 48,
+  },
+  joiningText: {
+    ...typography.interfaceBody,
+    color: colors.ink,
+    textAlign: "center",
+  },
+  kept: {
+    ...typography.interfaceSecondary,
+    color: colors.inkSecondary,
+    textAlign: "center",
+  },
+  retry: {
+    alignSelf: "stretch",
+    paddingTop: 8,
   },
   resendRow: {
     alignItems: "center",

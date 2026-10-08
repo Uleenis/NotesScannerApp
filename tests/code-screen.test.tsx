@@ -1,5 +1,6 @@
 import { useLocales } from "expo-localization";
 import { act, fireEvent, renderRouter, screen, waitFor } from "expo-router/testing-library";
+import { QueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 
 import { defaultAuthServices } from "@/auth/default-services";
@@ -121,7 +122,6 @@ describe("the code screen", () => {
 
   test.each([
     ["wrong_code", fr.accountErrors.wrong_code],
-    ["has_pages", fr.accountErrors.has_pages],
     ["too_many", fr.accountErrors.too_many],
     ["offline", fr.accountErrors.offline],
     ["failed", fr.accountErrors.failed],
@@ -223,7 +223,7 @@ describe("asking for the code again", () => {
     await fireEvent.press(screen.getByText(fr.code.resend));
 
     expect(service.startSignIn).toHaveBeenCalledTimes(1);
-    expect(service.startSignIn).toHaveBeenCalledWith(EMAIL, true);
+    expect(service.startSignIn).toHaveBeenCalledWith(EMAIL);
     expect(service.startSignUp).not.toHaveBeenCalled();
   });
 
@@ -290,6 +290,152 @@ describe("after the sign-up", () => {
     await waitFor(() => expect(screen.queryByText(fr.library.anonymousReminder)).toBeNull());
     expect(jest.mocked(captureService.allowance).mock.calls.length).toBeGreaterThan(readsBefore);
     expect(screen.getByText(histoire.name)).toBeTruthy();
+  });
+});
+
+const PENDING = { pages: 2, session: { accessToken: "found-access", refreshToken: "found-refresh", userId: "found-user" } };
+
+describe("joining the pages of this phone to the account found", () => {
+  beforeEach(() => {
+    service.confirmSignIn.mockResolvedValue({ ok: true, transfer: PENDING });
+  });
+
+  test("says that the pages are joining the account, takes no more typing, and asks for the transfer", async () => {
+    let finish: (value: { ok: true; userId: string }) => void = () => undefined;
+    service.completeTransfer.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const pathname = await openCode("signin");
+
+    await typeCode("123456");
+
+    expect(await screen.findByText(fr.code.transferring(2))).toBeTruthy();
+    expect(fr.code.transferring(2)).toBe("Les 2 pages de ce téléphone rejoignent ton compte.");
+    expect(service.completeTransfer).toHaveBeenCalledTimes(1);
+    expect(service.completeTransfer).toHaveBeenCalledWith(PENDING);
+    expect(screen.queryByLabelText(fr.code.label)).toBeNull();
+    expect(screen.queryByText(fr.code.nothingReceived, { exact: false })).toBeNull();
+    expect(pathname()).toBe("/sign-in/code");
+
+    await act(async () => finish({ ok: true, userId: "found-user" }));
+    await waitFor(() => expect(pathname()).toBe("/"));
+  });
+
+  test("speaks of one page in the singular, in French and in English", async () => {
+    service.confirmSignIn.mockResolvedValue({ ok: true, transfer: { ...PENDING, pages: 1 } });
+    service.completeTransfer.mockReturnValue(new Promise(() => undefined));
+    await openCode("signin");
+
+    await typeCode("123456");
+
+    expect(await screen.findByText(fr.code.transferring(1))).toBeTruthy();
+    expect(fr.code.transferring(1)).toBe("La page de ce téléphone rejoint ton compte.");
+    expect(strings.en.code.transferring(1)).toBe("The page on this phone is joining your account.");
+    expect(strings.en.code.transferring(2)).toBe("The 2 pages on this phone are joining your account.");
+  });
+
+  test("closes the sign-in and shows the pages of the account found", async () => {
+    installFakePages([page({ id: "joined-page", notebookId: histoire.id, number: 1 })]);
+    const pathname = await openLibrary();
+    await act(async () => router.push("/sign-in"));
+    await fireEvent.changeText(screen.getByLabelText(fr.signIn.emailLabel), EMAIL);
+    await fireEvent.press(screen.getByText(fr.signIn.signInLink));
+    await fireEvent.press(screen.getByText(fr.signIn.receiveCode));
+    await waitFor(() => expect(pathname()).toBe("/sign-in/code"));
+    service.completeTransfer.mockImplementation(async () => {
+      for (const listener of mockListeners) {
+        listener({ userId: "found-user", email: EMAIL, isAnonymous: false });
+      }
+      return { ok: true, userId: "found-user" };
+    });
+    const listsBefore = jest.mocked(pageService.list).mock.calls.length;
+
+    await typeCode("123456");
+
+    await waitFor(() => expect(pathname()).toBe("/"));
+    expect(await screen.findByText(histoire.name)).toBeTruthy();
+    expect(jest.mocked(pageService.list).mock.calls.length).toBeGreaterThan(listsBefore);
+  });
+
+  test("reads again the pages, the notebooks and the limits of the account found, and of no other", async () => {
+    const reload = jest.spyOn(QueryClient.prototype, "invalidateQueries");
+    const pathname = await openCode("signin");
+
+    await typeCode("123456");
+
+    await waitFor(() => expect(pathname()).toBe("/"));
+    const keys = reload.mock.calls.map((call) => JSON.stringify(call[0]?.queryKey));
+    for (const name of ["pages", "notebooks", "notebook", "allowance", "latest-notebook"]) {
+      expect(keys).toContain(JSON.stringify([name, "found-user"]));
+    }
+    expect(keys).not.toContain(JSON.stringify(["pages", "test-user"]));
+    reload.mockRestore();
+  });
+
+  test.each([
+    ["reading_in_progress", fr.accountErrors.reading_in_progress],
+    ["offline", fr.accountErrors.offline],
+    ["failed", fr.accountErrors.failed],
+  ] as const)("says why the transfer did not work (%s), says that nothing is lost and offers to try again", async (reason, message) => {
+    service.completeTransfer.mockResolvedValue(refused(reason));
+    const pathname = await openCode("signin");
+
+    await typeCode("123456");
+
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(screen.getByText(fr.code.transferKept)).toBeTruthy();
+    expect(screen.getByText(fr.common.retry)).toBeTruthy();
+    expect(pathname()).toBe("/sign-in/code");
+  });
+
+  test("tries again without asking for a new code and finishes", async () => {
+    service.completeTransfer.mockResolvedValueOnce(refused("offline")).mockResolvedValueOnce({ ok: true, userId: "found-user" });
+    const pathname = await openCode("signin");
+    await typeCode("123456");
+    await screen.findByText(fr.accountErrors.offline);
+
+    await fireEvent.press(screen.getByText(fr.common.retry));
+
+    await waitFor(() => expect(pathname()).toBe("/"));
+    expect(service.completeTransfer).toHaveBeenCalledTimes(2);
+    expect(service.completeTransfer).toHaveBeenLastCalledWith(PENDING);
+    expect(service.confirmSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows the sentence again, and no failure, while it tries again", async () => {
+    service.completeTransfer.mockResolvedValueOnce(refused("offline")).mockReturnValueOnce(new Promise(() => undefined));
+    await openCode("signin");
+    await typeCode("123456");
+    await screen.findByText(fr.accountErrors.offline);
+
+    await fireEvent.press(screen.getByText(fr.common.retry));
+
+    expect(await screen.findByText(fr.code.transferring(2))).toBeTruthy();
+    expect(screen.queryByText(fr.accountErrors.offline)).toBeNull();
+    expect(screen.queryByText(fr.common.retry)).toBeNull();
+  });
+
+  test("does not start a second transfer when the button is pressed twice in the same instant", async () => {
+    service.completeTransfer.mockResolvedValueOnce(refused("offline")).mockReturnValueOnce(new Promise(() => undefined));
+    await openCode("signin");
+    await typeCode("123456");
+    await screen.findByText(fr.accountErrors.offline);
+    const retry = screen.getByText(fr.common.retry);
+
+    await act(async () => {
+      fireEvent.press(retry);
+      fireEvent.press(retry);
+    });
+
+    expect(service.completeTransfer).toHaveBeenCalledTimes(2);
+  });
+
+  test("closes at once, with no sentence and no transfer, when there is nothing to bring", async () => {
+    service.confirmSignIn.mockResolvedValue({ ok: true, transfer: null });
+    const pathname = await openCode("signin");
+
+    await typeCode("123456");
+
+    await waitFor(() => expect(pathname()).toBe("/"));
+    expect(service.completeTransfer).not.toHaveBeenCalled();
   });
 });
 

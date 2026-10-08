@@ -4,7 +4,7 @@ export type AccountFailure =
   | "unknown_account"
   | "wrong_code"
   | "too_many"
-  | "has_pages"
+  | "reading_in_progress"
   | "offline"
   | "failed";
 
@@ -33,6 +33,9 @@ export function isEmailAddress(value: string): boolean {
 export function failureFor(error: unknown): AccountFailure {
   if (error instanceof TypeError || OFFLINE_NAMES.includes(String(field(error, "name")))) {
     return "offline";
+  }
+  if (field(field(error, "context"), "status") === 409) {
+    return "reading_in_progress";
   }
   switch (field(error, "code")) {
     case "email_exists":

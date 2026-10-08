@@ -4,7 +4,6 @@ import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { accountService } from "@/auth/account-service";
 import type { AccountFailure } from "@/auth/account-errors";
-import { useAuth } from "@/auth/auth-provider";
 import { HeaderTextButton } from "@/components/header-text-button";
 import { PrimaryButton } from "@/components/primary-button";
 import { useStrings } from "@/i18n";
@@ -16,15 +15,12 @@ type Mode = "signup" | "signin";
 
 export default function SignInScreen() {
   const t = useStrings();
-  const auth = useAuth();
   const [mode, setMode] = useState<Mode>("signup");
   const [email, setEmail] = useState("");
   const [focused, setFocused] = useState(false);
   const [failure, setFailure] = useState<AccountFailure | null>(null);
   const [sending, setSending] = useState(false);
   const busy = useRef(false);
-
-  const isAnonymous = auth.status !== "ready" || auth.isAnonymous;
 
   function edit(text: string) {
     setEmail(text);
@@ -44,7 +40,7 @@ export default function SignInScreen() {
     setSending(true);
     setFailure(null);
     try {
-      const outcome = mode === "signup" ? await accountService.startSignUp(email) : await accountService.startSignIn(email, isAnonymous);
+      const outcome = mode === "signup" ? await accountService.startSignUp(email) : await accountService.startSignIn(email);
       if (outcome.ok) {
         router.push({ pathname: "/sign-in/code", params: { email: email.trim().toLowerCase(), mode } });
       } else {

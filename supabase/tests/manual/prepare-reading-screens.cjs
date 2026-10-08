@@ -42,7 +42,7 @@ const LONG_TEXT = ["Journal de test", "", ...Array.from({ length: 40 }, (_, inde
 async function main() {
   const photoPath = flag("--photo");
   if (photoPath === null) {
-    console.error("Usage: node supabase/tests/manual/prepare-reading-screens.cjs --photo <a JPEG file> [--user <account id>] [--with-stuck]");
+    console.error("Usage: node supabase/tests/manual/prepare-reading-screens.cjs --photo <a JPEG file> [--user <account id>] [--with-stuck] [--without-page-being-read]");
     process.exit(1);
   }
   const env = localStatus();
@@ -88,6 +88,9 @@ async function main() {
     { label: "put-off reading (read_error)", minutes: 20, row: { status: "queued", queue_reason: "read_error", attempted_at: minutesAgo(3) } },
     { label: "failed reading", minutes: 10, row: { status: "failed", retry_count: 3 } },
   ];
+  if (process.argv.includes("--without-page-being-read")) {
+    fixtures.splice(fixtures.findIndex((fixture) => fixture.label === "page being read"), 1);
+  }
   if (process.argv.includes("--with-stuck")) {
     fixtures.push({ label: "queued page nobody started (the screen will start a REAL reading)", minutes: 5, row: { status: "queued" } });
   }
