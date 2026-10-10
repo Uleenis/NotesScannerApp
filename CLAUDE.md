@@ -22,7 +22,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/components/account/`: the groups and rows of the account screen.
 - `src/components/reading/`: the screens' parts for a reading: ink stroke, waiting view, document, original photo with its zoom, page rows and cards.
 - `src/theme.ts`: colors, fonts and type sizes of the design direction.
-- `tests/`: Jest tests. `tests/fixtures/b1-line-shapes.json` holds only the shape of the lines of the 18 B1 readings of the Thinking Spike (every letter is `x` or `X`, every digit `0`), with the verdict of the ground truth for each line break; no text of a page may enter the repository.
+- `tests/`: Jest tests. `tests/fixtures/b1-line-shapes.json` holds only the shape of the lines of the 18 B1 readings of the Thinking Spike (every letter is `x` or `X`, every digit `0`), with the verdict of the ground truth for each line break; no text of a page may enter the repository. `tests/google-keys.test.ts` reads every file git would send (tracked, or new and not ignored) and fails on a Google key or identifier, naming the file and the line, never the value.
 - `supabase/migrations/`: the only way the schema changes.
 - `supabase/templates/`: the e-mail templates (sign-up, sign-in, confirmation). Each one shows `{{ .Token }}`, the code, and never a link; `config.toml` references them and sets the code at 6 digits, valid 10 minutes, a new one after 30 seconds, and the proof of the address before an account keeps it.
 - `supabase/functions/`: Edge Functions (`prepare-page`, `read-page`, `relaunch-page`, `delete-account`, `transfer-account`), their shared code in `_shared/`, their Deno tests in `tests/`. Local secrets (`GEMINI_API_KEY`, `RELAUNCH_SECRET`) live in `supabase/functions/.env`, ignored by git. The `pg_cron` task that calls `relaunch-page` reads its secret and address from Supabase Vault, never from the repository.
@@ -68,10 +68,11 @@ All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitle
 ## Security rules
 
 - Row level security on every table, deny by default, `user_id = auth.uid()` and only the operations the client is allowed. Every policy has a test proving a user can neither read nor modify another user's data. `rls.test.sql` fails if a table in `public` has RLS disabled.
+- A new table in `public` gets no right by default, locally and in production: every migration that creates one grants its rights explicitly, to `authenticated` column by column and to `service_role` (`select, insert, update, delete`). `tests/server-grants.test.ts` and `server-grants.test.sql` fail otherwise.
 - `profiles` has no `user_id`: its key `id` is the account id and its rule is `id = auth.uid()`. Tables written only by the server have no default for `user_id`: the server always gives it.
 - The client only writes notebooks, chapters, pages, corrections, consents, its interface language, birth year and country. Everything else is written by the server.
 - Storage buckets are private; a user only reads files under their own `user_id`.
-- No secret in the repository. Secrets live in Supabase Edge Function secrets or Google Secret Manager. The app only holds the Supabase URL and publishable key.
+- No secret in the repository. Secrets live in Supabase Edge Function secrets or Google Secret Manager. The app only holds the Supabase URL and publishable key. The app reaches production through `.env.development.local`, ignored by git, holding only the production URL and publishable key; renamed `.env.development.local.off`, the app is back on the local stack.
 - Logs never contain page text or images.
 - Model output is text, never code: never executed, rendered without HTML or active links.
 - Usage limits are enforced by Edge Functions, never by the app.
