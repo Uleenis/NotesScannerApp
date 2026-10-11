@@ -17,7 +17,7 @@ export default function PhotoSheet() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <View style={styles.header}>
+      <View style={styles.header} testID="photo-sheet-bar">
         <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.close}>
           <Text style={styles.closeLabel}>{t.photo.close}</Text>
         </Pressable>
@@ -50,6 +50,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+    minHeight: 56,
     paddingBottom: 12,
   },
   close: {

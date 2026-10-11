@@ -47,8 +47,8 @@ export function ZoomablePhoto({ uri, label }: Props) {
   function bounds(nextScale: number) {
     "worklet";
     return {
-      x: Math.max(0, (displayed.width * nextScale - box.width) / 2),
-      y: Math.max(0, (displayed.height * nextScale - box.height) / 2),
+      x: Math.max(0, (displayed.width * nextScale - displayed.width) / 2),
+      y: Math.max(0, (displayed.height * nextScale - displayed.height) / 2),
     };
   }
 
@@ -73,8 +73,8 @@ export function ZoomablePhoto({ uri, label }: Props) {
     .onUpdate((event) => {
       const next = Math.min(maxScale, Math.max(1, startScale.value * event.scale));
       const ratio = next / startScale.value;
-      const focalX = event.focalX - box.width / 2;
-      const focalY = event.focalY - box.height / 2;
+      const focalX = event.focalX - displayed.width / 2;
+      const focalY = event.focalY - displayed.height / 2;
       const limit = bounds(next);
       scale.value = next;
       translateX.value = clamp(focalX - ratio * (focalX - startX.value), limit.x);
@@ -115,8 +115,8 @@ export function ZoomablePhoto({ uri, label }: Props) {
       const target = Math.min(maxScale, DOUBLE_TAP_SCALE);
       const limit = bounds(target);
       scale.value = withTiming(target, { duration: ZOOM_MS });
-      translateX.value = withTiming(clamp((event.x - box.width / 2) * (1 - target), limit.x), { duration: ZOOM_MS });
-      translateY.value = withTiming(clamp((event.y - box.height / 2) * (1 - target), limit.y), { duration: ZOOM_MS });
+      translateX.value = withTiming(clamp((event.x - displayed.width / 2) * (1 - target), limit.x), { duration: ZOOM_MS });
+      translateY.value = withTiming(clamp((event.y - displayed.height / 2) * (1 - target), limit.y), { duration: ZOOM_MS });
     });
 
   const gesture = Gesture.Race(doubleTap, Gesture.Simultaneous(pinch, pan));
@@ -137,7 +137,7 @@ export function ZoomablePhoto({ uri, label }: Props) {
         nestedScrollEnabled
         overScrollMode="never"
         showsVerticalScrollIndicator={false}
-        style={styles.area}
+        style={[styles.area, { height: displayed.height, width: displayed.width }]}
         contentContainerStyle={styles.areaContent}
       >
         <GestureDetector gesture={gesture}>
@@ -158,14 +158,16 @@ export function ZoomablePhoto({ uri, label }: Props) {
 
 const styles = StyleSheet.create({
   box: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+  area: {
     backgroundColor: colors.sheet,
     borderColor: colors.rule,
     borderWidth: StyleSheet.hairlineWidth,
-    flex: 1,
+    flexGrow: 0,
     overflow: "hidden",
-  },
-  area: {
-    flex: 1,
   },
   areaContent: {
     flexGrow: 1,
