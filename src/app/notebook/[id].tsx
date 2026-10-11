@@ -1,6 +1,8 @@
 import { Redirect, Stack, router, useLocalSearchParams } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { BackLink } from "@/components/back-link";
+import { LargeTitle } from "@/components/large-title";
 import { LoadError } from "@/components/load-error";
 import { PageRow } from "@/components/reading/page-row";
 import { ScanButton } from "@/components/scan-button";
@@ -28,7 +30,14 @@ export default function NotebookScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: notebook.data.name, headerLargeTitleEnabled: true }} />
+      <Stack.Screen
+        options={{
+          title: "",
+          headerBackVisible: false,
+          headerLeft: () => <BackLink name={t.library.title} label={t.library.title} onPress={() => router.dismissTo("/")} />,
+        }}
+      />
+      <LargeTitle text={notebook.data.name} />
       <View style={styles.container}>
         <Text style={styles.count}>{t.notebook.pageCount(notebook.data.pageCount)}</Text>
         {notebook.data.pageCount === 0 ? (
