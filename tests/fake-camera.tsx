@@ -43,7 +43,7 @@ export const granted: FakePermission = { granted: true, canAskAgain: true, statu
 export const refused: FakePermission = { granted: false, canAskAgain: false, status: "denied", expires: "never" };
 export const undetermined: FakePermission = { granted: false, canAskAgain: true, status: "undetermined", expires: "never" };
 
-export const PHOTO = { uri: "file:///cache/photo.jpg", width: 3000, height: 4000 };
+export const PHOTO = { uri: "file:///cache/photo.jpg", width: 4080, height: 3060, exif: { Orientation: 6 } };
 
 export function installPermission(permission: FakePermission | null) {
   const request = jest.fn(async () => granted);

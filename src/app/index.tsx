@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 
 import { AccountButton } from "@/components/account-button";
 import { FirstLaunch } from "@/components/first-launch";
+import { LargeTitle } from "@/components/large-title";
 import { LoadError } from "@/components/load-error";
 import { NotebookRow } from "@/components/notebook-row";
 import { LatestPageCard } from "@/components/reading/latest-page-card";
@@ -94,11 +95,11 @@ export default function LibraryScreen() {
     <>
       <Stack.Screen
         options={{
-          title: t.library.title,
-          headerLargeTitleEnabled: true,
+          title: "",
           headerRight: () => <AccountButton />,
         }}
       />
+      <LargeTitle text={t.library.title} />
       <LibraryBody />
     </>
   );

@@ -1,3 +1,4 @@
+import { shrinkTarget } from "@/capture/photo";
 import { captureService } from "@/capture/service";
 import { getSupabase } from "@/lib/supabase";
 
@@ -23,16 +24,56 @@ jest.mock("expo-file-system", () => ({
   },
 }));
 
-jest.mock("expo-image-manipulator", () => ({
-  ImageManipulator: {
-    manipulate: jest.fn(() => ({
-      resize: () => ({
-        renderAsync: async () => ({ saveAsync: async () => ({ uri: "file:///cache/shrunk.jpg" }) }),
-      }),
-    })),
-  },
-  SaveFormat: { JPEG: "jpeg" },
-}));
+type MockImage = { name: string; width: number; height: number; released: boolean };
+
+const mockImaging = {
+  calls: [] as string[],
+  sizes: [] as { width: number; height: number }[],
+  saved: [] as unknown[],
+  images: [] as MockImage[],
+  fail: false,
+};
+
+jest.mock("expo-image-manipulator", () => {
+  function image(name: string) {
+    const size = mockImaging.sizes.shift() ?? { width: 3000, height: 4000 };
+    const state: MockImage = { name, ...size, released: false };
+    mockImaging.images.push(state);
+    return {
+      state,
+      width: size.width,
+      height: size.height,
+      saveAsync: async (options: unknown) => {
+        mockImaging.calls.push(`save ${name}`);
+        mockImaging.saved.push(options);
+        return { uri: `file:///cache/${name}.jpg`, width: size.width, height: size.height };
+      },
+      release: () => {
+        state.released = true;
+      },
+    };
+  }
+  function context(source: string, steps: string[]) {
+    return {
+      rotate: (degrees: number) => context(source, [...steps, `rotate ${degrees}`]),
+      resize: (size: { width: number; height: number }) => context(source, [...steps, `resize ${size.width}x${size.height}`]),
+      renderAsync: async () => {
+        mockImaging.calls.push(`render ${source}${steps.map((step) => ` ${step}`).join("")}`);
+        if (mockImaging.fail) {
+          throw new Error("no memory");
+        }
+        return image(steps.some((step) => step.startsWith("resize")) ? "shrunk" : "turned");
+      },
+      release: () => undefined,
+    };
+  }
+  return {
+    ImageManipulator: {
+      manipulate: (source: string | { state: MockImage }) => context(typeof source === "string" ? source : `image:${source.state.name}`, []),
+    },
+    SaveFormat: { JPEG: "jpeg" },
+  };
+});
 
 jest.mock("@/lib/supabase", () => ({ getSupabase: jest.fn() }));
 
@@ -82,6 +123,11 @@ function fakeSupabase(options: { upload?: "ok" | "fail"; read?: Promise<unknown>
 beforeEach(() => {
   mockFiles.length = 0;
   mockDeleteFails = false;
+  mockImaging.calls = [];
+  mockImaging.sizes = [];
+  mockImaging.saved = [];
+  mockImaging.images = [];
+  mockImaging.fail = false;
 });
 
 const input = { notebookId: "notebook-1", photoUri: "file:///cache/photo.jpg", pageId: null };
@@ -137,13 +183,55 @@ test("when the photo is not sent no reading starts and the caller is not told", 
   expect(settled).not.toHaveBeenCalled();
 });
 
-test("a photo within the limit of pixels is used as it is", async () => {
-  expect(await captureService.preparePhoto({ uri: "file:///cache/a.jpg", width: 3000, height: 4000 })).toBe("file:///cache/a.jpg");
+const taken = { uri: "file:///cache/a.jpg", width: 4080, height: 3060, exif: { Orientation: 6 } };
+
+test("a photo held as in the viewfinder is saved again as a JPEG, without being turned, and the photo of the camera is kept", async () => {
+  expect(await captureService.preparePhoto(taken, 0)).toBe("file:///cache/turned.jpg");
+  expect(mockImaging.calls).toEqual(["render file:///cache/a.jpg", "save turned"]);
+  expect(mockImaging.saved).toEqual([{ format: "jpeg", compress: 0.9 }]);
+  expect(mockFiles).toEqual([]);
 });
 
-test("a photo with too many pixels is replaced by a shrunk one", async () => {
-  expect(await captureService.preparePhoto({ uri: "file:///cache/a.jpg", width: 6120, height: 8160 })).toBe("file:///cache/shrunk.jpg");
-  expect(mockFiles.map((file) => [file.uri, file.deleted])).toEqual([["file:///cache/a.jpg", true]]);
+test("a photo the phone turned the wrong way is turned back to the viewfinder before it is saved", async () => {
+  await captureService.preparePhoto({ ...taken, exif: { Orientation: 3 } }, 0);
+  expect(mockImaging.calls).toEqual(["render file:///cache/a.jpg rotate 270", "save turned"]);
+});
+
+test("a quarter turn asked by the user is added to the turn of the viewfinder", async () => {
+  await captureService.preparePhoto({ ...taken, exif: { Orientation: 1 } }, 1);
+  expect(mockImaging.calls).toEqual(["render file:///cache/a.jpg rotate 180", "save turned"]);
+});
+
+test("a photo with too many pixels is shrunk after it is turned, with its turned size, and compressed once", async () => {
+  mockImaging.sizes = [{ width: 8160, height: 6120 }];
+  expect(await captureService.preparePhoto({ ...taken, exif: { Orientation: 1 } }, 0)).toBe("file:///cache/shrunk.jpg");
+  const target = shrinkTarget(8160, 6120);
+  expect(mockImaging.calls).toEqual([
+    "render file:///cache/a.jpg rotate 90",
+    `render image:turned resize ${target?.width}x${target?.height}`,
+    "save shrunk",
+  ]);
+  expect(mockImaging.saved).toHaveLength(1);
+});
+
+test("the 12.5 megapixels of the sensor of the test phone are brought under the limit", async () => {
+  mockImaging.sizes = [{ width: 3060, height: 4080 }];
+  await captureService.preparePhoto(taken, 0);
+  const target = shrinkTarget(3060, 4080);
+  expect(target).not.toBeNull();
+  expect(mockImaging.calls[1]).toBe(`render image:turned resize ${target?.width}x${target?.height}`);
+});
+
+test("the images held in memory are released once the photo is saved", async () => {
+  mockImaging.sizes = [{ width: 8160, height: 6120 }];
+  await captureService.preparePhoto(taken, 0);
+  expect(mockImaging.images.map((image) => image.released)).toEqual([true, true]);
+});
+
+test("a photo that cannot be turned fails, and nothing is saved", async () => {
+  mockImaging.fail = true;
+  await expect(captureService.preparePhoto(taken, 0)).rejects.toThrow("no memory");
+  expect(mockImaging.saved).toEqual([]);
 });
 
 test("a photo that is thrown away has its file deleted, and a missing file is no problem", () => {

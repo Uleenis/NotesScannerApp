@@ -10,3 +10,8 @@ export const stackScreenOptions: NativeStackNavigationOptions = {
   headerTintColor: colors.ink,
   contentStyle: { backgroundColor: colors.paper },
 };
+
+export const newNotebookOptions: NativeStackNavigationOptions = {
+  headerTitleAlign: "center",
+  contentStyle: { backgroundColor: colors.sheet },
+};

@@ -67,6 +67,8 @@ export const fr: Strings = {
     counterTrial: (remaining: number) => (remaining === 1 ? "Plus qu'une page d'essai" : `Plus que ${remaining} pages d'essai`),
     reviewTitle: (page: number, notebook: string) => `Page ${page} · ${notebook}`,
     retake: "Reprendre",
+    rotate: "Pivoter",
+    rotateLabel: "Pivoter la photo d'un quart de tour",
     read: "Lire la page",
     sending: "Envoi de ta page…",
     noConnection: "Pas de connexion. Reconnecte-toi pour scanner",
@@ -76,6 +78,7 @@ export const fr: Strings = {
     sendFailed: "Ta page n'a pas pu être envoyée. Réessaie.",
     photoTooLarge: "Cette photo est trop lourde pour être envoyée.",
     shotFailed: "La photo n'a pas pu être prise. Réessaie.",
+    rotateFailed: "La photo n'a pas pu être tournée. Réessaie.",
   },
   limit: {
     monthTitle: (max: number) => `Tes ${max} pages du mois sont lues`,

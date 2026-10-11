@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { HeaderTextButton } from "@/components/header-text-button";
+import { newNotebookOptions } from "@/navigation-options";
 import { useStrings } from "@/i18n";
 import { useCreateNotebook } from "@/notebooks/queries";
 import { colors, radius, typography } from "@/theme";
@@ -54,8 +55,8 @@ export default function NewNotebookScreen() {
     <>
       <Stack.Screen
         options={{
+          ...newNotebookOptions,
           title: t.newNotebook.title,
-          contentStyle: { backgroundColor: colors.sheet },
           headerLeft: () => <HeaderTextButton label={t.common.cancel} onPress={() => router.back()} />,
           headerRight: () => <HeaderTextButton label={t.newNotebook.create} onPress={submit} />,
         }}

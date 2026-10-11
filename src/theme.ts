@@ -36,6 +36,7 @@ export const typography = {
   interfaceBody: { fontSize: 17 },
   interfaceSecondary: { fontSize: 15 },
   footnote: { fontSize: 13 },
+  largeTitle: { fontSize: 34, fontWeight: "700" },
 } satisfies Record<string, TextStyle>;
 
 export const radius = { control: 8, block: 12 } as const;

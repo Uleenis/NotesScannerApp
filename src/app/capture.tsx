@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { blockForReason, remainingCounter, type Counter } from "@/capture/allowance";
 import { limitParams } from "@/capture/limit-route";
-import { PHOTO_QUALITY } from "@/capture/photo";
+import { PHOTO_QUALITY, type Picture } from "@/capture/photo";
 import { useAllowance, useLatestNotebookId, useSendPage } from "@/capture/queries";
 import type { SendResult } from "@/capture/send-page";
 import { captureService } from "@/capture/service";
@@ -85,6 +85,8 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
   const busy = useRef(false);
   const mounted = useRef(true);
   const keptPhoto = useRef<string | null>(null);
+  const original = useRef<Picture | null>(null);
+  const turningNow = useRef(false);
   const [chosenId, setChosenId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [flash, setFlash] = useState(false);
@@ -93,6 +95,9 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
   const [pageId, setPageId] = useState<string | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [shotFailed, setShotFailed] = useState(false);
+  const [turns, setTurns] = useState(0);
+  const [turning, setTurning] = useState(false);
+  const [rotateFailed, setRotateFailed] = useState(false);
 
   const waitingForLatest = requested === undefined && latest.isLoading && !gaveUpWaiting;
   const cameraShown = photoUri === null && !offline && !waitingForLatest && access === "granted";
@@ -105,6 +110,10 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
       clearTimeout(timer);
       if (keptPhoto.current !== null && !busy.current) {
         captureService.discardPhoto(keptPhoto.current);
+      }
+      if (original.current !== null) {
+        captureService.discardPhoto(original.current.uri);
+        original.current = null;
       }
     };
   }, []);
@@ -120,6 +129,13 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
     }
   }
 
+  function discardOriginal() {
+    if (original.current !== null) {
+      captureService.discardPhoto(original.current.uri);
+      original.current = null;
+    }
+  }
+
   async function takePhoto() {
     if (busy.current || camera.current === null) {
       return;
@@ -127,14 +143,27 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
     busy.current = true;
     setShotFailed(false);
     try {
-      const picture = await camera.current.takePictureAsync({ quality: PHOTO_QUALITY, exif: false, shutterSound: false });
-      const uri = await captureService.preparePhoto(picture);
+      const picture = await camera.current.takePictureAsync({ quality: PHOTO_QUALITY, exif: true, shutterSound: false });
+      if (!mounted.current) {
+        captureService.discardPhoto(picture.uri);
+        return;
+      }
+      original.current = picture;
+      let uri: string;
+      try {
+        uri = await captureService.preparePhoto(picture, 0);
+      } catch (error) {
+        discardOriginal();
+        throw error;
+      }
       if (!mounted.current) {
         captureService.discardPhoto(uri);
         return;
       }
       keptPhoto.current = uri;
       setPhotoUri(uri);
+      setTurns(0);
+      setRotateFailed(false);
       setPageId(null);
       setFailure(null);
     } catch {
@@ -146,15 +175,48 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
     }
   }
 
+  async function rotate() {
+    const picture = original.current;
+    if (busy.current || turningNow.current || picture === null) {
+      return;
+    }
+    turningNow.current = true;
+    setTurning(true);
+    setRotateFailed(false);
+    const next = (turns + 1) % 4;
+    try {
+      const uri = await captureService.preparePhoto(picture, next);
+      if (!mounted.current || original.current !== picture) {
+        captureService.discardPhoto(uri);
+        return;
+      }
+      discardPhoto();
+      keptPhoto.current = uri;
+      setPhotoUri(uri);
+      setTurns(next);
+    } catch {
+      if (mounted.current) {
+        setRotateFailed(true);
+      }
+    } finally {
+      turningNow.current = false;
+      if (mounted.current) {
+        setTurning(false);
+      }
+    }
+  }
+
   function retake() {
     discardPhoto();
+    discardOriginal();
+    setRotateFailed(false);
     setPhotoUri(null);
     setPageId(null);
     setFailure(null);
   }
 
   async function submit() {
-    if (busy.current || photoUri === null || offline) {
+    if (busy.current || turningNow.current || photoUri === null || offline) {
       return;
     }
     busy.current = true;
@@ -196,11 +258,15 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
   if (photoUri !== null) {
     body = (
       <PhotoReview
-        message={offline ? t.capture.noConnection : failure === null ? null : failureMessages[failure]}
+        message={
+          offline ? t.capture.noConnection : failure !== null ? failureMessages[failure] : rotateFailed ? t.capture.rotateFailed : null
+        }
         onRead={() => void submit()}
         onRetake={retake}
+        onRotate={() => void rotate()}
         photoUri={photoUri}
         sending={send.isPending}
+        turning={turning}
         title={t.capture.reviewTitle(selected.pageCount + 1, selected.name)}
       />
     );

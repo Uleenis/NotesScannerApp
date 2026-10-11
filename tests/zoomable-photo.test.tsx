@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
 
 import { displayedSize, maxScaleFor, ZoomablePhoto } from "@/components/reading/zoomable-photo";
 
@@ -65,6 +66,26 @@ describe("ZoomablePhoto", () => {
     expect(area?.props.scrollEnabled).toBe(false);
     expect(area?.props.nestedScrollEnabled).toBe(true);
     expect(JSON.stringify(area?.children)).toContain("Photo");
+  });
+
+  async function measured(box: { width: number; height: number }, photo: { width: number; height: number }) {
+    await render(<ZoomablePhoto uri="https://photos.test/p.jpg" label="Photo" />);
+    await fireEvent(screen.getByTestId("zoomable-photo"), "layout", { nativeEvent: { layout: { x: 0, y: 0, ...box } } });
+    await fireEvent(screen.getByLabelText("Photo"), "load", { nativeEvent: { source: photo } });
+    const area = findScrollArea(screen.toJSON() as Tree | Tree[] | null);
+    return StyleSheet.flatten(area?.props.style as never) as { width?: number; height?: number };
+  }
+
+  test("keeps the touches only on the photo itself, so the bands beside a portrait page pull the sheet", async () => {
+    const style = await measured({ width: 400, height: 300 }, { width: 3000, height: 4000 });
+    expect(style.width).toBe(225);
+    expect(style.height).toBe(300);
+  });
+
+  test("keeps the touches only on the photo itself, so the bands above and below a landscape photo pull the sheet", async () => {
+    const style = await measured({ width: 400, height: 600 }, { width: 4000, height: 3000 });
+    expect(style.width).toBe(400);
+    expect(style.height).toBe(300);
   });
 
   test("takes the size of its box and of the photo without error", async () => {

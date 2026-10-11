@@ -1,6 +1,7 @@
 import { useLocales } from "expo-localization";
 import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen, waitFor } from "expo-router/testing-library";
+import { StyleSheet } from "react-native";
 
 import { defaultAuthServices } from "@/auth/default-services";
 import { strings } from "@/i18n";
@@ -9,6 +10,7 @@ import { notebookService } from "@/notebooks/service";
 import { deferred } from "./fake-auth-client";
 import { granted, installPermission } from "./fake-camera";
 import { histoire, installFakeNotebooks, sciences } from "./fake-notebook-service";
+import { newNotebookOptions } from "@/navigation-options";
 import { phoneLocale } from "./phone-locale";
 
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
@@ -97,6 +99,50 @@ test("opens a notebook from the list", async () => {
 
   expect(pathname()).toBe("/notebook/histoire-id");
   expect(await screen.findByText(fr.notebook.pageCount(8))).toBeTruthy();
+});
+
+function largeTitle(name: string) {
+  const title = screen.getByRole("header", { name });
+  return { title, style: StyleSheet.flatten(title.props.style) };
+}
+
+test("shows the library as a large title, as on the mock-up, with the account button", async () => {
+  installFakeNotebooks([histoire]);
+  await openApp();
+  await screen.findByText("Histoire");
+
+  const { style } = largeTitle(fr.library.title);
+  expect(style.fontSize).toBe(34);
+  expect(style.fontWeight).toBe("700");
+  expect(screen.getAllByText(fr.library.title)).toHaveLength(1);
+  expect(screen.getByLabelText(fr.account.title)).toBeTruthy();
+});
+
+test("shows the library as a large title on the first launch as well", async () => {
+  installFakeNotebooks();
+  await openApp();
+  await screen.findByText(fr.library.firstLaunch.title);
+
+  expect(largeTitle(fr.library.title).style.fontSize).toBe(34);
+});
+
+test("shows the notebook name as a large title under a small way back to the library, with its number of pages", async () => {
+  installFakeNotebooks([histoire, sciences]);
+  const pathname = await openApp();
+  await fireEvent.press(await screen.findByText("Histoire"));
+  await screen.findByText(fr.notebook.pageCount(8));
+
+  const { style } = largeTitle("Histoire");
+  expect(style.fontSize).toBe(34);
+  expect(style.fontWeight).toBe("700");
+  expect(screen.getAllByText("Histoire")).toHaveLength(1);
+
+  await fireEvent.press(screen.getByRole("button", { name: fr.library.title }));
+  expect(pathname()).toBe("/");
+});
+
+test("centres the title of the new notebook sheet, away from Cancel and Create", () => {
+  expect(newNotebookOptions.headerTitleAlign).toBe("center");
 });
 
 test("opens the sheet from the first launch screen and from the list", async () => {

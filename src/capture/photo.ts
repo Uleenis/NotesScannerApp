@@ -2,13 +2,16 @@ export const MAX_PHOTO_PIXELS = 12_000_000;
 
 export const PHOTO_QUALITY = 0.9;
 
-export type Picture = { uri: string; width: number; height: number };
+export const SENSOR_TO_VIEWFINDER = 90;
+
+const TAG_ANGLES: Record<number, number> = { 1: 0, 3: 180, 6: 90, 8: 270 };
+
+export type Picture = { uri: string; width: number; height: number; exif?: unknown };
 
 export type PhotoSize = { width: number; height: number };
 
 export type PhotoTools = {
-  shrink: (uri: string, size: PhotoSize) => Promise<string>;
-  remove: (uri: string) => void;
+  save: (uri: string, degrees: number) => Promise<string>;
 };
 
 export function shrinkTarget(width: number, height: number): PhotoSize | null {
@@ -22,21 +25,18 @@ export function shrinkTarget(width: number, height: number): PhotoSize | null {
   return { width: Math.floor(width * scale), height: Math.floor(height * scale) };
 }
 
-export async function preparePhoto(picture: Picture, tools: PhotoTools): Promise<string> {
-  const target = shrinkTarget(picture.width, picture.height);
-  if (target === null) {
-    return picture.uri;
+export function orientationTag(exif: unknown): unknown {
+  if (typeof exif !== "object" || exif === null || !("Orientation" in exif)) {
+    return undefined;
   }
-  let shrunk: string;
-  try {
-    shrunk = await tools.shrink(picture.uri, target);
-  } catch {
-    return picture.uri;
-  }
-  try {
-    tools.remove(picture.uri);
-  } catch {
-    return shrunk;
-  }
-  return shrunk;
+  return exif.Orientation;
+}
+
+export function viewfinderTurn(tag: unknown, quarterTurns: number): number {
+  const applied = TAG_ANGLES[Number(tag)] ?? 0;
+  return (((SENSOR_TO_VIEWFINDER - applied + quarterTurns * 90) % 360) + 360) % 360;
+}
+
+export async function preparePhoto(picture: Picture, quarterTurns: number, tools: PhotoTools): Promise<string> {
+  return tools.save(picture.uri, viewfinderTurn(orientationTag(picture.exif), quarterTurns));
 }

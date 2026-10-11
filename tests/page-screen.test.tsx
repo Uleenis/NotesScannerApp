@@ -143,6 +143,12 @@ describe("the original photo", () => {
     expect(pathname()).toBe("/page/page-1");
   });
 
+  test("has a tall top bar, so the sheet is easy to pull by it", async () => {
+    await openPage("/page/page-1/photo");
+    const bar = await screen.findByTestId("photo-sheet-bar");
+    expect(StyleSheet.flatten(bar.props.style).minHeight).toBeGreaterThanOrEqual(56);
+  });
+
   test("outlines the thumbnail in ink while the sheet is open, and no more once it is closed", async () => {
     await openPage();
     await screen.findByText(TITLE);

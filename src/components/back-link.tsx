@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text } from "react-native";
 
 import { colors, typography } from "@/theme";
 
-export function BackToNotebook({ name, label, onPress }: { name: string; label: string; onPress: () => void }) {
+export function BackLink({ name, label, onPress }: { name: string; label: string; onPress: () => void }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.button}>
       <Ionicons name="chevron-back" size={24} color={colors.ink} />

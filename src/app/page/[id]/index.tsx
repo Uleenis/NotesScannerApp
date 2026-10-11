@@ -9,7 +9,7 @@ import { blockForReason } from "@/capture/allowance";
 import { limitParams } from "@/capture/limit-route";
 import { freshAllowance } from "@/capture/queries";
 import { useOpenCapture } from "@/capture/use-open-capture";
-import { BackToNotebook } from "@/components/reading/back-to-notebook";
+import { BackLink } from "@/components/back-link";
 import { DocumentView } from "@/components/reading/document-view";
 import { PageThumbnail } from "@/components/reading/page-thumbnail";
 import { WaitingView, type ViewAction } from "@/components/reading/waiting-view";
@@ -200,7 +200,7 @@ function LoadedPage({ page, notebookName, now, refetchPage }: LoadedPageProps) {
       <Stack.Screen
         options={{
           headerBackVisible: false,
-          headerLeft: () => <BackToNotebook name={notebookName} label={t.common.back} onPress={backToNotebook} />,
+          headerLeft: () => <BackLink name={notebookName} label={t.common.back} onPress={backToNotebook} />,
           headerRight: inDocument ? () => <PageThumbnail photoUrl={photo.data} open={!focused} onPress={openPhoto} /> : undefined,
         }}
       />
