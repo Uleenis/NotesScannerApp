@@ -1,4 +1,4 @@
-import { MAX_PHOTO_PIXELS, preparePhoto, shrinkTarget } from "@/capture/photo";
+import { MAX_PHOTO_PIXELS, orientationTag, preparePhoto, SENSOR_TO_VIEWFINDER, shrinkTarget, viewfinderTurn } from "@/capture/photo";
 
 test("a photo within the limit of pixels is kept as it is", () => {
   expect(shrinkTarget(3000, 4000)).toBeNull();
@@ -30,45 +30,68 @@ test("a size that makes no sense is left alone", () => {
   expect(shrinkTarget(-10, 4000)).toBeNull();
 });
 
-const small = { uri: "file:///cache/small.jpg", width: 3000, height: 4000 };
-const big = { uri: "file:///cache/big.jpg", width: 6120, height: 8160 };
+const taken = { uri: "file:///cache/taken.jpg", width: 4080, height: 3060, exif: { Orientation: 6 } };
 
-function deps() {
-  return {
-    shrink: jest.fn(async (): Promise<string> => "file:///cache/shrunk.jpg"),
-    remove: jest.fn(),
-  };
-}
-
-test("a photo that is not too big is not touched", async () => {
-  const { shrink, remove } = deps();
-
-  expect(await preparePhoto(small, { shrink, remove })).toBe(small.uri);
-  expect(shrink).not.toHaveBeenCalled();
-  expect(remove).not.toHaveBeenCalled();
+test("the turn that brings back the viewfinder cancels the sense guessed by the phone", () => {
+  expect(viewfinderTurn(6, 0)).toBe(0);
+  expect(viewfinderTurn(1, 0)).toBe(90);
+  expect(viewfinderTurn(3, 0)).toBe(270);
+  expect(viewfinderTurn(8, 0)).toBe(180);
 });
 
-test("a photo that is too big is shrunk and the original file is deleted", async () => {
-  const { shrink, remove } = deps();
-
-  expect(await preparePhoto(big, { shrink, remove })).toBe("file:///cache/shrunk.jpg");
-  expect(shrink).toHaveBeenCalledWith(big.uri, shrinkTarget(big.width, big.height));
-  expect(remove).toHaveBeenCalledWith(big.uri);
+test("whatever the phone guessed, the photo ends up turned the same way from the sensor", () => {
+  const applied: Record<number, number> = { 1: 0, 3: 180, 6: 90, 8: 270 };
+  for (const tag of [1, 3, 6, 8]) {
+    expect((applied[tag] + viewfinderTurn(tag, 0)) % 360).toBe(SENSOR_TO_VIEWFINDER);
+  }
 });
 
-test("when the shrinking fails the original photo is used and kept", async () => {
-  const { remove } = deps();
-  const shrink = jest.fn(async (): Promise<string> => Promise.reject(new Error("no memory")));
-
-  expect(await preparePhoto(big, { shrink, remove })).toBe(big.uri);
-  expect(remove).not.toHaveBeenCalled();
+test("each quarter turn asked by the user adds 90 degrees, and four come back to the start", () => {
+  expect(viewfinderTurn(6, 1)).toBe(90);
+  expect(viewfinderTurn(6, 2)).toBe(180);
+  expect(viewfinderTurn(6, 3)).toBe(270);
+  expect(viewfinderTurn(6, 4)).toBe(0);
+  expect(viewfinderTurn(1, 3)).toBe(0);
 });
 
-test("a file that cannot be deleted does not lose the shrunk photo", async () => {
-  const { shrink } = deps();
-  const remove = jest.fn(() => {
-    throw new Error("already gone");
-  });
+test("a tag written as text is read as its number", () => {
+  expect(viewfinderTurn("6", 0)).toBe(0);
+  expect(viewfinderTurn("3", 0)).toBe(270);
+});
 
-  expect(await preparePhoto(big, { shrink, remove })).toBe("file:///cache/shrunk.jpg");
+test("a missing or unknown tag is taken as a photo the phone did not turn", () => {
+  for (const tag of [undefined, null, "", "x", 0, 2, 9, Number.NaN]) {
+    expect(viewfinderTurn(tag, 0)).toBe(90);
+  }
+});
+
+test("the tag is read from the exif of the photo, and a photo without exif is not turned by the phone", () => {
+  expect(orientationTag({ Orientation: 3 })).toBe(3);
+  expect(orientationTag(undefined)).toBeUndefined();
+  expect(orientationTag(null)).toBeUndefined();
+  expect(orientationTag("6")).toBeUndefined();
+  expect(orientationTag({})).toBeUndefined();
+});
+
+test("a photo is always saved again, turned as in the viewfinder, and the photo of the camera is kept", async () => {
+  const save = jest.fn(async (): Promise<string> => "file:///cache/upright.jpg");
+
+  expect(await preparePhoto(taken, 0, { save })).toBe("file:///cache/upright.jpg");
+  expect(save).toHaveBeenCalledWith(taken.uri, 0);
+
+  await preparePhoto({ ...taken, exif: { Orientation: 1 } }, 0, { save });
+  expect(save).toHaveBeenLastCalledWith(taken.uri, 90);
+});
+
+test("a photo turned by the user starts again from the photo of the camera", async () => {
+  const save = jest.fn(async (): Promise<string> => "file:///cache/upright.jpg");
+
+  await preparePhoto(taken, 1, { save });
+  expect(save).toHaveBeenCalledWith(taken.uri, 90);
+});
+
+test("a photo that cannot be turned is an error, never the photo of the camera sent as it is", async () => {
+  const save = jest.fn(async (): Promise<string> => Promise.reject(new Error("no memory")));
+
+  await expect(preparePhoto(taken, 0, { save })).rejects.toThrow("no memory");
 });

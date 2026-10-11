@@ -1,10 +1,10 @@
 import { File } from "expo-file-system";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { ImageManipulator, SaveFormat, type ImageRef } from "expo-image-manipulator";
 
 import { getSupabase } from "@/lib/supabase";
 import type { Allowance } from "./allowance";
 import { callPrepare, callRead, fetchAllowance, fetchLatestNotebookId, insertPage, markUploaded, uploadPhotoFile } from "./api";
-import { PHOTO_QUALITY, preparePhoto, type PhotoSize, type Picture } from "./photo";
+import { PHOTO_QUALITY, preparePhoto, shrinkTarget, type Picture } from "./photo";
 import { sendPage, type SendDeps, type SendInput, type SendResult } from "./send-page";
 
 const SEND_TIMEOUT_MS = 120_000;
@@ -13,7 +13,7 @@ export type CaptureService = {
   allowance: () => Promise<Allowance | null>;
   latestNotebookId: () => Promise<string | null>;
   send: (input: SendInput, onReadingSettled?: () => void) => Promise<SendResult>;
-  preparePhoto: (picture: Picture) => Promise<string>;
+  preparePhoto: (picture: Picture, quarterTurns: number) => Promise<string>;
   discardPhoto: (uri: string) => void;
 };
 
@@ -32,10 +32,19 @@ function realDeps(onReadingSettled?: () => void): SendDeps {
   };
 }
 
-async function shrink(uri: string, size: PhotoSize): Promise<string> {
-  const rendered = await ImageManipulator.manipulate(uri).resize(size).renderAsync();
-  const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: PHOTO_QUALITY });
-  return saved.uri;
+async function saveTurned(uri: string, degrees: number): Promise<string> {
+  const loaded = ImageManipulator.manipulate(uri);
+  const turned = await (degrees === 0 ? loaded : loaded.rotate(degrees)).renderAsync();
+  const images: ImageRef[] = [turned];
+  try {
+    const target = shrinkTarget(turned.width, turned.height);
+    const final = target === null ? turned : await ImageManipulator.manipulate(turned).resize(target).renderAsync();
+    images.push(final);
+    const saved = await final.saveAsync({ format: SaveFormat.JPEG, compress: PHOTO_QUALITY });
+    return saved.uri;
+  } finally {
+    new Set(images).forEach((image) => image.release());
+  }
 }
 
 function discardPhoto(uri: string): void {
@@ -50,6 +59,6 @@ export const captureService: CaptureService = {
   allowance: () => fetchAllowance(getSupabase()),
   latestNotebookId: () => fetchLatestNotebookId(getSupabase()),
   send: (input, onReadingSettled) => sendPage(realDeps(onReadingSettled), input),
-  preparePhoto: (picture) => preparePhoto(picture, { shrink, remove: (uri) => new File(uri).delete() }),
+  preparePhoto: (picture, quarterTurns) => preparePhoto(picture, quarterTurns, { save: saveTurned }),
   discardPhoto,
 };

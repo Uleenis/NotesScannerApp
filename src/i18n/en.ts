@@ -65,6 +65,8 @@ export const en = {
     counterTrial: (remaining: number) => (remaining === 1 ? "Only 1 trial page left" : `Only ${remaining} trial pages left`),
     reviewTitle: (page: number, notebook: string) => `Page ${page} · ${notebook}`,
     retake: "Retake",
+    rotate: "Rotate",
+    rotateLabel: "Rotate the photo a quarter turn",
     read: "Read the page",
     sending: "Sending your page…",
     noConnection: "No connection. Reconnect to scan",
@@ -74,6 +76,7 @@ export const en = {
     sendFailed: "Your page could not be sent. Try again.",
     photoTooLarge: "This photo is too heavy to be sent.",
     shotFailed: "The photo could not be taken. Try again.",
+    rotateFailed: "The photo could not be turned. Try again.",
   },
   limit: {
     monthTitle: (max: number) => `Your ${max} pages this month are read`,

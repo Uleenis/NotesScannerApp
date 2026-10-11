@@ -65,6 +65,12 @@ const offline = { isConnected: false, isInternetReachable: false };
 
 const never = <T,>() => new Promise<T>(() => {});
 
+const PREPARED = "file:///cache/prepared-0.jpg";
+
+function prepared(turns: number): string {
+  return `file:///cache/prepared-${turns}.jpg`;
+}
+
 let openSettings: jest.SpyInstance;
 
 beforeEach(() => {
@@ -75,7 +81,7 @@ beforeEach(() => {
   jest.mocked(captureService.allowance).mockReset().mockResolvedValue(open);
   jest.mocked(captureService.latestNotebookId).mockReset().mockResolvedValue(histoire.id);
   jest.mocked(captureService.send).mockReset().mockResolvedValue({ status: "sent", pageId: "page-1" });
-  jest.mocked(captureService.preparePhoto).mockReset().mockImplementation(async (picture) => picture.uri);
+  jest.mocked(captureService.preparePhoto).mockReset().mockImplementation(async (_picture, turns) => prepared(turns));
   jest.mocked(captureService.discardPhoto).mockReset();
   installFakeNotebooks([histoire, sciences]);
   installPermission(granted);
@@ -470,23 +476,108 @@ test("a photo is shown for checking with the page number and the notebook, and n
   await openCapture();
   await takePhoto();
 
-  expect(takePictureAsync).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.9, exif: false, shutterSound: false }));
+  expect(takePictureAsync).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.9, exif: true, shutterSound: false }));
   expect(screen.getByText(fr.capture.reviewTitle(histoire.pageCount + 1, histoire.name))).toBeTruthy();
   expect(screen.getByText(fr.capture.retake)).toBeTruthy();
   expect(screen.queryByText(fr.common.cancel)).toBeNull();
   expect(captureService.send).not.toHaveBeenCalled();
 });
 
-test("a photo with too many pixels is shrunk before the check, and the shrunk photo is the one sent", async () => {
-  jest.mocked(captureService.preparePhoto).mockResolvedValue("file:///cache/shrunk.jpg");
+test("the photo of the camera is turned as in the viewfinder before the check, and the turned photo is the one shown and sent", async () => {
   await openCapture();
   await takePhoto();
 
-  expect(captureService.preparePhoto).toHaveBeenCalledWith(PHOTO);
+  expect(captureService.preparePhoto).toHaveBeenCalledWith(PHOTO, 0);
+  expect(screen.getByTestId("photo-review")).toHaveProp("source", { uri: PREPARED });
 
   await fireEvent.press(screen.getByText(fr.capture.read));
   await waitFor(() => expect(captureService.send).toHaveBeenCalledTimes(1));
-  expect(captureService.send).toHaveBeenCalledWith({ notebookId: histoire.id, photoUri: "file:///cache/shrunk.jpg", pageId: null }, expect.any(Function));
+  expect(captureService.send).toHaveBeenCalledWith({ notebookId: histoire.id, photoUri: PREPARED, pageId: null }, expect.any(Function));
+});
+
+test("a photo that cannot be turned says so, deletes the photo of the camera, and the shutter works again", async () => {
+  jest.mocked(captureService.preparePhoto).mockRejectedValueOnce(new Error("no memory"));
+  await openCapture();
+  await fireEvent.press(await screen.findByLabelText(fr.capture.shutterLabel));
+
+  expect(await screen.findByText(fr.capture.shotFailed)).toBeTruthy();
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
+
+  await takePhoto();
+  expect(screen.queryByText(fr.capture.shotFailed)).toBeNull();
+});
+
+test("rotate turns the photo a quarter turn from the photo of the camera, shows it, and deletes the one it replaces", async () => {
+  await openCapture();
+  await takePhoto();
+  await fireEvent.press(screen.getByLabelText(fr.capture.rotateLabel));
+
+  await waitFor(() => expect(screen.getByTestId("photo-review")).toHaveProp("source", { uri: prepared(1) }));
+  expect(captureService.preparePhoto).toHaveBeenLastCalledWith(PHOTO, 1);
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PREPARED);
+  expect(captureService.discardPhoto).not.toHaveBeenCalledWith(PHOTO.uri);
+
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  await waitFor(() => expect(captureService.send).toHaveBeenCalledTimes(1));
+  expect(captureService.send).toHaveBeenCalledWith({ notebookId: histoire.id, photoUri: prepared(1), pageId: null }, expect.any(Function));
+});
+
+test("four quarter turns come back to the photo as it was taken", async () => {
+  await openCapture();
+  await takePhoto();
+  for (const turns of [1, 2, 3, 0]) {
+    await fireEvent.press(screen.getByLabelText(fr.capture.rotateLabel));
+    await waitFor(() => expect(screen.getByTestId("photo-review")).toHaveProp("source", { uri: prepared(turns) }));
+  }
+  expect(jest.mocked(captureService.preparePhoto).mock.calls.map((call) => call[1])).toEqual([0, 1, 2, 3, 0]);
+});
+
+test("while the photo is being turned, read the page and rotate wait, so the photo sent is the one shown", async () => {
+  await openCapture();
+  await takePhoto();
+  const turning = deferred<string>();
+  jest.mocked(captureService.preparePhoto).mockReturnValueOnce(turning.promise);
+  await fireEvent.press(screen.getByLabelText(fr.capture.rotateLabel));
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  await fireEvent.press(screen.getByLabelText(fr.capture.rotateLabel));
+
+  expect(captureService.send).not.toHaveBeenCalled();
+  expect(captureService.preparePhoto).toHaveBeenCalledTimes(2);
+
+  await act(async () => turning.resolve(prepared(1)));
+  await fireEvent.press(screen.getByText(fr.capture.read));
+  await waitFor(() => expect(captureService.send).toHaveBeenCalledTimes(1));
+  expect(captureService.send).toHaveBeenCalledWith({ notebookId: histoire.id, photoUri: prepared(1), pageId: null }, expect.any(Function));
+});
+
+test("a photo that cannot be turned by rotate says so and keeps the photo shown", async () => {
+  await openCapture();
+  await takePhoto();
+  jest.mocked(captureService.preparePhoto).mockRejectedValueOnce(new Error("no memory"));
+  await fireEvent.press(screen.getByLabelText(fr.capture.rotateLabel));
+
+  expect(await screen.findByText(fr.capture.rotateFailed)).toBeTruthy();
+  expect(screen.getByTestId("photo-review")).toHaveProp("source", { uri: PREPARED });
+  expect(captureService.discardPhoto).not.toHaveBeenCalled();
+
+  await fireEvent.press(screen.getByLabelText(fr.capture.rotateLabel));
+  await waitFor(() => expect(screen.getByTestId("photo-review")).toHaveProp("source", { uri: prepared(1) }));
+  expect(screen.queryByText(fr.capture.rotateFailed)).toBeNull();
+});
+
+test("leaving the capture while the photo is being turned deletes every photo, the late one too", async () => {
+  await openCapture();
+  await takePhoto();
+  const turning = deferred<string>();
+  jest.mocked(captureService.preparePhoto).mockReturnValueOnce(turning.promise);
+  await fireEvent.press(screen.getByLabelText(fr.capture.rotateLabel));
+  await goBack();
+
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PREPARED);
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
+
+  await act(async () => turning.resolve(prepared(1)));
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(prepared(1));
 });
 
 test("retake goes back to the camera, sends nothing and deletes the photo that was thrown away", async () => {
@@ -496,6 +587,7 @@ test("retake goes back to the camera, sends nothing and deletes the photo that w
 
   expect(await screen.findByTestId("camera-view")).toBeTruthy();
   expect(captureService.send).not.toHaveBeenCalled();
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PREPARED);
   expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
 });
 
@@ -504,6 +596,7 @@ test("leaving the capture on the check of the photo deletes the photo", async ()
   await takePhoto();
   await goBack();
 
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PREPARED);
   expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
 });
 
@@ -513,8 +606,9 @@ test("read the page sends the photo to the chosen notebook and opens the page [1
   await fireEvent.press(screen.getByText(fr.capture.read));
 
   await waitFor(() => expect(pathname()).toBe("/page/page-1"));
-  expect(captureService.send).toHaveBeenCalledWith({ notebookId: histoire.id, photoUri: PHOTO.uri, pageId: null }, expect.any(Function));
-  expect(captureService.discardPhoto).not.toHaveBeenCalled();
+  expect(captureService.send).toHaveBeenCalledWith({ notebookId: histoire.id, photoUri: PREPARED, pageId: null }, expect.any(Function));
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
+  expect(captureService.discardPhoto).not.toHaveBeenCalledWith(PREPARED);
 });
 
 test("the page replaces the capture: back from the page goes to the library, not to the camera", async () => {
@@ -548,7 +642,8 @@ test("a failed sending keeps the photo, says so, and the next try reuses the sam
 
   await fireEvent.press(screen.getByText(fr.capture.read));
   await waitFor(() => expect(captureService.send).toHaveBeenCalledTimes(2));
-  expect(captureService.send).toHaveBeenLastCalledWith({ notebookId: histoire.id, photoUri: PHOTO.uri, pageId: "page-7" }, expect.any(Function));
+  expect(captureService.send).toHaveBeenLastCalledWith({ notebookId: histoire.id, photoUri: PREPARED, pageId: "page-7" }, expect.any(Function));
+  expect(captureService.discardPhoto).not.toHaveBeenCalledWith(PREPARED);
   await waitFor(() => expect(pathname()).toBe("/page/page-1"));
 });
 
@@ -616,6 +711,7 @@ test("a limit refused by the server after the photo closes the capture, opens th
   expect(screen.getByText(fr.limit.accountTitle)).toBeTruthy();
   expect(screen.getByText(fr.limit.trialBody(3, 15))).toBeTruthy();
   expect(screen.queryByTestId("camera-view")).toBeNull();
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PREPARED);
   expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
 
   await fireEvent.press(screen.getByText(fr.limit.later));
@@ -645,7 +741,8 @@ test("while a page is being sent the cancel button is there, and cancel leaves t
 
   await fireEvent.press(await screen.findByText(fr.common.cancel));
   expect(pathname()).toBe("/");
-  expect(captureService.discardPhoto).not.toHaveBeenCalled();
+  expect(captureService.discardPhoto).not.toHaveBeenCalledWith(PREPARED);
+  expect(captureService.discardPhoto).toHaveBeenCalledWith(PHOTO.uri);
 
   await act(async () => sending.resolve({ status: "failed", pageId: "page-1" }));
 });
