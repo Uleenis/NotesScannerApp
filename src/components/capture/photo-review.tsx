@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 
+import { CAMERA_SHAPE } from "@/components/capture/viewfinder";
 import { PrimaryButton } from "@/components/primary-button";
+import { displayedSize } from "@/components/reading/zoomable-photo";
 import { SecondaryButton } from "@/components/secondary-button";
 import { useStrings } from "@/i18n";
 import { colors, radius, typography } from "@/theme";
@@ -19,12 +22,28 @@ type Props = {
 
 export function PhotoReview({ title, photoUri, message, sending, turning, onRetake, onRotate, onRead }: Props) {
   const t = useStrings();
+  const [area, setArea] = useState({ width: 0, height: 0 });
+  const [shape, setShape] = useState(CAMERA_SHAPE);
+  const frame = displayedSize(shape, area);
+
+  function onLayout(event: LayoutChangeEvent) {
+    const { width, height } = event.nativeEvent.layout;
+    setArea({ width, height });
+  }
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
-      <View style={styles.photoFrame}>
-        <Image resizeMode="contain" source={{ uri: photoUri }} style={styles.photo} testID="photo-review" />
+      <View onLayout={onLayout} style={styles.photoArea} testID="photo-review-area">
+        <View style={[styles.photoFrame, { height: frame.height, width: frame.width }]} testID="photo-review-frame">
+          <Image
+            onLoad={(event) => setShape({ width: event.nativeEvent.source.width, height: event.nativeEvent.source.height })}
+            resizeMode="contain"
+            source={{ uri: photoUri }}
+            style={styles.photo}
+            testID="photo-review"
+          />
+        </View>
       </View>
       <Pressable
         accessibilityLabel={t.capture.rotateLabel}
@@ -62,12 +81,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
+  photoArea: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
   photoFrame: {
     backgroundColor: colors.sheet,
     borderColor: colors.rule,
     borderRadius: radius.control,
     borderWidth: StyleSheet.hairlineWidth,
-    flex: 1,
     overflow: "hidden",
   },
   photo: {
