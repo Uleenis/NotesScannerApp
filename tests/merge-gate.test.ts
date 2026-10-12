@@ -43,6 +43,12 @@ describe("mergeRefusals", () => {
     expect(mergeRefusals(ready, checks, files, true)).toEqual(['required check "database" has not run on the last commit']);
   });
 
+  it("refuses when an earlier run of a required check passed but a later one failed", () => {
+    expect(mergeRefusals(ready, [...green, { name: "app", bucket: "fail" }], files, true)).toEqual([
+      'required check "app" is fail',
+    ]);
+  });
+
   it("refuses when no check has run", () => {
     expect(mergeRefusals(ready, [], files, true)).toHaveLength(REQUIRED_CHECKS.length);
   });
@@ -83,6 +89,11 @@ describe("mergeRefusals", () => {
     ".nvmrc",
     ".gitignore",
     ".gitattributes",
+    "eslint.config.js",
+    "tsconfig.json",
+    "tests/setup.ts",
+    "Scripts/merge-gate.ts",
+    ".Claude/settings.json",
   ])("leaves a pull request that changes %s to the owner", (path) => {
     expect(mergeRefusals(ready, green, [...files, path], true)).toEqual([
       `the pull request changes guarded files, which the owner merges: ${path}`,

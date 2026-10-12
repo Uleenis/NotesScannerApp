@@ -44,12 +44,19 @@ export const GUARDED_PATHS = [
   ".nvmrc",
   ".gitignore",
   ".gitattributes",
+  "eslint.config.js",
+  "tsconfig.json",
+  "tests/setup.ts",
 ];
 
 export const PRODUCTION_REF = "eapxcxcxapfrylxuzjsy";
 
 function isGuarded(path: string): boolean {
-  return GUARDED_PATHS.some((guarded) => (guarded.endsWith("/") ? path.startsWith(guarded) : path === guarded));
+  const lower = path.toLowerCase();
+  return GUARDED_PATHS.some((guarded) => {
+    const target = guarded.toLowerCase();
+    return target.endsWith("/") ? lower.startsWith(target) : lower === target;
+  });
 }
 
 export function mergeRefusals(pr: PullRequest, checks: Check[], files: string[], mainIsAncestor: boolean): string[] {
@@ -64,9 +71,10 @@ export function mergeRefusals(pr: PullRequest, checks: Check[], files: string[],
     refusals.push(`the description has no "${REVIEW_HEADING}" line`);
   }
   for (const name of REQUIRED_CHECKS) {
-    const check = checks.find((candidate) => candidate.name === name);
-    if (check === undefined) refusals.push(`required check "${name}" has not run on the last commit`);
-    else if (check.bucket !== "pass") refusals.push(`required check "${name}" is ${check.bucket}`);
+    const runs = checks.filter((candidate) => candidate.name === name);
+    if (runs.length === 0) refusals.push(`required check "${name}" has not run on the last commit`);
+    const failing = runs.find((check) => check.bucket !== "pass");
+    if (failing !== undefined) refusals.push(`required check "${name}" is ${failing.bucket}`);
   }
   for (const check of checks) {
     if (!REQUIRED_CHECKS.includes(check.name) && check.bucket !== "pass" && check.bucket !== "skipping") {

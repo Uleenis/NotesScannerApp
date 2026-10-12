@@ -15,6 +15,13 @@ function run(file, args) {
 
 run("git", ["fetch", "--quiet", "origin", "main"]);
 
+try {
+  run("git", ["diff", "--quiet", "origin/main", "--", "scripts", ".githooks", ".claude"]);
+} catch {
+  console.error("The scripts, hooks or Claude settings of this copy differ from main: deploy from a clean copy of main.");
+  process.exit(1);
+}
+
 const functions = readdirSync("supabase/functions", { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_") && entry.name !== "tests")
   .map((entry) => entry.name);
