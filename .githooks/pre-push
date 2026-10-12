@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  input += chunk;
+});
+process.stdin.on("end", () => {
+  for (const line of input.split(/\r?\n/)) {
+    const [, localSha, remoteRef] = line.trim().split(/\s+/);
+    if (remoteRef === undefined) continue;
+    if (remoteRef === "refs/heads/main") {
+      console.error("pre-push: a push to main is refused. Open a pull request.");
+      process.exit(1);
+    }
+    if (/^0+$/.test(localSha)) {
+      console.error(`pre-push: deleting ${remoteRef} on the remote is refused.`);
+      process.exit(1);
+    }
+  }
+});
