@@ -29,6 +29,10 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `supabase/tests/database/`: pgTAP tests.
 - `supabase/tests/concurrency/`: parallel-call tests.
 - `services/reading/`: reading service.
+- `scripts/merge-pr.mjs`: the only way a PR is merged. `scripts/deploy-function.mjs`: the only way an Edge Function is deployed. Their rules live in `scripts/merge-gate.ts`, tested by `tests/merge-gate.test.ts`.
+- `.githooks/pre-push`: refuses pushes to `main` and remote deletions.
+- `docs/slice.md`: the state of the current slice.
+- `.claude/agents/`: the `code-reviewer` (Sonnet) and `security-reviewer` (Opus) subagents. `.claude/settings.json`: the guardrails, tested by `tests/guardrails.test.ts`.
 
 ## Commands
 
@@ -44,17 +48,34 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 | `npm run functions:check` | Deno type check of the Edge Functions |
 | `npm run functions:lint` | Deno lint of the Edge Functions |
 | `npm run functions:test` | Deno tests of the Edge Functions |
+| `node scripts/merge-pr.mjs <number>` | Merge a PR through the gate of `main` |
+| `node scripts/deploy-function.mjs <name>` | Deploy an Edge Function from a clean, green `main` |
 
 All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitleaks.
 
 ## Workflow
 
-- One slice at a time, split into small branches. One branch, one PR, small diff.
-- Tests that encode the slice criteria are written first and fail before the code exists.
-- Every change is explained in plain terms in the PR: the owner is learning and must understand what they merge.
-- Never merge a PR and never push to `main`. The owner merges in GitHub after the checks are green.
-- Never start the next branch before the previous PR is merged.
-- Never touch the production Supabase project by hand: no SQL, no migration, no deployment outside the agreed workflow.
+The owner does not read the code. What protects `main` is the spec, the tests, the checks and the fresh reviews below: skip none of them.
+
+- One slice at a time. Its spec and its plan live in the owner's vault, outside the repository; the plan groups the branches by three. `docs/slice.md` says where they are, which branches are done, which one is next and which decisions were taken without the owner.
+- One session per branch. "Continue la tranche." means: read `docs/slice.md`, the spec and the plan, then do the next branch from start to merge and stop. If `docs/slice.md` names no next branch, stop and ask.
+- Tests that encode the criteria of the branch are written first and fail before the code exists.
+- Before the PR, `typecheck`, `lint`, `test`, `audit`, `functions:check`, `functions:lint`, `functions:test`, `db:test` and `db:test:concurrency` pass locally (the last two need Docker; if it is off, say so and let CI run them).
+- Review: spawn a fresh `code-reviewer` subagent with the spec, the criteria of the branch and the branch name. On a branch the plan marks sensitive (accounts, access rights, secrets, exposure of a service), also spawn a fresh `security-reviewer`. Fix the findings, then spawn a fresh `code-reviewer` on the fixes alone.
+- The PR explains every change in plain terms and ends with a `## Review` section: every finding, and what was done about it, fixed or set aside with the reason.
+- Merge only with `node scripts/merge-pr.mjs <number>`, once CI has run on the last commit. It judges the PR with the gate of `main` (`scripts/merge-gate.ts`), never with the branch's own copy, and refuses while one of the four checks (`app`, `functions`, `database`, `secrets`) is not green, while the branch lacks the last commit of `main`, without a `## Review` line, or when the PR changes a guarded file (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the guardrail tests, `supabase/config.toml`, `package.json`, `audit-ci.json`, `.nvmrc`, `.gitignore`, `.gitattributes`, `eslint.config.js`, `tsconfig.json`, `tests/setup.ts`). A PR that changes a guarded file is the owner's to merge: say so and stop. Never `gh pr merge`, never push to `main`, never rewrite history.
+- The pre-push hook in `.githooks/` refuses any push to `main` and any deletion of a remote branch. It works once the owner has run `git config core.hooksPath .githooks` in the clone. At the start of a session, `git rev-parse --git-path hooks` must print `.githooks`; if not, stop and ask the owner. Create PRs with `--body-file`, so their text never looks like a denied command.
+- The last commit of the branch updates `docs/slice.md`. After the merge, stop: the next branch starts in a new session.
+- The third branch of a group also writes the pause file, in French, outside the repository: `../Tranche N/Pause K.md` (what the code of the three branches does and how it works, in plain terms; the decisions taken without the owner; the checks to do on the phone, step by step, with the expected result; the production actions left to the owner, with their procedure). It also updates the "Current Status" of `../../AGENTS.md`. The next group starts only after the owner has done the pause.
+- Stop and ask the owner when the work would depart from the spec, when a decision is the owner's, when a check is still red after two attempts to fix it, or when a production action is the owner's.
+
+## Production
+
+- Allowed: deploy an Edge Function with `node scripts/deploy-function.mjs <name>`. It deploys only a clean copy of the last commit of `main` whose CI is green, with the token check that `supabase/config.toml` sets. It is undone by a PR that reverts the change, merged, then deployed the same way. Cloud Run deploys come with their own script, in the branch that creates the service, merged by the owner.
+- The owner's alone: production migrations, secrets, authentication settings, who may call a service and public access, billing, accounts and projects, and every `gcloud` command until that script exists.
+- `.claude/settings.json` denies these commands in both shells, the Supabase tools that write, the browser and computer-use tools, reading `supabase/functions/.env`, and editing the guarded files. `tests/guardrails.test.ts` fails if a rule is added or removed without the test, if an allowed command becomes blocked, or if a known bypass stops being blocked.
+- These guardrails stop mistakes, not a determined agent: a deny list matches the text of a command, and a shell can still write any file or read `supabase/functions/.env` by another path (`grep -r` on `supabase/functions` reads it too: search `supabase/functions/*/` instead). The gate of `main`, the pre-push hook and the owner merging guarded files are the parts that do not depend on the agent's goodwill.
+- Never read page text or images from production.
 
 ## Code rules
 
