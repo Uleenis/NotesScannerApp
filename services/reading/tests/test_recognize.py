@@ -1,0 +1,262 @@
+import io
+import json
+import logging
+import os
+import re
+
+import pytest
+from fastapi.testclient import TestClient
+from PIL import Image, ImageDraw, ImageFont
+
+from reading.app import GATE_HEADER, create_app
+from reading.photo import MAX_BYTES
+from reading.recognition import Reader, Reading, ReadLine, Recognizer, Word
+from reading.segmentation import Segmenter
+
+SECRET = "r" * 24 + "-shared-secret-of-the-test"
+PAGE = "0b6f3c1e-8d2a-4c5b-9e7f-1a2b3c4d5e6f"
+PROBE = "PROBE-b1-text-that-must-never-come-back"
+JPEG = "image/jpeg"
+
+FIXED = Reading(
+    width=640,
+    height=480,
+    lines=(
+        ReadLine(
+            row=1,
+            box=(10, 20, 600, 90),
+            ink=(15, 30, 590, 80),
+            words=(Word("lantern", (15, 20, 200, 90), 0.9876), Word("meadow", (220, 20, 400, 90), 0.5)),
+        ),
+    ),
+    segment_seconds=1.5,
+    recognize_seconds=0.5,
+)
+
+
+class FakeReader:
+    def __init__(self, reading: Reading = FIXED, error: Exception | None = None) -> None:
+        self.reading = reading
+        self.error = error
+        self.photos: list[Image.Image] = []
+
+    def read(self, photo: Image.Image) -> Reading:
+        self.photos.append(photo)
+        if self.error is not None:
+            raise self.error
+        return self.reading
+
+
+def jpeg(size: tuple[int, int] = (640, 480), mode: str = "RGB", **options: object) -> bytes:
+    out = io.BytesIO()
+    Image.new(mode, size, 200).save(out, format="JPEG", **options)
+    return out.getvalue()
+
+
+def png() -> bytes:
+    out = io.BytesIO()
+    Image.new("RGB", (64, 64), (200, 200, 200)).save(out, format="PNG")
+    return out.getvalue()
+
+
+def client_of(reader: FakeReader) -> TestClient:
+    return TestClient(create_app(SECRET, reader))
+
+
+def post(
+    client: TestClient,
+    content: bytes,
+    query: str = f"page_id={PAGE}",
+    content_type: str | None = JPEG,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, str]:
+    sent = {GATE_HEADER: SECRET, **(headers or {})}
+    if content_type is not None:
+        sent["Content-Type"] = content_type
+    response = client.post(f"/recognize?{query}" if query else "/recognize", content=content, headers=sent)
+    return response.status_code, response.text
+
+
+def test_a_photo_is_read_into_lines_words_boxes_confidences_and_alto() -> None:
+    reader = FakeReader()
+    status, text = post(client_of(reader), jpeg())
+    assert status == 200
+    body = json.loads(text)
+    assert body["page_id"] == PAGE
+    assert (body["width"], body["height"]) == (640, 480)
+    assert body["lines"] == [
+        {
+            "row": 1,
+            "box": [10, 20, 600, 90],
+            "ink": [15, 30, 590, 80],
+            "words": [
+                {"text": "lantern", "box": [15, 20, 200, 90], "confidence": 0.9876},
+                {"text": "meadow", "box": [220, 20, 400, 90], "confidence": 0.5},
+            ],
+        }
+    ]
+    assert body["alto"].lstrip().startswith("<?xml")
+    assert 'CONTENT="lantern"' in body["alto"]
+    assert set(body) == {"page_id", "width", "height", "lines", "alto"}
+    assert len(reader.photos) == 1
+    assert reader.photos[0].mode == "RGB"
+    assert reader.photos[0].size == (640, 480)
+
+
+def test_a_grey_photo_is_read_in_colour() -> None:
+    reader = FakeReader()
+    status, _ = post(client_of(reader), jpeg(mode="L"))
+    assert status == 200
+    assert reader.photos[0].mode == "RGB"
+
+
+def test_the_photo_is_read_upright_as_its_orientation_tag_says() -> None:
+    reader = FakeReader()
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    status, _ = post(client_of(reader), jpeg(size=(640, 480), exif=exif.tobytes()))
+    assert status == 200
+    assert reader.photos[0].size == (480, 640)
+
+
+REFUSALS = [
+    pytest.param(jpeg(), f"page_id={PAGE}&b1={PROBE}", JPEG, 400, "invalid_request", id="b1 beside the photo"),
+    pytest.param(jpeg(), f"page_id={PAGE}&text={PROBE}", JPEG, 400, "invalid_request", id="any other field"),
+    pytest.param(jpeg(), f"page_id={PAGE}&page_id={PAGE}", JPEG, 400, "invalid_request", id="page sent twice"),
+    pytest.param(jpeg(), "", JPEG, 400, "invalid_request", id="no page"),
+    pytest.param(jpeg(), f"page_id={PROBE}", JPEG, 400, "invalid_request", id="page not an identifier"),
+    pytest.param(jpeg(), f"page_id={PAGE.upper()}", JPEG, 400, "invalid_request", id="page in capitals"),
+    pytest.param(jpeg(), f"page_id={PAGE}&", JPEG, 400, "invalid_request", id="empty field"),
+    pytest.param(
+        json.dumps({"page_id": PAGE, "b1": PROBE}).encode(),
+        f"page_id={PAGE}",
+        "application/json",
+        415,
+        "unsupported_media_type",
+        id="b1 in a json body",
+    ),
+    pytest.param(
+        f'--x\r\nContent-Disposition: form-data; name="b1"\r\n\r\n{PROBE}\r\n--x--\r\n'.encode(),
+        f"page_id={PAGE}",
+        "multipart/form-data; boundary=x",
+        415,
+        "unsupported_media_type",
+        id="b1 in a form",
+    ),
+    pytest.param(jpeg(), f"page_id={PAGE}", None, 415, "unsupported_media_type", id="no content type"),
+    pytest.param(jpeg(), f"page_id={PAGE}", "image/jpeg; b1=x", 415, "unsupported_media_type", id="typed with more"),
+    pytest.param(png(), f"page_id={PAGE}", JPEG, 415, "unsupported_media_type", id="a png called a jpeg"),
+    pytest.param(PROBE.encode(), f"page_id={PAGE}", JPEG, 415, "unsupported_media_type", id="text called a jpeg"),
+    pytest.param(b"", f"page_id={PAGE}", JPEG, 415, "unsupported_media_type", id="empty body"),
+    pytest.param(
+        jpeg()[:600] + PROBE.encode(), f"page_id={PAGE}", JPEG, 400, "invalid_photo", id="broken jpeg"
+    ),
+    pytest.param(
+        b"\xff\xd8\xff" + bytes(MAX_BYTES), f"page_id={PAGE}", JPEG, 413, "too_large", id="more than 10 mb"
+    ),
+    pytest.param(jpeg(size=(4000, 3001)), f"page_id={PAGE}", JPEG, 413, "too_large", id="more than 12 mpx"),
+    pytest.param(jpeg(size=(8001, 16)), f"page_id={PAGE}", JPEG, 413, "too_large", id="too wide"),
+    pytest.param(jpeg(size=(16, 8001)), f"page_id={PAGE}", JPEG, 413, "too_large", id="too tall"),
+]
+
+
+@pytest.mark.parametrize(("content", "query", "content_type", "status", "code"), REFUSALS)
+def test_an_invalid_request_is_refused_without_its_content_coming_back(
+    content: bytes,
+    query: str,
+    content_type: str | None,
+    status: int,
+    code: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    reader = FakeReader()
+    got, text = post(client_of(reader), content, query, content_type)
+    assert (got, json.loads(text)) == (status, {"error": code})
+    assert reader.photos == []
+    assert PROBE not in caplog.text
+    assert code in caplog.text
+
+
+def test_the_largest_photo_the_app_sends_is_read() -> None:
+    reader = FakeReader()
+    status, _ = post(client_of(reader), jpeg(size=(3000, 4000)))
+    assert status == 200
+
+
+def test_a_body_announced_too_long_is_refused_before_it_is_read() -> None:
+    reader = FakeReader()
+    status, text = post(client_of(reader), jpeg(), headers={"Content-Length": str(MAX_BYTES + 1)})
+    assert (status, json.loads(text)) == (413, {"error": "too_large"})
+
+
+def test_a_failed_reading_answers_a_fixed_error_and_logs_only_a_code(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG)
+    reader = FakeReader(error=RuntimeError(PROBE))
+    status, text = post(client_of(reader), jpeg())
+    assert (status, json.loads(text)) == (500, {"error": "reading_failed"})
+    assert PROBE not in text
+    assert PROBE not in caplog.text
+    assert "reading_failed" in caplog.text
+    assert PAGE in caplog.text
+
+
+LOGGED = re.compile(
+    rf"recognized page={PAGE} lines=\d+ words=\d+ segment_seconds=\d+\.\d\d "
+    rf"recognize_seconds=\d+\.\d\d total_seconds=\d+\.\d\d"
+)
+
+
+def test_a_reading_logs_the_page_its_durations_and_counts_and_no_text(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG)
+    status, _ = post(client_of(FakeReader()), jpeg())
+    assert status == 200
+    messages = [record.getMessage() for record in caplog.records if record.name.startswith("reading")]
+    assert len(messages) == 1
+    assert LOGGED.fullmatch(messages[0])
+    assert "lines=1 words=2" in messages[0]
+    assert "lantern" not in caplog.text
+    assert "meadow" not in caplog.text
+
+
+@pytest.fixture(scope="module")
+def reader() -> Reader:
+    return Reader(Segmenter(), Recognizer(os.environ["READING_MODEL"]))
+
+
+def written_page() -> bytes:
+    face = ImageFont.load_default(size=60)
+    canvas = Image.new("L", (1400, 700), 250)
+    draw = ImageDraw.Draw(canvas)
+    draw.text((120, 150), "copper lantern meadow", fill=20, font=face)
+    draw.text((120, 400), "harbor pebble summit", fill=20, font=face)
+    out = io.BytesIO()
+    canvas.convert("RGB").save(out, format="JPEG", quality=92)
+    return out.getvalue()
+
+
+def test_a_real_reading_logs_neither_text_nor_image(
+    reader: Reader, caplog: pytest.LogCaptureFixture, capfd: pytest.CaptureFixture[str]
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    client = TestClient(create_app(SECRET, reader))
+    photo = written_page()
+    response = client.post(
+        f"/recognize?page_id={PAGE}", content=photo, headers={GATE_HEADER: SECRET, "Content-Type": JPEG}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    words = [word["text"] for line in body["lines"] for word in line["words"]]
+    assert len(body["lines"]) == 2
+    assert len(words) >= 4
+    out, err = capfd.readouterr()
+    logged = caplog.text + out + err
+    for word in words:
+        if len(word) >= 4:
+            assert word not in logged
+    assert "<alto" not in logged
+    assert "CONTENT=" not in logged
+    assert "JFIF" not in logged
+    reading_messages = [record.getMessage() for record in caplog.records if record.name.startswith("reading")]
+    assert len(reading_messages) == 1
+    assert LOGGED.fullmatch(reading_messages[0])
