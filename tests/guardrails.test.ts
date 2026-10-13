@@ -62,6 +62,8 @@ const SHELL_RULES = [
   "*cmdkey*",
   "*functions/.env*",
   "*functions\\.env*",
+  "*reading/.env*",
+  "*reading\\.env*",
   "*supabase* db* push*",
   "*--linked*",
   "*--db-url*",
@@ -105,10 +107,12 @@ const GUARDED_FILES = [
   "./eslint.config.js",
   "./tsconfig.json",
   "./tests/setup.ts",
+  "./services/reading/audit-allowlist.txt",
 ];
 
 const SECRET_FILES = [
   "./supabase/functions/.env",
+  "./services/reading/.env",
 ];
 
 const DENIED_TOOLS = [
@@ -193,6 +197,12 @@ describe("guardrails", () => {
     "gh pr view 23 --json mergeable",
     "git rev-parse --git-path hooks",
     "git checkout -b t2/service",
+    "npm run service:start",
+    "npm run service:test",
+    "docker compose -f services/reading/compose.yaml down",
+    "docker logs notes-reading",
+    "cat services/reading/src/reading/app.py",
+    "git add services/reading/pyproject.toml services/reading/uv.lock",
   ])("still allows %s", (command) => {
     expect(denied(command)).toBe(false);
   });
@@ -230,6 +240,9 @@ describe("guardrails", () => {
     "git credential fill",
     "cat supabase/functions/.env",
     "Get-Content supabase\\functions\\.env",
+    "cat services/reading/.env",
+    "Get-Content services\\reading\\.env",
+    "docker run --env-file services/reading/.env notes-reading:local env",
     "npx supabase db push",
     "npx supabase --debug db push",
     "npx supabase@latest link --project-ref abc",

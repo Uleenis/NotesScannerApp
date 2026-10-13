@@ -32,3 +32,21 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  - package-ecosystem: uv
+    directory: /services/reading
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "kraken"
+      - dependency-name: "torch"
+      - dependency-name: "torchvision"
+      - dependency-name: "lightning"
+    groups:
+      uv-minor-and-patch:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /services/reading
+    schedule:
+      interval: weekly

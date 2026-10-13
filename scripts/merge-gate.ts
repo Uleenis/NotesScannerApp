@@ -28,7 +28,7 @@ export type DeployState = {
 
 export const REVIEW_HEADING = "## Review";
 
-export const REQUIRED_CHECKS = ["app", "functions", "database", "secrets"];
+export const REQUIRED_CHECKS = ["app", "functions", "database", "secrets", "reading"];
 
 export const GUARDED_PATHS = [
   ".claude/",
@@ -47,6 +47,7 @@ export const GUARDED_PATHS = [
   "eslint.config.js",
   "tsconfig.json",
   "tests/setup.ts",
+  "services/reading/audit-allowlist.txt",
 ];
 
 export const PRODUCTION_REF = "eapxcxcxapfrylxuzjsy";

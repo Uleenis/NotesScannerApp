@@ -49,7 +49,7 @@ test("the scan covers the files that go to GitHub", () => {
 
 test("the scan leaves out the files git ignores, where local secrets live", () => {
   const envFiles = filesGoingToGitHub().filter((file) => /(^|\/)\.env(\.|$)/.test(file));
-  expect(envFiles).toEqual([".env.example"]);
+  expect(envFiles).toEqual([".env.example", "services/reading/.env.example"]);
 });
 
 test("no Google key or identifier is in the files that go to GitHub", () => {

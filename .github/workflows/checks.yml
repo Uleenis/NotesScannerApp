@@ -55,3 +55,24 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  reading:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: services/reading
+          target: check
+          load: true
+          tags: notes-reading:check
+          cache-from: type=gha,scope=reading
+          cache-to: type=gha,mode=max,scope=reading
+      - run: docker run --rm notes-reading:check
+      - uses: docker/build-push-action@v7
+        with:
+          context: services/reading
+          target: runtime
+          tags: notes-reading:local
+          cache-from: type=gha,scope=reading

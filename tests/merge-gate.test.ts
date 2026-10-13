@@ -1,3 +1,4 @@
+import * as ts from "typescript";
 import {
   Check,
   DeployState,
@@ -24,6 +25,23 @@ const green: Check[] = REQUIRED_CHECKS.map((name) => ({ name, bucket: "pass" }))
 
 const files = ["services/reading/main.py", "tests/reading.test.ts"];
 
+function ciJobs(): string[] {
+  const workflow = ts.sys.readFile(`${ts.sys.getCurrentDirectory()}/.github/workflows/checks.yml`);
+  if (workflow === undefined) throw new Error("the CI workflow is missing");
+  const jobs = workflow.replace(/\r\n/g, "\n").split("\njobs:\n")[1] ?? "";
+  return [...jobs.matchAll(/^ {2}([a-z-]+):$/gm)].map((match) => match[1]);
+}
+
+describe("REQUIRED_CHECKS", () => {
+  it("requires the five checks of CI, the reading service included", () => {
+    expect([...REQUIRED_CHECKS].sort()).toEqual(["app", "database", "functions", "reading", "secrets"]);
+  });
+
+  it("requires every job of the CI workflow, and only those", () => {
+    expect([...ciJobs()].sort()).toEqual([...REQUIRED_CHECKS].sort());
+  });
+});
+
 describe("mergeRefusals", () => {
   it("lets an open pull request with every required check green and a review section through", () => {
     expect(mergeRefusals(ready, green, files, true)).toEqual([]);
@@ -36,6 +54,14 @@ describe("mergeRefusals", () => {
   it.each(["fail", "pending", "cancel", "skipping"])("refuses while a required check is %s", (bucket) => {
     const checks = green.map((check) => (check.name === "database" ? { ...check, bucket } : check));
     expect(mergeRefusals(ready, checks, files, true)).toEqual([`required check "database" is ${bucket}`]);
+  });
+
+  it("refuses while the reading service has not passed, even if the four others are green", () => {
+    const others = green.filter((check) => check.name !== "reading");
+    expect(mergeRefusals(ready, others, files, true)).toEqual(['required check "reading" has not run on the last commit']);
+    expect(mergeRefusals(ready, [...others, { name: "reading", bucket: "fail" }], files, true)).toEqual([
+      'required check "reading" is fail',
+    ]);
   });
 
   it("refuses when a required check has not run, even if the others are green", () => {
@@ -92,6 +118,7 @@ describe("mergeRefusals", () => {
     "eslint.config.js",
     "tsconfig.json",
     "tests/setup.ts",
+    "services/reading/audit-allowlist.txt",
     "Scripts/merge-gate.ts",
     ".Claude/settings.json",
   ])("leaves a pull request that changes %s to the owner", (path) => {

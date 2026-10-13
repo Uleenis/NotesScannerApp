@@ -45,7 +45,11 @@
     "functions:test": "deno test --node-modules-dir=none --allow-env --allow-net --permit-no-files supabase/functions",
     "functions:check": "deno check --node-modules-dir=none \"supabase/functions/**/*.ts\"",
     "functions:lint": "deno lint --rules-exclude=no-import-prefix supabase/functions",
-    "audit": "audit-ci --config audit-ci.json"
+    "audit": "audit-ci --config audit-ci.json",
+    "service:build": "docker build --target runtime --tag notes-reading:local services/reading",
+    "service:test": "docker build --target check --tag notes-reading:check services/reading && docker run --rm notes-reading:check",
+    "service:start": "docker compose --file services/reading/compose.yaml up --build --detach --wait",
+    "service:stop": "docker compose --file services/reading/compose.yaml down"
   },
   "private": true,
   "devDependencies": {
