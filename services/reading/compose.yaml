@@ -1,0 +1,38 @@
+name: notes-reading
+
+services:
+  reading:
+    image: notes-reading:local
+    build:
+      context: .
+      target: runtime
+    container_name: notes-reading
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:54340:8080"
+    networks:
+      - supabase
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os, urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8080/health', headers={'X-Reading-Secret': os.environ['READING_SECRET']}), timeout=2)"
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
+
+networks:
+  supabase:
+    name: supabase_network_NotesScannerApp
+    external: true

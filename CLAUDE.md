@@ -7,7 +7,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - App: Expo SDK 57, React Native 0.86, React 19, TypeScript strict. Expo has changed: read the versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing app code.
 - Backend: Supabase (Postgres, Auth, Storage, Edge Functions in TypeScript on Deno), Paris region.
 - Reading model: `gemini-3.6-flash`, prompt V0, default temperature, `thinkingBudget: 0`, called only from Edge Functions.
-- Reading service: Python in `services/reading/`, deployed on Cloud Run (from slice 2).
+- Reading service: Python 3.13 in `services/reading/` (FastAPI, Kraken 7.1.1, PyTorch for the processor only), one Docker image. It runs on the PC next to the local Supabase stack until Cloud Run, at the end of slice 4.
 
 ## Layout
 
@@ -28,7 +28,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `supabase/functions/`: Edge Functions (`prepare-page`, `read-page`, `relaunch-page`, `delete-account`, `transfer-account`), their shared code in `_shared/`, their Deno tests in `tests/`. Local secrets (`GEMINI_API_KEY`, `RELAUNCH_SECRET`) live in `supabase/functions/.env`, ignored by git. The `pg_cron` task that calls `relaunch-page` reads its secret and address from Supabase Vault, never from the repository.
 - `supabase/tests/database/`: pgTAP tests.
 - `supabase/tests/concurrency/`: parallel-call tests.
-- `services/reading/`: reading service.
+- `services/reading/`: the reading service. `pyproject.toml` and `uv.lock` pin every package: the Kraken chain keeps the versions that produced the Cold Spike (`constraint-dependencies`), torch comes from the PyTorch index for the processor. The `Dockerfile` downloads the `medium` model from Zenodo (record 21788410, Apache-2.0) and checks its SHA-256; Kraken carries its `blla` segmenter; the service runs as a user that is not root and cannot change its model. Every route requires the shared secret in the `X-Reading-Secret` header, compared in constant time, and `Authorization` stays free for the identity token of Cloud Run; without a `READING_SECRET` of at least 32 characters the service does not start. `check.sh` runs ruff, mypy, pytest and pip-audit inside the image; `audit-allowlist.txt` lists the advisories pip-audit ignores. Both are guarded, and CI calls `check.sh` by name, so the default command of the image cannot skip it. `compose.yaml` runs it on the network of the stack, at `http://notes-reading:8080`, and on `127.0.0.1:54340` for the PC only. Its local secret lives in `services/reading/.env`, ignored by git.
 - `scripts/merge-pr.mjs`: the only way a PR is merged. `scripts/deploy-function.mjs`: the only way an Edge Function is deployed. Their rules live in `scripts/merge-gate.ts`, tested by `tests/merge-gate.test.ts`.
 - `.githooks/pre-push`: refuses pushes to `main` and remote deletions.
 - `docs/slice.md`: the state of the current slice.
@@ -48,10 +48,13 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 | `npm run functions:check` | Deno type check of the Edge Functions |
 | `npm run functions:lint` | Deno lint of the Edge Functions |
 | `npm run functions:test` | Deno tests of the Edge Functions |
+| `npm run service:build` | Build the image of the reading service |
+| `npm run service:test` | Build the check stage of the image and run ruff, mypy, pytest and pip-audit in it |
+| `npm run service:start` / `npm run service:stop` | Start the reading service on the network of the local stack (needs `db:start`), waiting until it answers, or stop it |
 | `node scripts/merge-pr.mjs <number>` | Merge a PR through the gate of `main` |
 | `node scripts/deploy-function.mjs <name>` | Deploy an Edge Function from a clean, green `main` |
 
-All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitleaks.
+All of them run in CI on every push (`.github/workflows/checks.yml`), plus gitleaks: five jobs, `app`, `functions`, `database`, `secrets` and `reading` (the image of the service, built with a cache, then `check.sh` in it).
 
 ## Workflow
 
@@ -60,10 +63,10 @@ The owner does not read the code. What protects `main` is the spec, the tests, t
 - One slice at a time. Its spec and its plan live in the owner's vault, outside the repository; the plan groups the branches by three. `docs/slice.md` says where they are, which branches are done, which one is next and which decisions were taken without the owner.
 - One session per branch. "Continue la tranche." means: read `docs/slice.md`, the spec and the plan, then do the next branch from start to merge and stop. If `docs/slice.md` names no next branch, stop and ask.
 - Tests that encode the criteria of the branch are written first and fail before the code exists.
-- Before the PR, `typecheck`, `lint`, `test`, `audit`, `functions:check`, `functions:lint`, `functions:test`, `db:test` and `db:test:concurrency` pass locally (the last two need Docker; if it is off, say so and let CI run them).
+- Before the PR, `typecheck`, `lint`, `test`, `audit`, `functions:check`, `functions:lint`, `functions:test`, `db:test`, `db:test:concurrency` and `service:test` pass locally (the last three need Docker; if it is off, say so and let CI run them).
 - Review: spawn a fresh `code-reviewer` subagent with the spec, the criteria of the branch and the branch name. On a branch the plan marks sensitive (accounts, access rights, secrets, exposure of a service), also spawn a fresh `security-reviewer`. Fix the findings, then spawn a fresh `code-reviewer` on the fixes alone.
 - The PR explains every change in plain terms and ends with a `## Review` section: every finding, and what was done about it, fixed or set aside with the reason.
-- Merge only with `node scripts/merge-pr.mjs <number>`, once CI has run on the last commit. It judges the PR with the gate of `main` (`scripts/merge-gate.ts`), never with the branch's own copy, and refuses while one of the four checks (`app`, `functions`, `database`, `secrets`) is not green, while the branch lacks the last commit of `main`, without a `## Review` line, or when the PR changes a guarded file (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the guardrail tests, `supabase/config.toml`, `package.json`, `audit-ci.json`, `.nvmrc`, `.gitignore`, `.gitattributes`, `eslint.config.js`, `tsconfig.json`, `tests/setup.ts`). A PR that changes a guarded file is the owner's to merge: say so and stop. Never `gh pr merge`, never push to `main`, never rewrite history.
+- Merge only with `node scripts/merge-pr.mjs <number>`, once CI has run on the last commit. It judges the PR with the gate of `main` (`scripts/merge-gate.ts`), never with the branch's own copy, and refuses while one of the five checks (`app`, `functions`, `database`, `secrets`, `reading`) is not green, while the branch lacks the last commit of `main`, without a `## Review` line, or when the PR changes a guarded file (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the guardrail tests, `supabase/config.toml`, `package.json`, `audit-ci.json`, `services/reading/check.sh`, `services/reading/audit-allowlist.txt`, `.nvmrc`, `.gitignore`, `.gitattributes`, `eslint.config.js`, `tsconfig.json`, `tests/setup.ts`). The guarded files are denied to the Edit and Write tools: never write them by another path (a shell, a script). When a branch needs one changed, prepare the change as a patch outside the repository and let the owner apply it. A PR that changes a guarded file is the owner's to merge: say so and stop. Never `gh pr merge`, never push to `main`, never rewrite history.
 - The pre-push hook in `.githooks/` refuses any push to `main` and any deletion of a remote branch. It works once the owner has run `git config core.hooksPath .githooks` in the clone. At the start of a session, `git rev-parse --git-path hooks` must print `.githooks`; if not, stop and ask the owner. Create PRs with `--body-file`, so their text never looks like a denied command.
 - The last commit of the branch updates `docs/slice.md`. After the merge, stop: the next branch starts in a new session.
 - The third branch of a group also writes the pause file, in French, outside the repository: `../Tranche N/Pause K.md` (what the code of the three branches does and how it works, in plain terms; the decisions taken without the owner; the checks to do on the phone, step by step, with the expected result; the production actions left to the owner, with their procedure). It also updates the "Current Status" of `../../AGENTS.md`. The next group starts only after the owner has done the pause.
@@ -73,8 +76,8 @@ The owner does not read the code. What protects `main` is the spec, the tests, t
 
 - Allowed: deploy an Edge Function with `node scripts/deploy-function.mjs <name>`. It deploys only a clean copy of the last commit of `main` whose CI is green, with the token check that `supabase/config.toml` sets. It is undone by a PR that reverts the change, merged, then deployed the same way. Cloud Run deploys come with their own script, in the branch that creates the service, merged by the owner.
 - The owner's alone: production migrations, secrets, authentication settings, who may call a service and public access, billing, accounts and projects, and every `gcloud` command until that script exists.
-- `.claude/settings.json` denies these commands in both shells, the Supabase tools that write, the browser and computer-use tools, reading `supabase/functions/.env`, and editing the guarded files. `tests/guardrails.test.ts` fails if a rule is added or removed without the test, if an allowed command becomes blocked, or if a known bypass stops being blocked.
-- These guardrails stop mistakes, not a determined agent: a deny list matches the text of a command, and a shell can still write any file or read `supabase/functions/.env` by another path (`grep -r` on `supabase/functions` reads it too: search `supabase/functions/*/` instead). The gate of `main`, the pre-push hook and the owner merging guarded files are the parts that do not depend on the agent's goodwill.
+- `.claude/settings.json` denies these commands in both shells, the Supabase tools that write, the browser and computer-use tools, reading `supabase/functions/.env` and `services/reading/.env`, and editing the guarded files. `tests/guardrails.test.ts` fails if a rule is added or removed without the test, if an allowed command becomes blocked, or if a known bypass stops being blocked.
+- These guardrails stop mistakes, not a determined agent: a deny list matches the text of a command, and a shell can still write any file or read `supabase/functions/.env` by another path (`grep -r` on `supabase/functions` reads it too: search `supabase/functions/*/` instead). The secret of the reading service is in the environment of its container: `docker inspect`, `docker exec` and `docker compose config` are denied for that reason; read its logs with `docker logs notes-reading`. The gate of `main`, the pre-push hook and the owner merging guarded files are the parts that do not depend on the agent's goodwill.
 - Never read page text or images from production.
 
 ## Code rules
@@ -93,7 +96,8 @@ The owner does not read the code. What protects `main` is the spec, the tests, t
 - `profiles` has no `user_id`: its key `id` is the account id and its rule is `id = auth.uid()`. Tables written only by the server have no default for `user_id`: the server always gives it.
 - The client only writes notebooks, chapters, pages, corrections, consents, its interface language, birth year and country. Everything else is written by the server.
 - Storage buckets are private; a user only reads files under their own `user_id`.
-- No secret in the repository. Secrets live in Supabase Edge Function secrets or Google Secret Manager. The app only holds the Supabase URL and publishable key. The app reaches production through `.env.development.local`, ignored by git, holding only the production URL and publishable key; renamed `.env.development.local.off`, the app is back on the local stack.
+- No secret in the repository. Secrets live in Supabase Edge Function secrets or Google Secret Manager; locally, in `supabase/functions/.env` and `services/reading/.env`, both ignored by git and never copied into the image (`.dockerignore` lets only the listed files in).
+- The reading service is never public: it refuses every call without the shared secret, and locally it is published on `127.0.0.1` only, never on the local network. The app only holds the Supabase URL and publishable key. The app reaches production through `.env.development.local`, ignored by git, holding only the production URL and publishable key; renamed `.env.development.local.off`, the app is back on the local stack.
 - Logs never contain page text or images.
 - Model output is text, never code: never executed, rendered without HTML or active links.
 - Usage limits are enforced by Edge Functions, never by the app.
@@ -108,6 +112,14 @@ The owner does not read the code. What protects `main` is the spec, the tests, t
 
 - `GHSA-vfj7-8cjw-p6xm`: `braces` 3.0.3 via Jest, stack exhaustion on crafted glob patterns.
 - `GHSA-86w9-cpqp-85rv`: `node-forge` 1.4.0 via `@expo/cli` code signing, lax RSA signature parsing.
+
+`services/reading/audit-allowlist.txt` allows one advisory to pip-audit, in the reading service:
+
+- `GHSA-qqmf-gpg7-g8gw`: `lightning` 2.6.1, pinned exactly by Kraken 7.1.1 (no later Kraken release), runs code named in a crafted checkpoint loaded by `load_from_checkpoint`. Reading loads only `.safetensors` files through `kraken.models.load_models`, never through Lightning: today the `medium` model checked by its hash. A checkpoint is code whatever the version of Lightning (Kraken's training loads `.ckpt` files with `weights_only=False`), so from slice 5 the service loads only checkpoints it wrote itself, from storage only the server can write, never a file from a user. Dependabot ignores `kraken` and `lightning`: at the start of each slice, check by hand whether a Kraken release allows `lightning` 2.6.6, and remove the entry when it does.
+
+## Reading chain dependencies
+
+`kraken`, `torch`, `torchvision`, `lightning` and the versions in `constraint-dependencies` of `services/reading/pyproject.toml` are those that produced the measures of the spikes. Dependabot ignores the first four. Change them only together with the measure of criterion 1 of slice 2 run again; a package outside the reading itself (network, server) can move to a release that fixes an advisory.
 
 ## Expo-managed dependencies
 

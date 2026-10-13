@@ -1,2 +1,6 @@
 *.sh text eol=lf
 .githooks/* text eol=lf
+services/reading/** text eol=lf
+services/reading/**/*.png -text
+services/reading/**/*.jpg -text
+services/reading/**/*.jpeg -text

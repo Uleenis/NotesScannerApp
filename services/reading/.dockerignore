@@ -1,0 +1,10 @@
+*
+!pyproject.toml
+!uv.lock
+!src/
+!tests/
+!check.sh
+!audit-allowlist.txt
+**/__pycache__/
+**/.env
+**/.env.*
