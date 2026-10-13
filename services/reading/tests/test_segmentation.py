@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -38,6 +39,12 @@ class Written:
     dark_right: int
 
 
+def font_of(size: int = 56) -> ImageFont.FreeTypeFont:
+    font = ImageFont.load_default(size=size)
+    assert isinstance(font, ImageFont.FreeTypeFont)
+    return font
+
+
 def text_of(index: int, count: int) -> str:
     return " ".join(WORDS[(index * 5 + k) % len(WORDS)] for k in range(count))
 
@@ -50,7 +57,7 @@ def write(
     angle: float = 0.0,
     font_size: int = 56,
 ) -> tuple[int, int, int, int]:
-    font = ImageFont.load_default(size=font_size)
+    font = font_of(font_size)
     layer = Image.new("L", canvas.size, 0)
     ImageDraw.Draw(layer).text(origin, text, fill=255, font=font)
     if angle:
@@ -202,6 +209,8 @@ class RecordingModel:
 def test_the_segmenter_runs_on_one_thread_as_the_kraken_command_did(
     segmenter: Segmenter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    if (os.cpu_count() or 1) < 2:
+        pytest.skip("one processor: the limit cannot be told apart from the machine")
     model = RecordingModel()
     monkeypatch.setattr(segmenter, "_model", model)
     photo, _ = page(rows=1)
@@ -223,6 +232,48 @@ def test_fragments_of_the_same_height_make_one_line() -> None:
     lines = lines_of(canvas.convert("RGB"), fragments)
     assert len(lines) == 1
     assert_box_near(lines[0].box, (left[0], min(left[1], right[1]), right[2], max(left[3], right[3])))
+
+
+def fragment_under(box: tuple[int, int, int, int], top: int) -> Fragment:
+    base = float(top + font_of().getmetrics()[0])
+    return Fragment.of([(box[0], base), (box[2], base)], [(box[0], box[1]), (box[2], box[3])])
+
+
+def test_the_ink_of_a_neighbouring_line_is_erased_from_a_tile() -> None:
+    canvas = Image.new("L", (1200, 600), PAPER)
+    above_layer = Image.new("L", canvas.size, 0)
+    font = font_of()
+    ImageDraw.Draw(above_layer).text((100, 200), "jumpy gypsy jig", fill=255, font=font)
+    canvas.paste(Image.new("L", canvas.size, 20), mask=above_layer)
+    above = above_layer.getbbox()
+    below = write(canvas, "bold little thistle", (100, 262), 20)
+    assert above is not None
+    lines = lines_of(
+        canvas.convert("RGB"),
+        [fragment_under(above, 200), fragment_under(below, 262)],
+    )
+    assert len(lines) == 2
+    tile = np.asarray(lines[1].image)
+    reach = np.asarray(above_layer) > 0
+    ys, xs = np.nonzero(tile < 230)
+    landed = [lines[1].to_photo(u + 0.5, v + 0.5) for u, v in zip(xs.tolist(), ys.tolist(), strict=True)]
+    assert lines[1].to_photo(0, 0)[1] < above[3] - 8
+    assert not any(reach[int(y), int(x)] for x, y in landed)
+
+
+def test_a_stroke_across_two_lines_is_cut_between_them() -> None:
+    canvas = Image.new("L", (1200, 600), PAPER)
+    upper = write(canvas, "harbor summit", (100, 200), 20)
+    lower = write(canvas, "willow thistle", (100, 330), 20)
+    x = upper[0] + 160
+    ImageDraw.Draw(canvas).line([(x, upper[3] - 35), (x, lower[1] + 35)], fill=20, width=4)
+    lines = lines_of(
+        canvas.convert("RGB"),
+        [fragment_under(upper, 200), fragment_under(lower, 330)],
+    )
+    assert len(lines) == 2
+    assert lines[0].box[3] <= lower[1] + 10
+    assert lines[1].box[1] >= upper[3] - 10
 
 
 def test_lines_without_fragments_are_empty() -> None:
