@@ -59,6 +59,14 @@ def png() -> bytes:
     return out.getvalue()
 
 
+def served(caplog: pytest.LogCaptureFixture) -> str:
+    return "\n".join(
+        f"{record.name} {record.getMessage()} {record.exc_text or ''}"
+        for record in caplog.records
+        if not record.name.startswith("httpx")
+    )
+
+
 def client_of(reader: FakeReader) -> TestClient:
     return TestClient(create_app(SECRET, reader))
 
@@ -148,12 +156,8 @@ REFUSALS = [
     pytest.param(png(), f"page_id={PAGE}", JPEG, 415, "unsupported_media_type", id="a png called a jpeg"),
     pytest.param(PROBE.encode(), f"page_id={PAGE}", JPEG, 415, "unsupported_media_type", id="text called a jpeg"),
     pytest.param(b"", f"page_id={PAGE}", JPEG, 415, "unsupported_media_type", id="empty body"),
-    pytest.param(
-        jpeg()[:600] + PROBE.encode(), f"page_id={PAGE}", JPEG, 400, "invalid_photo", id="broken jpeg"
-    ),
-    pytest.param(
-        b"\xff\xd8\xff" + bytes(MAX_BYTES), f"page_id={PAGE}", JPEG, 413, "too_large", id="more than 10 mb"
-    ),
+    pytest.param(jpeg()[:600] + PROBE.encode(), f"page_id={PAGE}", JPEG, 400, "invalid_photo", id="broken jpeg"),
+    pytest.param(b"\xff\xd8\xff" + bytes(MAX_BYTES), f"page_id={PAGE}", JPEG, 413, "too_large", id="more than 10 mb"),
     pytest.param(jpeg(size=(4000, 3001)), f"page_id={PAGE}", JPEG, 413, "too_large", id="more than 12 mpx"),
     pytest.param(jpeg(size=(8001, 16)), f"page_id={PAGE}", JPEG, 413, "too_large", id="too wide"),
     pytest.param(jpeg(size=(16, 8001)), f"page_id={PAGE}", JPEG, 413, "too_large", id="too tall"),
@@ -174,8 +178,8 @@ def test_an_invalid_request_is_refused_without_its_content_coming_back(
     got, text = post(client_of(reader), content, query, content_type)
     assert (got, json.loads(text)) == (status, {"error": code})
     assert reader.photos == []
-    assert PROBE not in caplog.text
-    assert code in caplog.text
+    assert PROBE not in served(caplog)
+    assert code in served(caplog)
 
 
 def test_the_largest_photo_the_app_sends_is_read() -> None:
@@ -196,9 +200,9 @@ def test_a_failed_reading_answers_a_fixed_error_and_logs_only_a_code(caplog: pyt
     status, text = post(client_of(reader), jpeg())
     assert (status, json.loads(text)) == (500, {"error": "reading_failed"})
     assert PROBE not in text
-    assert PROBE not in caplog.text
-    assert "reading_failed" in caplog.text
-    assert PAGE in caplog.text
+    assert PROBE not in served(caplog)
+    assert "reading_failed" in served(caplog)
+    assert PAGE in served(caplog)
 
 
 LOGGED = re.compile(
@@ -215,8 +219,8 @@ def test_a_reading_logs_the_page_its_durations_and_counts_and_no_text(caplog: py
     assert len(messages) == 1
     assert LOGGED.fullmatch(messages[0])
     assert "lines=1 words=2" in messages[0]
-    assert "lantern" not in caplog.text
-    assert "meadow" not in caplog.text
+    assert "lantern" not in served(caplog)
+    assert "meadow" not in served(caplog)
 
 
 @pytest.fixture(scope="module")
@@ -250,7 +254,7 @@ def test_a_real_reading_logs_neither_text_nor_image(
     assert len(body["lines"]) == 2
     assert len(words) >= 4
     out, err = capfd.readouterr()
-    logged = caplog.text + out + err
+    logged = served(caplog) + out + err
     for word in words:
         if len(word) >= 4:
             assert word not in logged

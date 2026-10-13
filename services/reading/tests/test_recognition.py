@@ -128,9 +128,7 @@ def test_every_word_box_lies_in_its_line(reading: Reading) -> None:
             assert overlap(word.box, line.ink)
 
 
-def test_word_boxes_land_on_the_written_words(
-    reading: Reading, page: tuple[Image.Image, list[list[Box]]]
-) -> None:
+def test_word_boxes_land_on_the_written_words(reading: Reading, page: tuple[Image.Image, list[list[Box]]]) -> None:
     _, drawn = page
     for line, written in zip(reading.lines, drawn, strict=True):
         assert len(line.words) == len(written)
