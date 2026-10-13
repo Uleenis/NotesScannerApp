@@ -13,10 +13,12 @@ END = 0xD9
 SCAN = 0xDA
 FILL = 0xFF
 STUFFED = 0x00
-STANDALONE = frozenset({0x01, *range(0xD0, 0xD8)})
 RESTARTS = frozenset(range(0xD0, 0xD8))
 FRAMES = frozenset({0xC0, 0xC1, 0xC2})
-OTHER_FRAMES = frozenset(range(0xC0, 0xD0)) - {0xC4, 0xC8, 0xCC} - FRAMES
+TABLES = frozenset({0xC4, 0xDB, 0xDD})
+APPLICATIONS = frozenset(range(0xE0, 0xF0))
+COMMENT = 0xFE
+SEGMENTS = FRAMES | TABLES | APPLICATIONS | {SCAN, COMMENT}
 
 
 def after_scan(data: bytes, position: int) -> int:
@@ -46,12 +48,10 @@ def check_structure(data: bytes) -> None:
         position += 1
         if marker == END:
             break
-        if marker in STANDALONE:
-            continue
-        if position + 2 > len(data):
+        if marker not in SEGMENTS or position + 2 > len(data):
             raise invalid_photo()
         length = int.from_bytes(data[position : position + 2], "big")
-        if length < 2 or position + length > len(data) or marker in OTHER_FRAMES:
+        if length < 2 or position + length > len(data):
             raise invalid_photo()
         position += length
         if marker in FRAMES:

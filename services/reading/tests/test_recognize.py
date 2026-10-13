@@ -239,6 +239,26 @@ def test_a_photo_made_of_endless_scans_is_refused_before_it_is_decoded() -> None
     assert reader.photos == []
 
 
+def test_scans_hidden_behind_a_marker_no_photo_carries_are_refused() -> None:
+    reader = FakeReader()
+    photo = jpeg(progressive=True)
+    hidden = last_scan(photo) * 4
+    assert len(hidden) < 60_000
+    for marker in (b"\x00", b"\x01", b"\xd0", b"\xd8", b"\xc8", b"\xcc", b"\xdc", b"\xf0", b"\x02", b"\xbf"):
+        crafted = (
+            photo[:-2]
+            + b"\xff\xfe\x00\x06note"
+            + b"\xff"
+            + marker
+            + (len(hidden) + 2).to_bytes(2, "big")
+            + hidden
+            + b"\xff\xd9"
+        )
+        status, text = post(client_of(reader), crafted)
+        assert (status, json.loads(text)) == (400, {"error": "invalid_photo"}), marker
+    assert reader.photos == []
+
+
 def test_a_photo_coded_otherwise_than_the_app_codes_it_is_refused() -> None:
     reader = FakeReader()
     photo = jpeg()
