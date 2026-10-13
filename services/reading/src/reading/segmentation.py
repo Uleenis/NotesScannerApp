@@ -8,6 +8,7 @@ from scipy import ndimage
 from threadpoolctl import threadpool_limits
 
 from reading.ink import Band, Component, Floats, Gray, Labels, components, ink
+from reading.refusal import too_complex
 
 Point = tuple[float, float]
 
@@ -29,6 +30,7 @@ SIDE_RATIO = 0.35
 INK_MARGIN = 0.18
 HALO = 3
 PAPER = 255
+MAX_COMPONENTS = 40_000
 
 
 @dataclass(frozen=True)
@@ -306,6 +308,8 @@ def lines_of(photo: Image.Image, fragments: Sequence[Fragment]) -> list[Line]:
     gray: Gray = np.asarray(photo.convert("L"))
     red: Gray = np.asarray(photo.convert("RGB"))[:, :, 0]
     labels, comps, x_height = ink(red)
+    if len(comps) > MAX_COMPONENTS:
+        raise too_complex()
     rows = group_rows(fragments)
     assign(comps, rows, x_height)
     comps, cuts = cut_straddling(comps, labels, x_height)

@@ -9,14 +9,22 @@ import urllib.request
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from reading.app import GATE_HEADER, create_app
+from reading.recognition import Reading
 from reading.secret import GATE_VARIABLE, SecretError, load_secret
 
 SECRET = "s" * 24 + "-shared-secret-of-the-test"
 OTHER = "o" * 24 + "-shared-secret-of-the-test"
 
-app = create_app(SECRET)
+
+class EmptyReader:
+    def read(self, photo: Image.Image) -> Reading:
+        return Reading(width=photo.width, height=photo.height, lines=(), segment_seconds=0.0, recognize_seconds=0.0)
+
+
+app = create_app(SECRET, EmptyReader())
 client = TestClient(app)
 
 API_ROUTES = [route for route in app.routes if isinstance(route, APIRoute)]
@@ -47,6 +55,7 @@ REFUSED_HEADERS = [
 
 def test_the_service_has_routes() -> None:
     assert ("GET", "/health") in ROUTES
+    assert ("POST", "/recognize") in ROUTES
 
 
 @pytest.mark.parametrize(("method", "path"), PROBES)
@@ -96,7 +105,7 @@ def test_no_valid_secret_no_service(environ: dict[str, str]) -> None:
     with pytest.raises(SecretError):
         load_secret(environ)
     with pytest.raises(SecretError):
-        create_app(environ.get(GATE_VARIABLE, ""))
+        create_app(environ.get(GATE_VARIABLE, ""), EmptyReader())
 
 
 def test_a_valid_secret_is_loaded() -> None:
