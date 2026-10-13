@@ -10,10 +10,12 @@ from typing import Protocol
 from PIL import Image
 from threadpoolctl import threadpool_limits
 
+from reading.refusal import too_complex
 from reading.segmentation import Line
 
 Box = tuple[int, int, int, int]
 
+DEADLINE = 120.0
 SPACES = re.compile(r"(\s+)")
 QUIET = ("kraken", "lightning", "lightning.fabric", "pytorch_lightning")
 
@@ -73,12 +75,11 @@ def words_of(
         if not segment.isspace():
             own_cuts = cuts[offset : offset + len(segment)]
             own_confidences = confidences[offset : offset + len(segment)]
-            if own_cuts and own_confidences:
-                xs = [float(point[0]) for polygon in own_cuts for point in polygon]
-                confidence = round(sum(own_confidences) / len(own_confidences), 4)
-                words.append(TileWord(segment, min(xs), max(xs) + 1.0, confidence))
-            else:
-                words.append(TileWord(segment, 0.0, float(width), 0.0))
+            if len(own_cuts) != len(segment) or len(own_confidences) != len(segment):
+                raise ValueError("cuts and confidences do not match the prediction")
+            xs = [float(point[0]) for polygon in own_cuts for point in polygon]
+            confidence = round(sum(own_confidences) / len(own_confidences), 4)
+            words.append(TileWord(segment, max(0.0, min(xs)), min(float(width), max(xs) + 1.0), confidence))
         offset += len(segment)
     return words
 
@@ -119,7 +120,7 @@ class Recognizer:
 
         quiet_libraries()
         self._model = RecognitionTaskModel.load_model(model_path)
-        self._config = RecognitionInferenceConfig(num_line_workers=0)
+        self._config = RecognitionInferenceConfig(num_line_workers=0, accelerator="cpu")
 
     def words(self, tile: Image.Image) -> list[TileWord]:
         from kraken.containers import BBoxLine, Segmentation
@@ -140,10 +141,11 @@ class Recognizer:
 
 
 class Reader:
-    def __init__(self, segmenter: LineSource, recognizer: TileReader) -> None:
+    def __init__(self, segmenter: LineSource, recognizer: TileReader, deadline_seconds: float = DEADLINE) -> None:
         quiet_libraries()
         self._segmenter = segmenter
         self._recognizer = recognizer
+        self._deadline = deadline_seconds
         self._lock = threading.Lock()
 
     def read(self, photo: Image.Image) -> Reading:
@@ -151,14 +153,16 @@ class Reader:
             started = time.perf_counter()
             lines = self._segmenter.lines(photo)
             segmented = time.perf_counter()
-            read = tuple(
-                read_line(line, self._recognizer.words(line.image), photo.width, photo.height) for line in lines
-            )
+            read = []
+            for line in lines:
+                if time.perf_counter() - started > self._deadline:
+                    raise too_complex()
+                read.append(read_line(line, self._recognizer.words(line.image), photo.width, photo.height))
             recognized = time.perf_counter()
         return Reading(
             width=photo.width,
             height=photo.height,
-            lines=read,
+            lines=tuple(read),
             segment_seconds=segmented - started,
             recognize_seconds=recognized - segmented,
         )

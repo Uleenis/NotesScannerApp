@@ -8,9 +8,11 @@ import pytest
 from PIL import Image, ImageDraw, ImageFont
 from threadpoolctl import threadpool_info
 
+from reading import segmentation
 from reading.alto import alto_of
 from reading.recognition import Reader, Reading, ReadLine, Recognizer, TileWord, Word, words_of
-from reading.segmentation import Line, Segmenter
+from reading.refusal import RefusalError
+from reading.segmentation import Fragment, Line, Segmenter, lines_of
 
 ALTO = "{http://www.loc.gov/standards/alto/ns-v4#}"
 PAPER = 250
@@ -44,9 +46,16 @@ def test_an_empty_or_blank_prediction_has_no_word() -> None:
     assert words_of("   ", [cut(1), cut(2), cut(3)], [0.5, 0.5, 0.5], width=10) == []
 
 
-def test_a_word_without_cuts_spans_its_tile_with_no_confidence() -> None:
-    words = words_of("ab cd", [cut(1), cut(2), cut(3)], [0.9, 0.9, 0.9], width=80)
-    assert words == [TileWord("ab", 1.0, 3.0, 0.9), TileWord("cd", 0.0, 80.0, 0.0)]
+def test_a_word_without_its_cuts_is_never_given_an_invented_box() -> None:
+    with pytest.raises(ValueError):
+        words_of("ab cd", [cut(1), cut(2), cut(3)], [0.9, 0.9, 0.9], width=80)
+    with pytest.raises(ValueError):
+        words_of("ab", [cut(1), cut(2)], [0.9], width=80)
+
+
+def test_a_word_box_runs_from_its_first_to_its_last_character_and_stays_in_its_tile() -> None:
+    assert words_of("a", [cut(30)], [0.7], width=80) == [TileWord("a", 30.0, 31.0, 0.7)]
+    assert words_of("ab", [cut(5), cut(79)], [0.7, 0.9], width=80) == [TileWord("ab", 5.0, 80.0, 0.8)]
 
 
 def font() -> ImageFont.FreeTypeFont:
@@ -139,10 +148,22 @@ def test_word_boxes_land_on_the_written_words(reading: Reading, page: tuple[Imag
             assert overlap(word.box, expected)
 
 
+def edits(a: str, b: str) -> int:
+    previous = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        current = [i]
+        for j, cb in enumerate(b, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (ca != cb)))
+        previous = current
+    return previous[-1]
+
+
 def test_the_page_is_read_word_for_word(reading: Reading) -> None:
     read = [[word.text for word in line.words] for line in reading.lines]
-    matching = sum(a == b for got, want in zip(read, LINES, strict=True) for a, b in zip(got, want, strict=True))
-    assert matching >= 7
+    close = sum(
+        edits(a.lower(), b) <= 1 for got, want in zip(read, LINES, strict=True) for a, b in zip(got, want, strict=True)
+    )
+    assert close >= 8
 
 
 def test_the_alto_carries_each_word_with_its_box_and_confidence(reading: Reading) -> None:
@@ -247,6 +268,62 @@ class SlowSegmenter:
 class NoRecognizer:
     def words(self, tile: Image.Image) -> list[TileWord]:
         return []
+
+
+class SlowRecognizer:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def words(self, tile: Image.Image) -> list[TileWord]:
+        self.calls += 1
+        time.sleep(0.1)
+        return []
+
+
+class FixedSegmenter:
+    def __init__(self, lines: list[Line]) -> None:
+        self._lines = lines
+
+    def lines(self, photo: Image.Image) -> list[Line]:
+        return self._lines
+
+
+def drawn_lines(count: int) -> tuple[Image.Image, list[Line]]:
+    canvas = Image.new("L", (1200, 200 + 120 * count), PAPER)
+    face = font()
+    fragments = []
+    for index in range(count):
+        top = 100 + 120 * index
+        ImageDraw.Draw(canvas).text((100, top), "copper lantern", fill=INK, font=face)
+        box = ImageDraw.Draw(canvas).textbbox((100, top), "copper lantern", font=face)
+        base = float(top + face.getmetrics()[0])
+        fragments.append(Fragment.of([(box[0], base), (box[2], base)], [(box[0], box[1]), (box[2], box[3])]))
+    photo = canvas.convert("RGB")
+    return photo, lines_of(photo, fragments)
+
+
+def test_a_reading_that_outlasts_its_deadline_is_abandoned_between_lines() -> None:
+    photo, lines = drawn_lines(4)
+    assert len(lines) == 4
+    recognizer = SlowRecognizer()
+    reader = Reader(FixedSegmenter(lines), recognizer, deadline_seconds=0.15)
+    with pytest.raises(RefusalError) as refused:
+        reader.read(photo)
+    assert (refused.value.status, refused.value.code) == (422, "too_complex")
+    assert recognizer.calls < 4
+    assert Reader(FixedSegmenter(lines), recognizer, deadline_seconds=5).read(photo).lines
+
+
+def test_a_page_with_more_ink_components_than_any_page_of_notes_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert len(drawn_lines(2)[1]) == 2
+    monkeypatch.setattr(segmentation, "MAX_COMPONENTS", 10)
+    with pytest.raises(RefusalError) as refused:
+        drawn_lines(2)
+    assert (refused.value.status, refused.value.code) == (422, "too_complex")
+
+
+def test_the_ceiling_of_ink_components_is_far_above_a_page_of_notes() -> None:
+    assert segmentation.MAX_COMPONENTS >= 40_000
 
 
 def test_one_page_is_read_at_a_time() -> None:

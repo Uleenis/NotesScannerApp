@@ -9,12 +9,14 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from reading.alto import alto_of
-from reading.photo import MAX_BYTES, RefusalError, open_photo, too_large, unsupported
+from reading.photo import MAX_BYTES, open_photo
 from reading.recognition import Box, PageReader, Reading
+from reading.refusal import RefusalError, busy, invalid_request, too_large, unsupported
 from reading.secret import check_secret
 
 GATE_HEADER = "X-Reading-Secret"
 PHOTO_TYPE = "image/jpeg"
+MAX_IN_FLIGHT = 4
 QUERY = re.compile(r"page_id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 
 log = logging.getLogger("reading")
@@ -44,7 +46,7 @@ class SecretGate:
 def page_of(request: Request) -> str:
     found = QUERY.fullmatch(request.url.query)
     if found is None:
-        raise RefusalError(400, "invalid_request")
+        raise invalid_request()
     return found.group(1)
 
 
@@ -90,9 +92,15 @@ def answer(page_id: str, reading: Reading, alto: str) -> dict[str, object]:
     }
 
 
-def create_app(secret: str, reader: PageReader) -> FastAPI:
+def refusal(page_id: str | None, refused: RefusalError) -> JSONResponse:
+    log.info("refused page=%s code=%s", page_id or "-", refused.code)
+    return JSONResponse({"error": refused.code}, status_code=refused.status)
+
+
+def create_app(secret: str, reader: PageReader, max_in_flight: int = MAX_IN_FLIGHT) -> FastAPI:
     check_secret(secret)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    in_flight = [0]
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -100,18 +108,26 @@ def create_app(secret: str, reader: PageReader) -> FastAPI:
 
     @app.post("/recognize")
     async def recognize(request: Request) -> JSONResponse:
+        if in_flight[0] >= max_in_flight:
+            return refusal(None, busy())
+        in_flight[0] += 1
+        try:
+            return await recognized(request)
+        finally:
+            in_flight[0] -= 1
+
+    async def recognized(request: Request) -> JSONResponse:
         page_id = None
         try:
             page_id = page_of(request)
             check_type(request)
-            photo = open_photo(await body_of(request))
+            photo = await run_in_threadpool(open_photo, await body_of(request))
             started = time.perf_counter()
             reading = await run_in_threadpool(reader.read, photo)
-            alto = alto_of(reading)
+            alto = await run_in_threadpool(alto_of, reading)
             total = time.perf_counter() - started
         except RefusalError as refused:
-            log.info("refused page=%s code=%s", page_id or "-", refused.code)
-            return JSONResponse({"error": refused.code}, status_code=refused.status)
+            return refusal(page_id, refused)
         except Exception:
             log.error("failed page=%s code=reading_failed", page_id)
             return JSONResponse({"error": "reading_failed"}, status_code=500)

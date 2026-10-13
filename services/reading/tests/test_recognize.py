@@ -3,6 +3,9 @@ import json
 import logging
 import os
 import re
+import threading
+import time
+from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 from reading.app import GATE_HEADER, create_app
 from reading.photo import MAX_BYTES
 from reading.recognition import Reader, Reading, ReadLine, Recognizer, Word
+from reading.refusal import too_complex
 from reading.segmentation import Segmenter
 
 SECRET = "r" * 24 + "-shared-secret-of-the-test"
@@ -192,6 +196,99 @@ def test_a_body_announced_too_long_is_refused_before_it_is_read() -> None:
     reader = FakeReader()
     status, text = post(client_of(reader), jpeg(), headers={"Content-Length": str(MAX_BYTES + 1)})
     assert (status, json.loads(text)) == (413, {"error": "too_large"})
+
+
+def test_a_body_streamed_past_the_limit_without_a_length_is_refused() -> None:
+    reader = FakeReader()
+
+    def chunks() -> Iterator[bytes]:
+        yield b"\xff\xd8\xff"
+        for _ in range(11):
+            yield bytes(1024 * 1024)
+
+    response = client_of(reader).post(
+        f"/recognize?page_id={PAGE}", content=chunks(), headers={GATE_HEADER: SECRET, "Content-Type": JPEG}
+    )
+    assert "content-length" not in {name.lower() for name in response.request.headers}
+    assert (response.status_code, response.json()) == (413, {"error": "too_large"})
+    assert reader.photos == []
+
+
+def test_a_progressive_photo_is_read() -> None:
+    reader = FakeReader()
+    status, _ = post(client_of(reader), jpeg(progressive=True, quality=90))
+    assert status == 200
+    assert len(reader.photos) == 1
+
+
+def last_scan(data: bytes) -> bytes:
+    start = data.rindex(b"\xff\xda")
+    assert data.endswith(b"\xff\xd9")
+    return data[start:-2]
+
+
+def test_a_photo_made_of_endless_scans_is_refused_before_it_is_decoded() -> None:
+    reader = FakeReader()
+    photo = jpeg(size=(3000, 4000), progressive=True)
+    crafted = photo[:-2] + last_scan(photo) * 20_000 + b"\xff\xd9"
+    assert len(crafted) < MAX_BYTES
+    started = time.perf_counter()
+    status, text = post(client_of(reader), crafted)
+    assert time.perf_counter() - started < 2
+    assert (status, json.loads(text)) == (400, {"error": "invalid_photo"})
+    assert reader.photos == []
+
+
+def test_a_photo_coded_otherwise_than_the_app_codes_it_is_refused() -> None:
+    reader = FakeReader()
+    photo = jpeg()
+    frame = photo.index(b"\xff\xc0")
+    for kind in (b"\xc3", b"\xc9", b"\xcb"):
+        crafted = photo[:frame] + b"\xff" + kind + photo[frame + 2 :]
+        status, text = post(client_of(reader), crafted)
+        assert (status, json.loads(text)) == (400, {"error": "invalid_photo"})
+    status, text = post(client_of(reader), photo[:-2])
+    assert (status, json.loads(text)) == (400, {"error": "invalid_photo"})
+    assert reader.photos == []
+
+
+def test_a_page_too_complex_to_read_answers_a_fixed_error() -> None:
+    reader = FakeReader(error=too_complex())
+    status, text = post(client_of(reader), jpeg())
+    assert (status, json.loads(text)) == (422, {"error": "too_complex"})
+
+
+class BlockingReader:
+    def __init__(self) -> None:
+        self.entered = threading.Semaphore(0)
+        self.release = threading.Event()
+
+    def read(self, photo: Image.Image) -> Reading:
+        self.entered.release()
+        self.release.wait(timeout=30)
+        return FIXED
+
+
+def test_requests_beyond_those_in_flight_are_turned_away() -> None:
+    reader = BlockingReader()
+    statuses: list[int] = []
+    with TestClient(create_app(SECRET, reader, max_in_flight=2)) as client:
+
+        def call() -> None:
+            statuses.append(post(client, jpeg())[0])
+
+        waiting = [threading.Thread(target=call) for _ in range(2)]
+        for thread in waiting:
+            thread.start()
+        for _ in waiting:
+            assert reader.entered.acquire(timeout=30)
+        status, text = post(client, jpeg())
+        reader.release.set()
+        for thread in waiting:
+            thread.join()
+        assert (status, json.loads(text)) == (503, {"error": "busy"})
+        assert statuses == [200, 200]
+        assert post(client, jpeg())[0] == 200
 
 
 def test_a_failed_reading_answers_a_fixed_error_and_logs_only_a_code(caplog: pytest.LogCaptureFixture) -> None:
