@@ -48,6 +48,7 @@ export const GUARDED_PATHS = [
   "tsconfig.json",
   "tests/setup.ts",
   "services/reading/audit-allowlist.txt",
+  "services/reading/check.sh",
 ];
 
 export const PRODUCTION_REF = "eapxcxcxapfrylxuzjsy";

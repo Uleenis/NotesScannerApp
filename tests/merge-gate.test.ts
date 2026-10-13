@@ -119,6 +119,7 @@ describe("mergeRefusals", () => {
     "tsconfig.json",
     "tests/setup.ts",
     "services/reading/audit-allowlist.txt",
+    "services/reading/check.sh",
     "Scripts/merge-gate.ts",
     ".Claude/settings.json",
   ])("leaves a pull request that changes %s to the owner", (path) => {

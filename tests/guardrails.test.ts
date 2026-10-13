@@ -64,6 +64,9 @@ const SHELL_RULES = [
   "*functions\\.env*",
   "*reading/.env*",
   "*reading\\.env*",
+  "*docker*inspect*",
+  "*docker*exec*",
+  "*compose*config*",
   "*supabase* db* push*",
   "*--linked*",
   "*--db-url*",
@@ -108,6 +111,7 @@ const GUARDED_FILES = [
   "./tsconfig.json",
   "./tests/setup.ts",
   "./services/reading/audit-allowlist.txt",
+  "./services/reading/check.sh",
 ];
 
 const SECRET_FILES = [
@@ -243,6 +247,10 @@ describe("guardrails", () => {
     "cat services/reading/.env",
     "Get-Content services\\reading\\.env",
     "docker run --env-file services/reading/.env notes-reading:local env",
+    "docker inspect notes-reading",
+    "docker container inspect notes-reading",
+    "docker exec notes-reading env",
+    "docker compose -f services/reading/compose.yaml config",
     "npx supabase db push",
     "npx supabase --debug db push",
     "npx supabase@latest link --project-ref abc",
