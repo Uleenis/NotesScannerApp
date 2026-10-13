@@ -209,7 +209,7 @@ class RecordingModel:
 def test_the_segmenter_runs_on_one_thread_as_the_kraken_command_did(
     segmenter: Segmenter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    if (os.cpu_count() or 1) < 2:
+    if (os.process_cpu_count() or 1) < 2:
         pytest.skip("one processor: the limit cannot be told apart from the machine")
     model = RecordingModel()
     monkeypatch.setattr(segmenter, "_model", model)
