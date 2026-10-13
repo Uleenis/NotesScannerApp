@@ -1059,6 +1059,11 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "kraken" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "scikit-image" },
+    { name = "scipy" },
+    { name = "threadpoolctl" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "uvicorn" },
@@ -1077,6 +1082,11 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.120" },
     { name = "kraken", specifier = "==7.1.1" },
+    { name = "numpy", specifier = "==2.4.6" },
+    { name = "pillow", specifier = "==12.3.0" },
+    { name = "scikit-image", specifier = "==0.25.2" },
+    { name = "scipy", specifier = "==1.15.3" },
+    { name = "threadpoolctl", specifier = "==3.6.0" },
     { name = "torch", specifier = "==2.14.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", specifier = "==0.29.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "uvicorn", specifier = ">=0.38" },

@@ -5,6 +5,11 @@ requires-python = "==3.13.*"
 dependencies = [
     "fastapi>=0.120",
     "kraken==7.1.1",
+    "numpy==2.4.6",
+    "pillow==12.3.0",
+    "scikit-image==0.25.2",
+    "scipy==1.15.3",
+    "threadpoolctl==3.6.0",
     "torch==2.14.0",
     "torchvision==0.29.0",
     "uvicorn>=0.38",
@@ -119,9 +124,10 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "N", "SIM", "RUF"]
 strict = true
 files = ["src", "tests"]
 cache_dir = "/tmp/mypy"
+untyped_calls_exclude = ["skimage"]
 
 [[tool.mypy.overrides]]
-module = ["kraken", "kraken.*"]
+module = ["kraken", "kraken.*", "scipy", "scipy.*", "skimage", "skimage.*", "threadpoolctl"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
