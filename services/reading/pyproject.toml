@@ -120,6 +120,10 @@ strict = true
 files = ["src", "tests"]
 cache_dir = "/tmp/mypy"
 
+[[tool.mypy.overrides]]
+module = ["kraken", "kraken.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-p no:cacheprovider"

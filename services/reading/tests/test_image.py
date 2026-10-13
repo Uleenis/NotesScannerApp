@@ -1,4 +1,5 @@
 import hashlib
+import importlib
 import os
 from importlib import resources
 from pathlib import Path
@@ -25,6 +26,18 @@ def test_the_service_cannot_change_its_model() -> None:
 
 def test_the_image_carries_the_kraken_segmenter() -> None:
     assert resources.files("kraken").joinpath("blla.mlmodel").is_file()
+
+
+def test_kraken_loads_the_generic_model_on_the_processor_only() -> None:
+    import torch
+    from kraken.models import load_models
+
+    importlib.import_module("kraken.blla")
+    importlib.import_module("kraken.rpred")
+    models = load_models(os.environ["READING_MODEL"])
+    assert len(models) == 1
+    assert torch.version.cuda is None
+    assert not torch.cuda.is_available()
 
 
 def test_the_image_carries_no_local_secret_file() -> None:
