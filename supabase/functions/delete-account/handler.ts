@@ -14,6 +14,11 @@ export async function handleDeleteAccount(request: Request, deps: DeleteAccountD
     await deps.accounts.deleteUser(userId);
 
     deps.log.event("account_deleted");
+    try {
+      await deps.accounts.removeFiles("alto", userId);
+    } catch {
+      deps.log.event("account_files_left");
+    }
     return json(200, { deleted: true });
   } catch (error) {
     return failed(deps.log, error);

@@ -88,8 +88,32 @@ Deno.test("delete-account erases the files before the account [10]", async () =>
   await call(world, TOKEN_ALICE);
   assertEquals(
     world.calls.filter((name) => name.startsWith("removeFiles") || name === "deleteUser"),
-    ["removeFiles:photos", "removeFiles:alto", "removeFiles:models", "deleteUser"],
+    ["removeFiles:photos", "removeFiles:alto", "removeFiles:models", "deleteUser", "removeFiles:alto"],
   );
+});
+
+Deno.test("delete-account erases an ALTO file uploaded by a reading A that ended while the account was being deleted [14]", async () => {
+  const world = twoAccounts();
+  world.beforeDeleteUser = () => {
+    world.alto.set(`${ALICE}/${PAGE_ID}/late.xml`, new Uint8Array([1]));
+  };
+  const response = await call(world, TOKEN_ALICE);
+  assertEquals(response.status, 200);
+  assertEquals(world.filesOf("alto", ALICE), []);
+  assertEquals(world.filesOf("alto", BOB).length, 1);
+});
+
+Deno.test("delete-account answers deleted when only the last erase of ALTO files fails, and logs it with no identifier [14]", async () => {
+  const world = twoAccounts();
+  world.beforeDeleteUser = () => {
+    world.alto.set(`${ALICE}/${PAGE_ID}/late.xml`, new Uint8Array([1]));
+    world.failOn.add("removeFiles:alto");
+  };
+  const response = await call(world, TOKEN_ALICE);
+  assertEquals(response.status, 200);
+  assertEquals(await readJson(response), { deleted: true });
+  assertEquals(world.deletedUsers, [ALICE]);
+  assertEquals(world.logs, [{ event: "account_deleted", fields: {} }, { event: "account_files_left", fields: {} }]);
 });
 
 Deno.test("delete-account keeps the account when the files of any bucket cannot be erased, and a second try works [10]", async () => {

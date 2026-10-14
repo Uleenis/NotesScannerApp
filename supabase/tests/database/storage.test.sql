@@ -1,6 +1,6 @@
 begin;
 
-select plan(22);
+select plan(24);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -59,6 +59,15 @@ select throws_ok(
   $$delete from storage.objects where bucket_id = 'photos'$$,
   '42501', null, 'a user cannot delete files'
 );
+
+select set_config('storage.allow_delete_query', 'true', true);
+
+select lives_ok(
+  $$delete from storage.objects where bucket_id = 'photos'$$,
+  'a user who gets past the guard of storage against direct deletes runs a delete on photos, which the next check shows removed nothing'
+);
+
+select set_config('storage.allow_delete_query', '', true);
 
 reset role;
 
@@ -164,9 +173,18 @@ select throws_ok(
   '42501', null, 'a user cannot upload a model file, even in their own folder'
 );
 
-select throws_ok(
+select set_config('storage.allow_delete_query', 'true', true);
+
+select lives_ok(
   $$delete from storage.objects where bucket_id in ('alto', 'models')$$,
-  '42501', null, 'a user cannot delete an ALTO or a model file'
+  'a user who gets past the guard of storage against direct deletes runs a delete on ALTO and model files, which the next check shows removed nothing'
+);
+
+select set_config('storage.allow_delete_query', '', true);
+
+select lives_ok(
+  $$update storage.objects set name = name || '.moved' where bucket_id in ('alto', 'models')$$,
+  'a user runs an update on ALTO and model files, which the next check shows changed nothing'
 );
 
 reset role;
@@ -182,9 +200,14 @@ select is(
 reset role;
 
 select is(
-  (select count(*) from storage.objects where bucket_id in ('alto', 'models')),
-  4::bigint,
-  'those attempts changed no ALTO file and no model file'
+  (select array_agg(bucket_id || ':' || name order by bucket_id, name) from storage.objects where bucket_id in ('alto', 'models')),
+  array[
+    'alto:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/page/a.xml',
+    'alto:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/page/a.xml',
+    'models:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/1.safetensors',
+    'models:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/1.safetensors'
+  ],
+  'those attempts deleted, renamed and added no ALTO file and no model file'
 );
 
 select * from finish();

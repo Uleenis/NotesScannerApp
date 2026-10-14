@@ -15,7 +15,9 @@ alter table public.readings
       prompt_version is not null and thinking_budget is not null and input_tokens is not null and output_tokens is not null and alto_path is null
     end
   ),
-  add constraint readings_alto_path_in_page_folder check (alto_path is null or alto_path like (user_id::text || '/' || page_id::text || '/%'));
+  add constraint readings_alto_path_in_page_folder check (
+    alto_path is null or alto_path ~ ('^' || user_id::text || '/' || page_id::text || '/[A-Za-z0-9_-][A-Za-z0-9._-]*$')
+  );
 
 create unique index readings_one_a_per_page on public.readings (page_id) where label = 'A';
 
@@ -117,6 +119,28 @@ create policy page_tokens_select on public.page_tokens
   for select to authenticated
   using (user_id = (select auth.uid()));
 
+create function private.check_page_type() returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.page_type <> 'text' and (
+    exists (select 1 from public.readings r where r.page_id = new.id and r.label = 'A')
+    or exists (select 1 from public.page_tokens k where k.page_id = new.id)
+  ) then
+    raise exception 'page_has_reading_a' using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function private.check_page_type() from public, anon, authenticated, service_role;
+
+create trigger pages_check_page_type
+  before update of page_type on public.pages
+  for each row execute function private.check_page_type();
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values
   ('alto', 'alto', false, 5242880, array['application/xml']),
   ('models', 'models', false, null, null);
@@ -188,7 +212,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_blank constant text := E' \t\r\n            ​  ⁠　﻿';
+  v_blank constant text := E' \t\r\n\u00a0\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u200b\u202f\u205f\u2060\u3000\ufeff';
   v_from_anonymous boolean;
   v_to_anonymous boolean;
   v_pages integer;

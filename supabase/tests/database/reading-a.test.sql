@@ -1,6 +1,6 @@
 begin;
 
-select plan(37);
+select plan(39);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -276,6 +276,20 @@ select throws_ok(
     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000002', 'A', 'x', 'medium', 'v', 1,
             'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/a3000000-0000-0000-0000-000000000001/other.xml')$$,
   '23514', null, 'an ALTO in the folder of another page is refused'
+);
+
+select throws_ok(
+  $$insert into public.readings (user_id, page_id, label, raw_text, model, model_version, duration_ms, alto_path)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000002', 'A', 'x', 'medium', 'v', 1,
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/a3000000-0000-0000-0000-000000000002/../../bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/a.xml')$$,
+  '23514', null, 'an ALTO path that climbs out of the folder of its page is refused'
+);
+
+select throws_ok(
+  $$insert into public.readings (user_id, page_id, label, raw_text, model, model_version, duration_ms, alto_path)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000002', 'A', 'x', 'medium', 'v', 1,
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/a3000000-0000-0000-0000-000000000002/inner/a.xml')$$,
+  '23514', null, 'an ALTO file sits directly in the folder of its page'
 );
 
 select pg_temp.login('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');

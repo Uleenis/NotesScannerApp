@@ -102,6 +102,7 @@ export class World {
   failCopyAt: number | null = null;
   loseCopies = new Set<Bucket>();
   onCopy: (() => void) | null = null;
+  beforeDeleteUser: (() => void) | null = null;
   photos = new Map<string, FakePhoto>();
   alto = new Map<string, Uint8Array>();
   models = new Map<string, Uint8Array>();
@@ -382,6 +383,7 @@ export class World {
         for (const path of this.filesOf(bucket, userId)) this.files(bucket).delete(path);
       },
       deleteUser: async (userId) => {
+        this.beforeDeleteUser?.();
         await this.tick("deleteUser");
         this.deletedUsers.push(userId);
         for (const [id, page] of [...this.pages]) {

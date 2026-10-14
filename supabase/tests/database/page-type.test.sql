@@ -1,6 +1,6 @@
 begin;
 
-select plan(19);
+select plan(23);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -111,6 +111,40 @@ select is(
   '(math,)',
   'those attempts changed nothing'
 );
+
+select public.record_reading_a(
+  '55555555-5555-5555-5555-555555555555', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'mot', 'medium', 'version', 1,
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/55555555-5555-5555-5555-555555555555/a.xml', 'fr',
+  '[{"token_index": 0, "line_index": 0, "text": "mot", "reading_a": "mot", "reading_b1": "mot", "anchor_kind": null, "anchor": null}]'::jsonb
+);
+
+select pg_temp.as_server();
+
+select throws_ok(
+  $$update public.pages set page_type = 'math' where id = '55555555-5555-5555-5555-555555555555'$$,
+  '23514', 'page_has_reading_a', 'a page that has A cannot become a page of math'
+);
+
+select throws_ok(
+  $$update public.pages set page_type = 'unsupported_script' where id = '55555555-5555-5555-5555-555555555555'$$,
+  '23514', 'page_has_reading_a', 'a page that has A cannot become a page in an unsupported script'
+);
+
+delete from public.readings where page_id = '55555555-5555-5555-5555-555555555555' and label = 'A';
+
+select throws_ok(
+  $$update public.pages set page_type = 'math' where id = '55555555-5555-5555-5555-555555555555'$$,
+  '23514', 'page_has_reading_a', 'a page that still has positions cannot become a page of math'
+);
+
+delete from public.page_tokens where page_id = '55555555-5555-5555-5555-555555555555';
+
+select lives_ok(
+  $$update public.pages set page_type = 'math' where id = '55555555-5555-5555-5555-555555555555'$$,
+  'once A and its positions are erased, the page can become a page of math'
+);
+
+reset role;
 
 select col_default_is('public', 'notebooks', 'correction_level', 'course'::text, 'a notebook corrects at the course level by default');
 

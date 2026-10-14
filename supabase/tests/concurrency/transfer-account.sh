@@ -147,9 +147,15 @@ check "a reading A that waits for a transfer writes no position" 0 "$(sql -c "se
 OWNER="$(id_of 000000000011)"
 make_account 000000000011 false 1 false
 PAGE="$(sql -c "select id from public.pages where user_id = '${OWNER}'")"
-record_a "${PAGE}" "${OWNER}" | install_script record_a
-bench record_a 10
+OUTCOMES="$(mktemp -d)"
+for writer in $(seq 1 10); do
+  ( sql -c "$(record_a "${PAGE}" "${OWNER}")" > "${OUTCOMES}/${writer}" 2>&1 || true ) &
+done
+wait
 
+check "of ten simultaneous writes of A for one page, one is recorded" 1 "$(cat "${OUTCOMES}"/* | grep -c '^t|recorded$')"
+check "of ten simultaneous writes of A for one page, nine are refused as already read, none fails" 9 "$(cat "${OUTCOMES}"/* | grep -c '^f|already_read$')"
+rm -rf "${OUTCOMES}"
 check "ten simultaneous writes of A for one page write one reading" 1 "$(sql -c "select count(*) from public.readings where page_id = '${PAGE}' and label = 'A'")"
 check "ten simultaneous writes of A for one page write its positions once" 1 "$(sql -c "select count(*) from public.page_tokens where page_id = '${PAGE}'")"
 
