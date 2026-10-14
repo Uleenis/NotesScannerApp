@@ -1,6 +1,6 @@
 begin;
 
-select plan(36);
+select plan(39);
 
 create function pg_temp.make_user(uid uuid, anon boolean default false) returns void
 language sql as $$
@@ -80,6 +80,13 @@ insert into public.readings (user_id, page_id, label, raw_text, model, model_ver
 insert into public.page_texts (user_id, page_id, text, pipeline_version) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', 'text', '1');
 
+select public.record_reading_a(
+  'a3000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'text', 'medium', 'version', 1,
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/a3000000-0000-0000-0000-000000000001/a.xml', 'en',
+  '[{"token_index": 0, "line_index": 0, "text": "text", "reading_a": "text", "reading_b1": "text", "anchor_kind": "word", "anchor": [0, 0, 10, 10]},
+    {"token_index": 1, "line_index": 0, "text": "more", "reading_a": null, "reading_b1": "more", "anchor_kind": null, "anchor": null}]'::jsonb
+);
+
 insert into public.page_charges (user_id, page_id, charged_at) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', now()),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000002', now() - interval '70 days'),
@@ -146,7 +153,7 @@ select is(has_function_privilege('service_role', 'public.transfer_account_rows(u
 
 select ok(pg_temp.user_tables() >= 7, 'the check for leftover rows looks at every table that has a user_id');
 
-select is(pg_temp.leftovers('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 15::bigint, 'the giving account holds 2 notebooks, 1 chapter, 3 pages, 3 images, 1 reading, 1 text and 4 charges before the transfer');
+select is(pg_temp.leftovers('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 18::bigint, 'the giving account holds 2 notebooks, 1 chapter, 3 pages, 3 images, 2 readings, 1 text, 4 charges and 2 positions before the transfer');
 
 create temp table bystander_before as select pg_temp.rows_of('cccccccc-cccc-cccc-cccc-cccccccccccc') as n;
 
@@ -217,8 +224,26 @@ select is(
 select is(
   (select count(*) from public.readings where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001')
     + (select count(*) from public.page_texts where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001'),
-  2::bigint,
-  'the reading and the text moved'
+  3::bigint,
+  'the readings and the text moved'
+);
+
+select is(
+  (select array_agg(text order by token_index) from public.page_tokens where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001'),
+  array['text', 'more'],
+  'the positions moved with their page'
+);
+
+select is(
+  (select alto_path from public.readings where page_id = 'a3000000-0000-0000-0000-000000000001' and label = 'A'),
+  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/a3000000-0000-0000-0000-000000000001/a.xml',
+  'the path of the ALTO now starts with the receiving account and keeps its page folder and file name'
+);
+
+select is(
+  (select language from public.pages where id = 'a3000000-0000-0000-0000-000000000001'),
+  'en',
+  'the page kept its language'
 );
 
 select is(

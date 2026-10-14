@@ -76,8 +76,12 @@ export type ServerStore = {
   createUploadUrl: (path: string) => Promise<{ signedUrl: string; token: string }>;
 };
 
+export type Bucket = "photos" | "alto" | "models";
+
+export const ACCOUNT_BUCKETS: readonly Bucket[] = ["photos", "alto", "models"];
+
 export type AccountStore = {
-  removePhotos: (userId: string) => Promise<void>;
+  removeFiles: (bucket: Bucket, userId: string) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
 };
 
@@ -85,8 +89,8 @@ export type MoveResult = { ok: true; pages: number; notebooksMerged: number } | 
 
 export type TransferStore = {
   hasProcessingPage: (userId: string) => Promise<boolean>;
-  listPhotos: (userId: string) => Promise<string[]>;
-  copyPhoto: (from: string, to: string) => Promise<void>;
+  listFiles: (bucket: Bucket, userId: string) => Promise<string[]>;
+  copyFile: (bucket: Bucket, from: string, to: string) => Promise<void>;
   moveRows: (fromId: string, toId: string) => Promise<MoveResult>;
 };
 

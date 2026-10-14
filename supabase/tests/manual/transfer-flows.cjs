@@ -12,6 +12,8 @@ const TABLES = [
   ["readings", "user_id"],
   ["page_texts", "user_id"],
   ["page_charges", "user_id"],
+  ["page_tokens", "user_id"],
+  ["htr_models", "user_id"],
 ];
 
 function flag(name) {
@@ -102,12 +104,12 @@ async function rowsOf(userId) {
   return total;
 }
 
-async function filesOf(userId) {
+async function filesOf(userId, bucket = "photos") {
   const found = [];
   const folders = [userId];
   for (let folder = folders.pop(); folder !== undefined; folder = folders.pop()) {
     for (let offset = 0; ; offset += 100) {
-      const { data, error } = await server.storage.from("photos").list(folder, { limit: 100, offset });
+      const { data, error } = await server.storage.from(bucket).list(folder, { limit: 100, offset });
       if (error) throw new Error(error.message);
       for (const entry of data) (entry.id === null ? folders : found).push(`${folder}/${entry.name}`);
       if (data.length < 100) break;
@@ -156,6 +158,27 @@ async function addPage(userId, notebookId, withCharge) {
   return { id: page.data.id, path };
 }
 
+const ALTO = new TextEncoder().encode('<?xml version="1.0" encoding="UTF-8"?><alto/>');
+
+async function addReadingA(userId, pageId) {
+  const path = `${userId}/${pageId}/a.xml`;
+  const upload = await server.storage.from("alto").upload(path, ALTO, { contentType: "application/xml" });
+  if (upload.error) throw new Error(`alto: ${upload.error.message}`);
+  const written = await server.rpc("record_reading_a", {
+    p_page_id: pageId,
+    p_user_id: userId,
+    p_raw_text: "Texte",
+    p_model: "medium",
+    p_model_version: "manual",
+    p_duration_ms: 1,
+    p_alto_path: path,
+    p_language: "fr",
+    p_tokens: [{ token_index: 0, line_index: 0, text: "Texte", reading_a: "Texte", reading_b1: "Texte", anchor_kind: "word", anchor: [0, 0, 10, 10] }],
+  });
+  if (written.error || written.data?.[0]?.reason !== "recorded") throw new Error(`record_reading_a: ${written.error?.message ?? JSON.stringify(written.data)}`);
+  return path;
+}
+
 async function notebook(userId, name) {
   const made = await server.from("notebooks").insert({ user_id: userId, name }).select("id").single();
   if (made.error) throw new Error(`notebook: ${made.error.message}`);
@@ -197,6 +220,7 @@ async function callTransfer(headers, method = "POST", body = {}) {
   const aOwn = await notebook(a, ownName);
   await server.from("chapters").insert({ user_id: a, notebook_id: aShared, name: "Chapitre" });
   const aPages = [await addPage(a, aShared, true), await addPage(a, aOwn, true)];
+  await addReadingA(a, aPages[0].id);
   const before = (await server.rpc("page_allowance", { p_user_id: b })).data[0];
   check("the account found has used 1 page this month", before.used === 1 && before.is_anonymous === false, JSON.stringify(before));
   check("the anonymous account has 2 pages, 2 files and 2 charges", (await countOf("pages", "user_id", a)) === 2 && (await filesOf(a)).length === 2 && (await countOf("page_charges", "user_id", a)) === 2);
@@ -260,6 +284,14 @@ async function callTransfer(headers, method = "POST", body = {}) {
   check("the paths of the photos are those of the account found", JSON.stringify(images) === JSON.stringify(expectedPaths), JSON.stringify(images));
   check("the files of the account found are at those paths", JSON.stringify((await filesOf(b)).sort()) === JSON.stringify(expectedPaths));
   check("the texts and the charges moved", (await countOf("page_texts", "user_id", b)) === 3 && (await countOf("page_charges", "user_id", b)) === 3);
+  const movedAlto = `${b}/${aPages[0].id}/a.xml`;
+  check("no ALTO file is left for the account of the phone", (await filesOf(a, "alto")).length === 0);
+  check("the ALTO file is at the path of the account found", JSON.stringify(await filesOf(b, "alto")) === JSON.stringify([movedAlto]));
+  const readingA = await server.from("readings").select("user_id, alto_path").eq("page_id", aPages[0].id).eq("label", "A").single();
+  check("the reading A belongs to the account found and points to the moved ALTO", readingA.data?.user_id === b && readingA.data?.alto_path === movedAlto, JSON.stringify(readingA));
+  check("the positions moved", (await countOf("page_tokens", "user_id", b)) === 1);
+  const altoBytes = await server.storage.from("alto").download(movedAlto);
+  check("the moved ALTO file holds what was written", !altoBytes.error && (await altoBytes.data.text()).includes("<alto/>"));
   const after = (await server.rpc("page_allowance", { p_user_id: b })).data[0];
   check("the account found has now used 3 pages this month", after.used === 3 && after.max === 15, JSON.stringify(after));
   check("the other account is untouched", JSON.stringify([await rowsOf(c), (await filesOf(c)).length]) === JSON.stringify(cBefore));

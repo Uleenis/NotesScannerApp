@@ -227,7 +227,7 @@ Deno.test("the logs of an account deletion that fails hold the name of the error
     (world) => remove(world),
     (world) => {
       world.readyPage(ALICE);
-      world.failOn.add("removePhotos");
+      world.failOn.add("removeFiles:alto");
     },
   );
   assertNoAccountData(logged);
@@ -253,6 +253,7 @@ function transferScene(world: World): void {
   world.readyPage(ALICE);
   world.addNotebook(ALICE, CANARY_NOTEBOOK_NAME);
   world.pageTexts.set(PAGE_ID, { userId: ALICE, text: CANARY_PAGE_TEXT, pipelineVersion: "1" });
+  world.addReadingA(ALICE, PAGE_ID);
   world.readyPage(BOB, OTHER_PAGE_ID);
   world.readyPage(CAROL, "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
 }
@@ -277,7 +278,7 @@ Deno.test("the logs of an account transfer hold no id, no token, no e-mail, no f
 });
 
 Deno.test("the logs of an account transfer that fails hold the name of the error and nothing of its message [16]", async () => {
-  for (const name of ["copyPhoto", "moveRows", "removePhotos", "deleteUser"]) {
+  for (const name of ["copyFile:photos", "moveRows", "copyFile:alto", "removeFiles:photos", "removeFiles:alto", "removeFiles:models", "deleteUser"]) {
     const logged = await everythingLogged(
       (world) => transfer(world),
       (world) => {

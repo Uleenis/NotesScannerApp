@@ -5,6 +5,7 @@ import type {
   AccountStore,
   Allowance,
   Auth,
+  Bucket,
   Caller,
   CallerStore,
   DeleteAccountDeps,
@@ -97,10 +98,16 @@ export class World {
   notebooks = new Map<string, FakeNotebook>();
   chapters = new Map<string, FakeChapter>();
   anonymousUsers = new Set<string>();
-  copies: { from: string; to: string }[] = [];
+  copies: { bucket: Bucket; from: string; to: string }[] = [];
   failCopyAt: number | null = null;
-  loseCopies = false;
+  loseCopies = new Set<Bucket>();
+  onCopy: (() => void) | null = null;
+  beforeDeleteUser: (() => void) | null = null;
   photos = new Map<string, FakePhoto>();
+  alto = new Map<string, Uint8Array>();
+  models = new Map<string, Uint8Array>();
+  altoReadings: { userId: string; pageId: string; path: string }[] = [];
+  pageTokens: { userId: string; pageId: string; index: number }[] = [];
   charges: { userId: string; pageId: string }[] = [];
   chargeArguments: unknown[][] = [];
   claimArguments: unknown[][] = [];
@@ -150,6 +157,22 @@ export class World {
   readyPage(userId: string = ALICE, id: string = PAGE_ID): void {
     this.addPage(userId, "queued", id);
     this.addPhoto(userId, id);
+  }
+
+  addReadingA(userId: string, pageId: string, words: number = 2): string {
+    const path = `${userId}/${pageId}/a.xml`;
+    this.alto.set(path, new TextEncoder().encode("<alto/>"));
+    this.altoReadings.push({ userId, pageId, path });
+    for (let index = 0; index < words; index++) this.pageTokens.push({ userId, pageId, index });
+    return path;
+  }
+
+  files(bucket: Bucket): Map<string, unknown> {
+    return bucket === "photos" ? this.photos : bucket === "alto" ? this.alto : this.models;
+  }
+
+  filesOf(bucket: Bucket, userId: string): string[] {
+    return [...this.files(bucket).keys()].filter((path) => path.startsWith(`${userId}/`)).sort();
   }
 
   page(id: string = PAGE_ID): FakePage {
@@ -355,13 +378,12 @@ export class World {
 
   accounts(): AccountStore {
     return {
-      removePhotos: async (userId) => {
-        await this.tick("removePhotos");
-        for (const path of [...this.photos.keys()]) {
-          if (path.startsWith(`${userId}/`)) this.photos.delete(path);
-        }
+      removeFiles: async (bucket, userId) => {
+        await this.tick(`removeFiles:${bucket}`);
+        for (const path of this.filesOf(bucket, userId)) this.files(bucket).delete(path);
       },
       deleteUser: async (userId) => {
+        this.beforeDeleteUser?.();
         await this.tick("deleteUser");
         this.deletedUsers.push(userId);
         for (const [id, page] of [...this.pages]) {
@@ -375,6 +397,8 @@ export class World {
         this.readings = this.readings.filter((reading) => reading.userId !== userId);
         this.pageImages = this.pageImages.filter((image) => image.userId !== userId);
         this.charges = this.charges.filter((charge) => charge.userId !== userId);
+        this.altoReadings = this.altoReadings.filter((reading) => reading.userId !== userId);
+        this.pageTokens = this.pageTokens.filter((token) => token.userId !== userId);
       },
     };
   }
@@ -385,18 +409,20 @@ export class World {
         await this.tick("hasProcessingPage");
         return [...this.pages.values()].some((page) => page.userId === userId && page.status === "processing");
       },
-      listPhotos: async (userId) => {
-        await this.tick("listPhotos");
-        return [...this.photos.keys()].filter((path) => path.startsWith(`${userId}/`));
+      listFiles: async (bucket, userId) => {
+        await this.tick(`listFiles:${bucket}`);
+        return this.filesOf(bucket, userId);
       },
-      copyPhoto: async (from, to) => {
-        await this.tick("copyPhoto");
-        this.copies.push({ from, to });
+      copyFile: async (bucket, from, to) => {
+        await this.tick(`copyFile:${bucket}`);
+        this.copies.push({ bucket, from, to });
+        this.onCopy?.();
         if (this.failCopyAt === this.copies.length) throw new Error(`${CANARY_EXCEPTION} copy`);
-        const photo = this.photos.get(from);
-        if (!photo) throw new Error("the file to copy is not there");
-        if (this.loseCopies || this.photos.has(to)) return;
-        this.photos.set(to, { ...photo });
+        const files = this.files(bucket);
+        const file = files.get(from);
+        if (file === undefined) throw new Error("the file to copy is not there");
+        if (this.loseCopies.has(bucket) || files.has(to)) return;
+        files.set(to, file);
       },
       moveRows: async (fromId, toId): Promise<MoveResult> => {
         await this.tick("moveRows");
@@ -426,6 +452,12 @@ export class World {
           image.path = `${toId}${image.path.slice(fromId.length)}`;
         }
         for (const reading of this.readings) if (reading.userId === fromId) reading.userId = toId;
+        for (const reading of this.altoReadings) {
+          if (reading.userId !== fromId) continue;
+          reading.userId = toId;
+          reading.path = `${toId}${reading.path.slice(fromId.length)}`;
+        }
+        for (const token of this.pageTokens) if (token.userId === fromId) token.userId = toId;
         for (const text of this.pageTexts.values()) if (text.userId === fromId) text.userId = toId;
         for (const charge of this.charges) if (charge.userId === fromId) charge.userId = toId;
         return { ok: true, pages: mine.length, notebooksMerged: merged.size };

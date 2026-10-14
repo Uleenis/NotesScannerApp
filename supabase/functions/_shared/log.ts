@@ -9,6 +9,7 @@ export type LogEvent =
   | "manual_relaunch"
   | "page_abandoned"
   | "account_deleted"
+  | "account_files_left"
   | "account_transferred"
   | "unexpected_error";
 

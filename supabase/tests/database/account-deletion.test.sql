@@ -1,6 +1,6 @@
 begin;
 
-select plan(15);
+select plan(17);
 
 create function pg_temp.make_user(uid uuid, anon boolean default false) returns void
 language sql as $$
@@ -25,6 +25,9 @@ begin
   insert into public.page_texts (user_id, page_id, text, pipeline_version) values (uid, pg, 'text ' || tag, '1');
   insert into public.page_charges (user_id, page_id) values (uid, pg);
   insert into public.page_charges (user_id, page_id) values (uid, null);
+  perform public.record_reading_a(pg, uid, 'text ' || tag, 'medium', 'version', 1, uid::text || '/' || pg::text || '/a.xml', 'en',
+    jsonb_build_array(jsonb_build_object('token_index', 0, 'line_index', 0, 'text', 'text', 'reading_a', 'text', 'reading_b1', 'text', 'anchor_kind', 'word', 'anchor', jsonb_build_array(0, 0, 10, 10))));
+  insert into public.htr_models (user_id, name, version, status, storage_path) values (uid, 'personal', 1, 'candidate', uid::text || '/1.safetensors');
 end;
 $$;
 
@@ -37,7 +40,9 @@ language sql as $$
     + (select count(*) from public.page_images where user_id = uid)
     + (select count(*) from public.readings where user_id = uid)
     + (select count(*) from public.page_texts where user_id = uid)
-    + (select count(*) from public.page_charges where user_id = uid);
+    + (select count(*) from public.page_charges where user_id = uid)
+    + (select count(*) from public.page_tokens where user_id = uid)
+    + (select count(*) from public.htr_models where user_id = uid);
 $$;
 
 select pg_temp.make_user('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
@@ -48,8 +53,8 @@ select pg_temp.fill('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a');
 select pg_temp.fill('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'b');
 select pg_temp.fill('cccccccc-cccc-cccc-cccc-cccccccccccc', 'c');
 
-select is(pg_temp.rows_of('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 9::bigint, 'the account has a row in every table before it is deleted');
-select is(pg_temp.rows_of('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'), 9::bigint, 'the other account has its rows too');
+select is(pg_temp.rows_of('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 12::bigint, 'the account has a row in every table before it is deleted');
+select is(pg_temp.rows_of('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'), 12::bigint, 'the other account has its rows too');
 
 delete from auth.users where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
@@ -61,19 +66,21 @@ select is((select count(*) from public.page_images where user_id = 'aaaaaaaa-aaa
 select is((select count(*) from public.readings where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 0::bigint, 'the readings are gone');
 select is((select count(*) from public.page_texts where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 0::bigint, 'the texts are gone');
 select is((select count(*) from public.page_charges where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 0::bigint, 'the charges are gone');
+select is((select count(*) from public.page_tokens where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 0::bigint, 'the positions are gone');
+select is((select count(*) from public.htr_models where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 0::bigint, 'the models are gone');
 
-select is(pg_temp.rows_of('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'), 9::bigint, 'the rows of another account are untouched');
+select is(pg_temp.rows_of('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'), 12::bigint, 'the rows of another account are untouched');
 
 delete from auth.users where id = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 
 select is(pg_temp.rows_of('cccccccc-cccc-cccc-cccc-cccccccccccc'), 0::bigint, 'an anonymous account is deleted with all its rows too');
-select is(pg_temp.rows_of('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'), 9::bigint, 'the account kept is still complete');
+select is(pg_temp.rows_of('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'), 12::bigint, 'the account kept is still complete');
 
 select cmp_ok(
   (select count(*) from pg_constraint c
    where c.contype = 'f' and c.confrelid = 'auth.users'::regclass and c.connamespace = 'public'::regnamespace),
   '>=',
-  8::bigint,
+  10::bigint,
   'the tables of the public schema point to the accounts'
 );
 

@@ -14,7 +14,7 @@ sql() {
 }
 
 cleanup() {
-  sql -c "drop trigger if exists pause_probe on public.pages; drop function if exists public.pause_probe();" > /dev/null
+  sql -c "drop trigger if exists pause_probe on public.pages; drop function if exists public.pause_probe(); drop table if exists public.reading_a_tally;" > /dev/null
   sql -c "delete from auth.users where id::text like '${USER_PREFIX}%'; delete from public.anonymous_daily_counts where day = '${DAY}'; delete from public.email_monthly_counts where month = '2031-06-01';" > /dev/null
 }
 
@@ -125,5 +125,40 @@ sql -c "drop trigger pause_probe on public.pages; drop function public.pause_pro
 
 check "a reading that starts while the pages are being moved does not catch a page on its way" queued "$(sql -c "select status from public.pages where id = '${PAGE}'")"
 check "the page that raced a reading arrived in the account found" "${TO}" "$(sql -c "select user_id from public.pages where id = '${PAGE}'")"
+
+record_a() {
+  echo "select * from public.record_reading_a('$1', '$2', 'text', 'medium', 'version', 1, '$2/$1/a.xml', 'en', '[{\"token_index\": 0, \"line_index\": 0, \"text\": \"text\", \"reading_a\": \"text\", \"reading_b1\": \"text\", \"anchor_kind\": null, \"anchor\": null}]'::jsonb)"
+}
+
+FROM="$(id_of 000000000009)"
+TO="$(id_of 000000000010)"
+make_account 000000000009 true 1 false
+make_account 000000000010 false 0 false
+PAGE="$(sql -c "select id from public.pages where user_id = '${FROM}'")"
+( sql -c "begin; select * from public.transfer_account_rows('${FROM}', '${TO}'); select pg_sleep(3); commit;" > /dev/null ) &
+sleep 1
+REFUSAL="$(sql -c "$(record_a "${PAGE}" "${FROM}")" 2>&1 || true)"
+wait
+
+check "a reading A that waits for a transfer is refused, the page having changed owner" "f|page_not_found" "${REFUSAL}"
+check "a reading A that waits for a transfer writes no reading" 0 "$(sql -c "select count(*) from public.readings where page_id = '${PAGE}'")"
+check "a reading A that waits for a transfer writes no position" 0 "$(sql -c "select count(*) from public.page_tokens where page_id = '${PAGE}'")"
+
+OWNER="$(id_of 000000000011)"
+make_account 000000000011 false 1 false
+PAGE="$(sql -c "select id from public.pages where user_id = '${OWNER}'")"
+sql -c "drop table if exists public.reading_a_tally; create table public.reading_a_tally (recorded integer not null, refused integer not null);" > /dev/null
+install_script record_a <<EOS
+select r.recorded::integer as recorded, (r.reason = 'already_read')::integer as refused from ($(record_a "${PAGE}" "${OWNER}")) r \gset
+insert into public.reading_a_tally (recorded, refused) values (:recorded, :refused);
+EOS
+bench record_a 10
+
+check "ten simultaneous writes of A for one page all answer, none fails" 10 "$(sql -c "select count(*) from public.reading_a_tally")"
+check "of ten simultaneous writes of A for one page, one is recorded" 1 "$(sql -c "select coalesce(sum(recorded), 0) from public.reading_a_tally")"
+check "of ten simultaneous writes of A for one page, nine are refused as already read" 9 "$(sql -c "select coalesce(sum(refused), 0) from public.reading_a_tally")"
+sql -c "drop table public.reading_a_tally;" > /dev/null
+check "ten simultaneous writes of A for one page write one reading" 1 "$(sql -c "select count(*) from public.readings where page_id = '${PAGE}' and label = 'A'")"
+check "ten simultaneous writes of A for one page write its positions once" 1 "$(sql -c "select count(*) from public.page_tokens where page_id = '${PAGE}'")"
 
 exit "$failures"
