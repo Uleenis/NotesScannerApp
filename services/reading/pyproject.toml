@@ -4,7 +4,9 @@ version = "0.1.0"
 requires-python = "==3.13.*"
 dependencies = [
     "fastapi>=0.120",
+    "httpx2>=2.13",
     "kraken==7.1.1",
+    "lingua-language-detector>=2.1",
     "numpy==2.4.6",
     "pillow==12.3.0",
     "scikit-image==0.25.2",
@@ -17,7 +19,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "httpx2",
     "mypy>=1.18",
     "pip-audit>=2.9",
     "pytest>=8.4",

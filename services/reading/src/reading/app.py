@@ -9,6 +9,8 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from reading.alto import alto_of
+from reading.arbiter import PageArbiter
+from reading.contract import arbitration_of
 from reading.photo import MAX_BYTES, open_photo
 from reading.recognition import Box, PageReader, Reading
 from reading.refusal import RefusalError, busy, invalid_request, too_large, unsupported
@@ -16,7 +18,9 @@ from reading.secret import check_secret
 
 GATE_HEADER = "X-Reading-Secret"
 PHOTO_TYPE = "image/jpeg"
+JSON_TYPE = "application/json"
 MAX_IN_FLIGHT = 4
+MAX_ARBITRATION_BYTES = 12 * 1024 * 1024
 QUERY = re.compile(r"page_id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 
 log = logging.getLogger("reading")
@@ -50,20 +54,20 @@ def page_of(request: Request) -> str:
     return found.group(1)
 
 
-def check_type(request: Request) -> None:
+def check_type(request: Request, expected: str = PHOTO_TYPE) -> None:
     types = request.headers.getlist("content-type")
-    if types != [PHOTO_TYPE]:
+    if types != [expected]:
         raise unsupported()
 
 
-async def body_of(request: Request) -> bytes:
+async def body_of(request: Request, limit: int = MAX_BYTES) -> bytes:
     lengths = request.headers.getlist("content-length")
-    if any(not length.isdigit() or int(length) > MAX_BYTES for length in lengths):
+    if any(not length.isdigit() or int(length) > limit for length in lengths):
         raise too_large()
     received = bytearray()
     async for chunk in request.stream():
         received += chunk
-        if len(received) > MAX_BYTES:
+        if len(received) > limit:
             raise too_large()
     return bytes(received)
 
@@ -97,10 +101,11 @@ def refusal(page_id: str | None, refused: RefusalError) -> JSONResponse:
     return JSONResponse({"error": refused.code}, status_code=refused.status)
 
 
-def create_app(secret: str, reader: PageReader, max_in_flight: int = MAX_IN_FLIGHT) -> FastAPI:
+def create_app(secret: str, reader: PageReader, arbiter: PageArbiter, max_in_flight: int = MAX_IN_FLIGHT) -> FastAPI:
     check_secret(secret)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     in_flight = [0]
+    arbitrating = [0]
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -141,6 +146,34 @@ def create_app(secret: str, reader: PageReader, max_in_flight: int = MAX_IN_FLIG
             total,
         )
         return JSONResponse(answer(page_id, reading, alto))
+
+    @app.post("/arbitrate")
+    async def arbitrate(request: Request) -> JSONResponse:
+        if arbitrating[0] >= max_in_flight:
+            return refusal(None, busy())
+        arbitrating[0] += 1
+        try:
+            return await arbitrated(request)
+        finally:
+            arbitrating[0] -= 1
+
+    async def arbitrated(request: Request) -> JSONResponse:
+        page_id = None
+        try:
+            if request.url.query:
+                raise invalid_request()
+            check_type(request, JSON_TYPE)
+            arbitration = await run_in_threadpool(arbitration_of, await body_of(request, MAX_ARBITRATION_BYTES))
+            page_id = arbitration.page_id
+            outcome = await run_in_threadpool(arbiter.arbitrate, arbitration)
+        except RefusalError as refused:
+            return refusal(page_id, refused)
+        except Exception:
+            log.error("failed page=%s code=arbitration_failed", page_id or "-")
+            return JSONResponse({"error": "arbitration_failed"}, status_code=500)
+        if outcome.reason != "recorded":
+            return JSONResponse({"error": outcome.reason}, status_code=409)
+        return JSONResponse({"page_id": page_id, "outcome": outcome.reason, "tokens": outcome.tokens})
 
     app.add_middleware(SecretGate, secret=secret)
     return app
