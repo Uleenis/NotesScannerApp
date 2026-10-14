@@ -147,7 +147,8 @@ export class World {
   serviceConfigured = false;
   recognizeOutcomes: (Recognized | "hold")[] = [];
   arbitrateOutcomes: Arbitrated[] = [];
-  recognitions: { pageId: string; image: Uint8Array; signal: AbortSignal }[] = [];
+  recognitions: { pageId: string; image: Uint8Array; signal: AbortSignal; timeoutMs: number | undefined }[] = [];
+  arbitrateTimeouts: (number | undefined)[] = [];
   arbitrations: Arbitration[] = [];
   held: ((outcome: Recognized | null) => void)[] = [];
   recognizeDurationMs = 26_000;
@@ -504,9 +505,9 @@ export class World {
 
   readingService(): ReadingService {
     return {
-      recognize: async (pageId, image, signal): Promise<Recognized> => {
+      recognize: async (pageId, image, signal, timeoutMs): Promise<Recognized> => {
         this.calls.push("recognize");
-        this.recognitions.push({ pageId, image, signal });
+        this.recognitions.push({ pageId, image, signal, timeoutMs });
         const outcome = this.recognizeOutcomes.shift() ?? { ok: true, answer: fakeAnswer(pageId) };
         if (outcome === "hold") {
           const released = await new Promise<Recognized | null>((resolve) => {
@@ -520,9 +521,10 @@ export class World {
         await Promise.resolve();
         return signal.aborted ? CANCELLED : outcome;
       },
-      arbitrate: async (input): Promise<Arbitrated> => {
+      arbitrate: async (input, _signal, timeoutMs): Promise<Arbitrated> => {
         this.calls.push("arbitrate");
         this.arbitrations.push(input);
+        this.arbitrateTimeouts.push(timeoutMs);
         await Promise.resolve();
         this.clock += this.arbitrateDurationMs;
         return this.arbitrateOutcomes.shift() ?? { ok: true, tokens: 3 };

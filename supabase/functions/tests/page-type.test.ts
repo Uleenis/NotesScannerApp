@@ -50,3 +50,9 @@ Deno.test("Latin letters with accents and a few foreign letters stay text", () =
 Deno.test("math wins over the script: a page of formulas in Greek letters is math", () => {
   assertEquals(pageTypeOf("$\\alpha$ αβγδεζηθ"), "math");
 });
+
+Deno.test("a long run of opening delimiters with no closing one is decided at once", () => {
+  const started = performance.now();
+  assertEquals(pageTypeOf("\\[ \\( ".repeat(100_000)), "text");
+  assertEquals(performance.now() - started < 1_000, true);
+});

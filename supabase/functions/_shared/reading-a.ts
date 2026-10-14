@@ -5,6 +5,8 @@ import type { ReadingService, ServiceFailure } from "./reading-service.ts";
 
 const ATTEMPTS = 2;
 
+export const A_BUDGET_MS = 140_000;
+
 type Clock = { now: () => number };
 
 export type ReadingADeps = {
@@ -27,14 +29,19 @@ function failureFields(failure: ServiceFailure) {
   return { kind: failure.kind, status: failure.status, code: failure.code };
 }
 
-async function recognize(deps: ReadingADeps, pageId: string, image: Uint8Array, signal: AbortSignal): Promise<Recognition> {
+function triedAgain(failure: ServiceFailure): boolean {
+  return retryable(failure) && failure.kind !== "timeout";
+}
+
+async function recognize(deps: ReadingADeps, pageId: string, image: Uint8Array, signal: AbortSignal, deadline: number): Promise<Recognition> {
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     const started = deps.clock.now();
-    const result = await deps.service.recognize(pageId, image, signal);
+    if (started >= deadline) return null;
+    const result = await deps.service.recognize(pageId, image, signal, deadline - started);
     if (result.ok) return { answer: result.answer, durationMs: deps.clock.now() - started };
     if (result.failure.kind === "cancelled") return null;
     deps.log.event("recognize_attempt_failed", { pageId, attempt, ...failureFields(result.failure) });
-    if (!retryable(result.failure)) return null;
+    if (!triedAgain(result.failure)) return null;
   }
   return null;
 }
@@ -48,13 +55,23 @@ async function arbitrate(
   sentAt: number,
 ): Promise<void> {
   const signal = new AbortController().signal;
+  const deadline = sentAt + A_BUDGET_MS;
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    const result = await deps.service.arbitrate({ pageId, userId, b1, answer: recognition.answer, durationMs: recognition.durationMs }, signal);
+    const left = deadline - deps.clock.now();
+    if (left <= 0) {
+      deps.log.event("a_abandoned", { pageId, code: "out_of_time" });
+      return;
+    }
+    const result = await deps.service.arbitrate({ pageId, userId, b1, answer: recognition.answer, durationMs: recognition.durationMs }, signal, left);
     if (result.ok) {
       deps.log.event("a_done", { pageId, durationMs: deps.clock.now() - sentAt, tokens: result.tokens ?? undefined });
       return;
     }
     deps.log.event("arbitrate_attempt_failed", { pageId, attempt, ...failureFields(result.failure) });
+    if (attempt > 1 && result.failure.code === "already_read") {
+      deps.log.event("a_done", { pageId, durationMs: deps.clock.now() - sentAt, code: "already_read" });
+      return;
+    }
     if (!retryable(result.failure)) {
       deps.log.event("a_abandoned", { pageId, code: result.failure.code ?? "arbitrate_refused" });
       return;
@@ -71,7 +88,7 @@ export function startReadingA(deps: ReadingADeps, userId: string, pageId: string
   });
   const sentAt = deps.clock.now();
   deps.log.event("a_sent", { pageId });
-  const recognition = recognize(deps, pageId, image, controller.signal).catch((error: unknown): Recognition => {
+  const recognition = recognize(deps, pageId, image, controller.signal, sentAt + A_BUDGET_MS).catch((error: unknown): Recognition => {
     deps.log.event("unexpected_error", { errorName: errorName(error) });
     return null;
   });

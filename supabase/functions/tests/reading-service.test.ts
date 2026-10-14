@@ -154,8 +154,8 @@ Deno.test("a half or unsafe configuration of the service stops the function", ()
   for (const values of [
     { READING_URL: BASE },
     { READING_SECRET: SECRET },
-    { READING_URL: BASE, READING_SECRET: "short" },
-    { READING_URL: BASE, READING_SECRET: ` ${SECRET}` },
+    { READING_URL: BASE, READING_SECRET: "short", SUPABASE_URL: LOCAL_STACK },
+    { READING_URL: BASE, READING_SECRET: ` ${SECRET}`, SUPABASE_URL: LOCAL_STACK },
     { READING_URL: "http://reading.example.com", READING_SECRET: SECRET },
     { READING_URL: "ftp://notes-reading", READING_SECRET: SECRET },
     { READING_URL: "https://user:pass@reading.example.com", READING_SECRET: SECRET },
@@ -167,14 +167,54 @@ Deno.test("a half or unsafe configuration of the service stops the function", ()
   }
 });
 
-Deno.test("the service is reached over https, or over http on the machine or the network of the stack", () => {
-  for (const url of ["https://reading.example.com", "https://reading.example.com/", "http://localhost:54340", "http://127.0.0.1:54340", "http://[::1]:54340", BASE, `${BASE}/`]) {
-    assert(readingServiceFrom(env({ READING_URL: url, READING_SECRET: SECRET })) !== null, url);
+const LOCAL_STACK = "http://kong:8000";
+
+Deno.test("the service is reached over https, or over http on the machine or the network of the local stack", () => {
+  for (const url of ["https://reading.example.com", "https://reading.example.com/"]) {
+    assert(readingServiceFrom(env({ READING_URL: url, READING_SECRET: SECRET, SUPABASE_URL: "https://project.supabase.co" })) !== null, url);
   }
+  for (const url of ["http://localhost:54340", "http://127.0.0.1:54340", "http://[::1]:54340", BASE, `${BASE}/`]) {
+    assert(readingServiceFrom(env({ READING_URL: url, READING_SECRET: SECRET, SUPABASE_URL: LOCAL_STACK })) !== null, url);
+  }
+});
+
+Deno.test("plain http is refused outside the local stack", () => {
+  for (const supabaseUrl of ["https://project.supabase.co", undefined]) {
+    assertThrows(() => readingServiceFrom(env({ READING_URL: BASE, READING_SECRET: SECRET, SUPABASE_URL: supabaseUrl })), Error);
+  }
+});
+
+Deno.test("a proxy of the environment would see the secret over http: the function does not start", () => {
+  for (const name of ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]) {
+    assertThrows(() => readingServiceFrom(env({ READING_URL: BASE, READING_SECRET: SECRET, SUPABASE_URL: LOCAL_STACK, [name]: "http://127.0.0.1:3128" })), Error, undefined, name);
+  }
+  for (const noProxy of ["notes-reading", "localhost,notes-reading", "*", ".notes-reading"]) {
+    const values = { READING_URL: BASE, READING_SECRET: SECRET, SUPABASE_URL: LOCAL_STACK, HTTP_PROXY: "http://127.0.0.1:3128", NO_PROXY: noProxy };
+    assert(readingServiceFrom(env(values)) !== null, noProxy);
+  }
+  assert(readingServiceFrom(env({ READING_URL: "https://reading.example.com", READING_SECRET: SECRET, HTTPS_PROXY: "http://127.0.0.1:3128" })) !== null);
 });
 
 Deno.test("a trailing slash in the address does not change the routes", async () => {
   const { fetch, seen } = recorder(() => reply(200, answerOf()));
   await createReadingService({ url: `${BASE}/`, secret: SECRET, fetch }).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal);
   assertEquals(seen[0].url.pathname, "/recognize");
+});
+
+Deno.test("the time left to A shortens a call, never lengthens it", async () => {
+  const hanging = ((_input: string | URL | Request, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    })) as typeof fetch;
+  const started = Date.now();
+  assertEquals(await service(hanging).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal, 10), { ok: false, failure: { kind: "timeout" } });
+  assertEquals(
+    await service(hanging).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, answer: answerOf(), durationMs: 1 }, new AbortController().signal, 10),
+    { ok: false, failure: { kind: "timeout" } },
+  );
+  assert(Date.now() - started < 5_000);
+  assertEquals(await service(hanging, { recognizeTimeoutMs: 10 }).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal, 60_000), {
+    ok: false,
+    failure: { kind: "timeout" },
+  });
 });

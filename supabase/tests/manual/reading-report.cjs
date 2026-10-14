@@ -52,9 +52,16 @@ async function report(admin, filter) {
   const lines = [];
   for (const page of pages) {
     const readings = await rows(admin.from("readings").select("label, duration_ms, alto_path").eq("page_id", page.id));
-    const anchors = await rows(admin.from("page_tokens").select("anchor_kind").eq("page_id", page.id));
     const a = readings.find((reading) => reading.label === "A");
-    const count = (kind) => anchors.filter((token) => token.anchor_kind === kind).length;
+    const count = async (kind) => {
+      let query = admin.from("page_tokens").select("token_index", { count: "exact", head: true }).eq("page_id", page.id);
+      query = kind === undefined ? query : kind === null ? query.is("anchor_kind", null) : query.eq("anchor_kind", kind);
+      const { count: found, error } = await query;
+      if (error) {
+        throw error;
+      }
+      return found ?? 0;
+    };
     lines.push({
       page: page.id,
       status: page.status,
@@ -63,10 +70,10 @@ async function report(admin, filter) {
       b1: readings.some((reading) => reading.label === "B1") ? "yes" : "no",
       a: a ? `yes (${a.duration_ms} ms)` : "no",
       alto: a?.alto_path ? "yes" : "no",
-      tokens: anchors.length,
-      word: count("word"),
-      line: count("line"),
-      none: count(null),
+      tokens: await count(undefined),
+      word: await count("word"),
+      line: await count("line"),
+      none: await count(null),
     });
   }
   return lines;

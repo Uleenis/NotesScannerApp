@@ -1,5 +1,6 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import { createLogger } from "../_shared/log.ts";
+import { A_BUDGET_MS } from "../_shared/reading-a.ts";
 import { handleReadPage } from "../read-page/handler.ts";
 import { handleRelaunchPage } from "../relaunch-page/handler.ts";
 import {
@@ -146,6 +147,65 @@ Deno.test("a failed recognition is tried once more, and the second try is used [
   assertEquals(world.recognitions.length, 2);
   assertEquals(world.arbitrations.length, 1);
   assert(events(world).includes("a_done"));
+});
+
+Deno.test("a recognition that timed out is not tried again: the service gave up at its own limit", async () => {
+  const world = withService();
+  world.readyPage();
+  world.recognizeOutcomes.push({ ok: false, failure: { kind: "timeout" } });
+  await call(world);
+  await world.settle();
+  assertEquals(world.recognitions.length, 1);
+  assertEquals(world.arbitrations, []);
+  assertEquals(world.logs.at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "recognize_failed" } });
+});
+
+Deno.test("A keeps within its budget from the send: each call gets the time left", async () => {
+  const world = withService();
+  world.readyPage();
+  world.geminiDurationMs = 0;
+  world.recognizeOutcomes.push("hold");
+  await call(world);
+  world.release();
+  await world.settle();
+  assertEquals(world.recognitions[0].timeoutMs, A_BUDGET_MS);
+  assertEquals(world.arbitrateTimeouts, [A_BUDGET_MS - world.recognizeDurationMs]);
+});
+
+Deno.test("no second recognition starts once the budget of A is spent", async () => {
+  const world = withService();
+  world.readyPage();
+  world.recognizeDurationMs = A_BUDGET_MS;
+  world.recognizeOutcomes.push("hold");
+  await call(world);
+  world.release({ ok: false, failure: { kind: "http_error", status: 503, code: "busy" } });
+  await world.settle();
+  assertEquals(world.recognitions.length, 1);
+  assertEquals(world.arbitrations, []);
+  assertEquals(world.logs.at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "recognize_failed" } });
+});
+
+Deno.test("no arbitration starts once the budget of A is spent", async () => {
+  const world = withService();
+  world.readyPage();
+  world.recognizeDurationMs = A_BUDGET_MS;
+  world.recognizeOutcomes.push("hold");
+  await call(world);
+  world.release();
+  await world.settle();
+  assertEquals(world.arbitrations, []);
+  assertEquals(world.logs.at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "out_of_time" } });
+});
+
+Deno.test("already_read on the second arbitration means the first one wrote A", async () => {
+  const world = withService();
+  world.readyPage();
+  world.arbitrateOutcomes.push({ ok: false, failure: { kind: "timeout" } }, { ok: false, failure: { kind: "http_error", status: 409, code: "already_read" } });
+  await call(world);
+  await world.settle();
+  assertEquals(world.arbitrations.length, 2);
+  assertEquals(world.logs.at(-1)?.event, "a_done");
+  assertEquals(world.logs.at(-1)?.fields.code, "already_read");
 });
 
 Deno.test("a refusal of /recognize is not tried again [11]", async () => {

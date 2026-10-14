@@ -36,8 +36,8 @@ export type Arbitration = { pageId: string; userId: string; b1: string; answer: 
 export type Arbitrated = { ok: true; tokens: number | null } | { ok: false; failure: ServiceFailure };
 
 export type ReadingService = {
-  recognize: (pageId: string, image: Uint8Array, signal: AbortSignal) => Promise<Recognized>;
-  arbitrate: (arbitration: Arbitration, signal: AbortSignal) => Promise<Arbitrated>;
+  recognize: (pageId: string, image: Uint8Array, signal: AbortSignal, timeoutMs?: number) => Promise<Recognized>;
+  arbitrate: (arbitration: Arbitration, signal: AbortSignal, timeoutMs?: number) => Promise<Arbitrated>;
 };
 
 type ServiceOptions = {
@@ -68,7 +68,15 @@ function parsed(text: string): Record<string, unknown> | null {
   }
 }
 
-function originOf(url: string): string {
+const HTTP_PROXY_NAMES = ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
+
+function bypassed(host: string, noProxy: string): boolean {
+  return noProxy.split(",").map((entry) => entry.trim().toLowerCase().replace(/^\./, "")).some((entry) =>
+    entry === "*" || (entry.length > 0 && (host === entry || host.endsWith(`.${entry}`)))
+  );
+}
+
+function originOf(url: string, get: (name: string) => string | undefined): string {
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
@@ -78,10 +86,16 @@ function originOf(url: string): string {
   if (parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash || parsedUrl.pathname !== "/") {
     throw new ReadingServiceConfigError("READING_URL must be an origin alone");
   }
+  if (parsedUrl.protocol === "https:") return parsedUrl.origin;
   const host = parsedUrl.hostname;
   const local = LOCAL_HOSTS.includes(host) || (!host.includes(".") && !host.includes(":") && host.length > 0);
-  if (parsedUrl.protocol !== "https:" && !(parsedUrl.protocol === "http:" && local)) {
-    throw new ReadingServiceConfigError("READING_URL must use https");
+  const stackIsLocal = (get("SUPABASE_URL") ?? "").startsWith("http://");
+  if (parsedUrl.protocol !== "http:" || !local || !stackIsLocal) {
+    throw new ReadingServiceConfigError("READING_URL must use https outside the local stack");
+  }
+  const noProxy = get("NO_PROXY") ?? get("no_proxy") ?? "";
+  if (HTTP_PROXY_NAMES.some((name) => get(name)) && !bypassed(host, noProxy)) {
+    throw new ReadingServiceConfigError("a proxy would see READING_SECRET over http");
   }
   return parsedUrl.origin;
 }
@@ -124,6 +138,10 @@ async function refusalOf(response: Response): Promise<ServiceFailure> {
     : { kind: "http_error", status: response.status };
 }
 
+function within(limit: number, given: number | undefined): number {
+  return given === undefined ? limit : Math.max(1, Math.min(limit, given));
+}
+
 type Sent = { response: Response; signal: AbortSignal } | { failure: ServiceFailure };
 
 function failureOfThrown(signal: AbortSignal, caller: AbortSignal): ServiceFailure {
@@ -161,9 +179,9 @@ export function createReadingService(options: ServiceOptions): ReadingService {
   }
 
   return {
-    recognize: async (pageId, image, caller) => {
+    recognize: async (pageId, image, caller, timeoutMs) => {
       const query = new URLSearchParams({ page_id: pageId });
-      const sent = await post(`/recognize?${query}`, "image/jpeg", image.slice(), options.recognizeTimeoutMs ?? RECOGNIZE_TIMEOUT_MS, caller);
+      const sent = await post(`/recognize?${query}`, "image/jpeg", image.slice(), within(options.recognizeTimeoutMs ?? RECOGNIZE_TIMEOUT_MS, timeoutMs), caller);
       if ("failure" in sent) return { ok: false, failure: sent.failure };
       if (sent.response.status !== 200) return { ok: false, failure: await refusalOf(sent.response) };
       const answer = await bodyOf(sent, caller);
@@ -171,7 +189,7 @@ export function createReadingService(options: ServiceOptions): ReadingService {
       if (parsed(answer)?.page_id !== pageId) return { ok: false, failure: { kind: "bad_response" } };
       return { ok: true, answer };
     },
-    arbitrate: async (arbitration, caller) => {
+    arbitrate: async (arbitration, caller, timeoutMs) => {
       const body = [
         `{"page_id":${JSON.stringify(arbitration.pageId)}`,
         `"user_id":${JSON.stringify(arbitration.userId)}`,
@@ -179,7 +197,7 @@ export function createReadingService(options: ServiceOptions): ReadingService {
         `"duration_ms":${JSON.stringify(arbitration.durationMs)}`,
         `"a":${arbitration.answer}}`,
       ].join(",");
-      const sent = await post("/arbitrate", "application/json", body, options.arbitrateTimeoutMs ?? ARBITRATE_TIMEOUT_MS, caller);
+      const sent = await post("/arbitrate", "application/json", body, within(options.arbitrateTimeoutMs ?? ARBITRATE_TIMEOUT_MS, timeoutMs), caller);
       if ("failure" in sent) return { ok: false, failure: sent.failure };
       if (sent.response.status !== 200) return { ok: false, failure: await refusalOf(sent.response) };
       const text = await bodyOf(sent, caller);
@@ -204,5 +222,5 @@ export function readingServiceFrom(get: (name: string) => string | undefined, fe
   if (secret.length < MIN_SECRET_LENGTH || secret.trim() !== secret) {
     throw new ReadingServiceConfigError("READING_SECRET is too short or has spaces around it");
   }
-  return createReadingService({ url: originOf(url), secret, fetch: fetchImpl });
+  return createReadingService({ url: originOf(url, get), secret, fetch: fetchImpl });
 }

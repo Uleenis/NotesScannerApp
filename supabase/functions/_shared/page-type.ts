@@ -15,15 +15,22 @@ const MATH_COMMANDS = [
   "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
 ];
 
-const DELIMITED = [/\$[^$]+\$/, /\\\[[\s\S]*?\\\]/, /\\\([\s\S]*?\\\)/];
+const DOLLARS = /\$[^$]+\$/;
+
+const PAIRS: [string, string][] = [["\\[", "\\]"], ["\\(", "\\)"]];
 
 const COMMAND = new RegExp(`\\\\(?:${MATH_COMMANDS.join("|")})(?![A-Za-z])`);
 
 const LETTER = /\p{L}/gu;
 const LATIN_LETTER = /\p{Script=Latin}/gu;
 
+function closes(text: string, open: string, close: string): boolean {
+  const start = text.indexOf(open);
+  return start >= 0 && text.indexOf(close, start + open.length) >= 0;
+}
+
 function holdsLatex(text: string): boolean {
-  return DELIMITED.some((pattern) => pattern.test(text)) || COMMAND.test(text);
+  return DOLLARS.test(text) || PAIRS.some(([open, close]) => closes(text, open, close)) || COMMAND.test(text);
 }
 
 function mostlyNotLatin(text: string): boolean {
