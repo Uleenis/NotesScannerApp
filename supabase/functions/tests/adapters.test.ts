@@ -98,12 +98,13 @@ Deno.test("a claim that changes no row is not a claim", async () => {
   assertEquals(await createServerStore(KEYS, fetch).claimForReading(ALICE, PAGE_ID, { status: "queued", queueReason: null, retryCount: 0 }), false);
 });
 
-Deno.test("marking a page read filters by owner and by the processing state", async () => {
+Deno.test("marking a page read filters by owner and by the processing state, and writes its type in the same update", async () => {
   const { fetch, calls } = stub(() => [{ id: PAGE_ID }]);
-  await createServerStore(KEYS, fetch).markRead(ALICE, PAGE_ID, "2026-10-05T10:00:00.000Z");
+  await createServerStore(KEYS, fetch).markRead(ALICE, PAGE_ID, "2026-10-05T10:00:00.000Z", "math");
+  assertEquals(calls.length, 1);
   assertEquals(calls[0].url.searchParams.get("user_id"), `eq.${ALICE}`);
   assertEquals(calls[0].url.searchParams.get("status"), "eq.processing");
-  assertEquals(calls[0].body, { status: "read", read_at: "2026-10-05T10:00:00.000Z", queue_reason: null });
+  assertEquals(calls[0].body, { status: "read", read_at: "2026-10-05T10:00:00.000Z", queue_reason: null, page_type: "math" });
 });
 
 Deno.test("releasing a page filters by owner and by the processing state and writes the relaunch count", async () => {
@@ -129,7 +130,7 @@ Deno.test("a write that changes no row is an error", async () => {
   const { fetch } = stub(() => []);
   const store = createServerStore(KEYS, fetch);
   for (const write of [
-    () => store.markRead(ALICE, PAGE_ID, "2026-10-05T10:00:00.000Z"),
+    () => store.markRead(ALICE, PAGE_ID, "2026-10-05T10:00:00.000Z", "text"),
     () => store.releaseToQueue(ALICE, PAGE_ID, "read_error", 1),
     () => store.markFailed(ALICE, PAGE_ID, 3),
     () => store.abandonQueued(ALICE, PAGE_ID),

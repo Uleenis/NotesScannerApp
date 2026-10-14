@@ -6,7 +6,7 @@ Paths below are from the repository root.
 
 - **Spec:** `../../02 Design/Spec tranche 2.md`, validated by the owner on 12/10/2026.
 - **Plan:** `../../02 Design/Plan tranche 2.md`, validated by the owner on 12/10/2026, with its "Points à trancher" as proposed.
-- **Next branch:** `t2/read-page`.
+- **Next branch:** `t2/rules`, after Pause 2.
 - **Pauses:** after branches 3, 6, 9 and 12, in `../Tranche 2/Pause 1.md` to `Pause 4.md`.
 - **Measures:** scripts and results in `../../04 Testing/T2 mesures/`, outside the repository.
 
@@ -18,8 +18,8 @@ Paths below are from the repository root.
 | 2 | `t2/segmentation` | 1 | no | Claude | merged |
 | 3 | `t2/recognition` | 1 | yes | Claude | merged |
 | 4 | `t2/schema` | 2 | yes | Claude | merged |
-| 5 | `t2/arbitrate` | 2 | yes | Claude | done |
-| 6 | `t2/read-page` | 2 | yes | Claude | to do |
+| 5 | `t2/arbitrate` | 2 | yes | Claude | merged |
+| 6 | `t2/read-page` | 2 | yes | Claude | done |
 | 7 | `t2/rules` | 3 | no | Claude | to do |
 | 8 | `t2/replay` | 3 | no | Claude | to do |
 | 9 | `t2/ner` | 3 | no | Claude | to do |
@@ -67,13 +67,31 @@ Paths below are from the repository root.
 - **Gate open without rules** (branch 5): until branch 7 the service has no rules; a gate open would write B1 without a rule, which cannot happen before slice 5.
 - **Measure of branch 5**: a real call, from the service in Docker to the local stack, on `Jour 15`: `/recognize` 15 lines, 106 words, 26 s; `/arbitrate` 0.5 s, A written with 109 positions (108 anchored to a word, 1 to a line), language `fr`, one ALTO file, the one recorded; a second call answered 409 `already_read` and a math page 409 `not_text`, both their files erased. The account of the probe was removed afterwards.
 
+- **Type of a page** (branch 6): `math` when B1 holds two `$` around anything (the plan's "Points à trancher": `5$ et 10$` is math, kept as is; the switch of branch 10 gives it back to text), `\[…\]`, `\(…\)` or a math command of the list in `_shared/page-type.ts` (fractions, sums, integrals, limits, relations, arrows, sets, `\mathbb` and kin, functions, Greek letters, `\begin`, `\left`); another backslash word (`\textbf`, a Windows path) is not math. `unsupported_script` when B1 has strictly more letters outside the Latin script than in it (Unicode script property); a tie or no letter at all is text. Math is decided first. The type is written in the same update as `read`.
+- **Timing of A** (branch 6, from the code review): a budget of 140 s from the send, so that A fits the 150 s wall clock of a hosted Edge Function on the free plan (400 s on paid plans; locally `per_worker` keeps the worker). `/recognize` gets 135 s at most and `/arbitrate` 30 s, each within the time left; no attempt starts once the budget is spent (`a_abandoned out_of_time`). The corpus reads in 36 s at most.
+- **Retries of A** (branch 6): one more try on a network failure, 429 or 5xx; never on a timeout of `/recognize` (the service gives up at 120 s and still holds its one-page lock), on 400, 401, 409, 413, 415, 422, a redirect, or an answer that is not a JSON object for the page or is above 11 MB. A second `/arbitrate` answered `already_read` means the first one wrote A: logged `a_done` with code `already_read`.
+- **Transfer during A** (branch 6, the note of branch 5): the page is left without A. `read` comes before A, so `transfer-account` is not held back; the late `/arbitrate` names the old owner, `record_reading_a` answers `page_not_found`, the service erases its ALTO, and the page keeps B1 alone (`a_abandoned page_not_found`). Retrying with the new owner would mean reading the page again for a window of about 30 s after a sign-in; not worth it.
+- **The answer of `/recognize`** (branch 6) is passed on as it came: its text is put as is in the body of `/arbitrate`, after checking that it is one JSON object for the page. Parsing and writing it again in JavaScript would turn a confidence of `1.0` into `1`.
+- **Configuration of the service** (branch 6, partly from the security review): `READING_URL` and `READING_SECRET` together or not at all (B1 alone); the secret 32 characters at least, no space around; the address an origin alone, https, or plain http only when `SUPABASE_URL` is itself http (the local stack) and to `localhost`, `127.0.0.1`, `::1` or a name without a dot, with no `HTTP_PROXY` or `ALL_PROXY` of the environment on the way unless `NO_PROXY` covers the host; no redirect followed. Otherwise the function does not start, B1 included: a half configuration is a mistake to see at once. The code review asked whether a bad configuration should rather leave B1 alone: left to the owner (below).
+- **Tests** (branch 6): the tests of slice 1 run without a service, as production does until the end of slice 4; `read-page-a.test.ts` runs the same flows with one.
+- **Measure of branch 6**: `read-page`'s own code, run against the local stack with the service in Docker and Gemini replaced by the ground truth of `Jour 15` (5 s), answered `read` after 5.1 s with the type `text`; A followed in the background, written after 26.8 s: 15 lines, 108 positions all anchored to a word, language `fr`, one ALTO file. The same reading with the real Gemini, launched by `read-photo.cjs` through `functions serve`, could not be done on 14/10: Gemini answered 503 to every attempt from 17:40 to 18:50 (eight readings, both tries each); each time the page went back to the queue and A was cancelled (`a_cancelled b1_failed`), as it should. To do at Pause 2.
+- **Control scripts** (branch 6) in `supabase/tests/manual/` (`scripts/` is guarded): `read-photo.cjs` reads one photo for real through `read-page` on the local stack and waits for A; `reading-report.cjs` prints, without text, the status, type, language, B1, A and positions by kind of anchor of the last pages.
+
 ## For the owner, set aside by branch 5
 
 - **The service key lives in the process that decodes photos** (security review): the plan has the service write A with the service key. The same process decodes JPEGs from every user (Pillow, libjpeg, Kraken, torch): a code-execution flaw there would yield a key that bypasses every rule of the database, where before it yielded only the reading secret. Ways to narrow it, each a departure from the plan for the owner to decide before Cloud Run (end of slice 4): `/arbitrate` returns positions, language and ALTO and `read-page`, which already holds the key, uploads and writes; or the service gets a credential allowed only `record_reading_a`, `htr_models` and the `alto` bucket; or `/recognize` and `/arbitrate` run as two services, only the one that never sees an image holding the key.
-- **ALTO files left behind are never swept** (security review): a file left after an ambiguous failure, or uploaded after a deletion's last erase of `alto`, stays until the account is deleted or transferred. A periodic server sweep of `alto` files no `readings.alto_path` names, older than a delay, would close it.
+- **ALTO files left behind are never swept** (security review): a file left after an ambiguous failure, or uploaded after a deletion's last erase of `alto`, stays until the account is deleted or transferred. A periodic server sweep of `alto` files no `readings.alto_path` names, older than a delay, would close it. Branch 6 makes the window real: A runs after `read`, so a transfer or a deletion can come while A is under way (security review of branch 6).
+
+## For the owner, set aside by branch 6
+
+- **A bad configuration of the service stops the reading altogether** (code review): `read-page` and `relaunch-page` do not start with half of `READING_URL`/`READING_SECRET`, a short secret, plain http outside the local stack or a proxy on the way, so B1 stops too. The other way: log it and read with B1 alone. Kept closed, as `RELAUNCH_SECRET`; say if you prefer the other.
+- **Do not deploy `read-page` or `relaunch-page` before the migrations of slice 2** (code review): they now write `pages.page_type`, which production does not have; deployed alone, no page would be read. The plan deploys nothing before the end of slice 4.
+- **A cancelled recognition goes on in the service** (security review, not checked): the function stops waiting, but the service may finish the reading it started, holding its one-page lock. A few pages at once can then make it answer `busy`, retried once, then B1 alone. Cloud Run's concurrency and instance count settle it at the end of slice 4.
+- **Pages typed math by two prices** (code review): kept as the plan decided (`5$ et 10$` is math); the code review proposed asking a non-space after the opening `$` and before the closing one. Say if you want it.
 
 ## Notes for the next branches
 
+- Branch 6 is done: what follows was its brief, kept for branch 10.
 - Branch 6, calling `/arbitrate`: `Content-Type: application/json` exactly, no query, body `{page_id, user_id, b1, a, duration_ms}` with `a` the answer of `/recognize` untouched and `b1` the text B1 shows. 200 `{page_id, outcome: "recorded", tokens}`; 409 `{error}` with `page_not_found`, `not_text` or `already_read` (final, never retried); 400, 413, 415 and 422 are final too; retry once on 500 `arbitration_failed`, 503 `busy` or a network failure (a retry after a write that did go through answers `already_read`).
 - Branch 6: `record_reading_a` does not check that the page has B1 or is `read`; `read-page` must call `/arbitrate` only after B1 and the type are written. `transfer-account` refuses only while a page is `processing`, and A runs after `read`: an A that ends after a transfer is refused (`page_not_found`) and the page stays with B1 alone. Decide there whether the service retries with the new owner or the page is left without A, and write it down.
 - Branch 10: switch to math in one SQL function that locks the page row (`for update`, as `record_reading_a`), deletes A and the positions, clears `language`, sets the type and returns the `alto_path` to erase; the trigger refuses the type while A or a position is left. Back to text: `page_type = 'text'` first, then `/recognize` and `/arbitrate`.

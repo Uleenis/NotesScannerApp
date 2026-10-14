@@ -40,6 +40,8 @@ const readDeps: ReadPageDeps = {
     const outcome = geminiOutcomes.shift() ?? reading;
     return outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome);
   },
+  service: null,
+  background: () => {},
   clock: { now: () => Date.now() },
   log: createLogger((line) => logLines.push(line)),
 };
@@ -49,6 +51,8 @@ const relaunchDeps: RelaunchPageDeps = {
   reader: createServiceReader(keys),
   server: readDeps.server,
   gemini: readDeps.gemini,
+  service: null,
+  background: () => {},
   clock: readDeps.clock,
   log: readDeps.log,
 };
@@ -296,7 +300,7 @@ Deno.test({
         assertEquals(await server.claimForReading(alice.id, pageId, { status: "queued", queueReason: null, retryCount: 0 }), true);
         let refused = 0;
         const attempts = [
-          () => server.markRead(bob.id, pageId, new Date().toISOString()),
+          () => server.markRead(bob.id, pageId, new Date().toISOString(), "text"),
           () => server.releaseToQueue(bob.id, pageId, "read_error", 1),
           () => server.markFailed(bob.id, pageId, 3),
           () => server.insertReading(bob.id, pageId, {

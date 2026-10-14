@@ -1,5 +1,7 @@
+import { runInBackground } from "../_shared/background.ts";
 import { createGeminiReader } from "../_shared/gemini.ts";
 import { consoleLogger } from "../_shared/log.ts";
+import { readingServiceFrom } from "../_shared/reading-service.ts";
 import { createAuth, createCallerStore, createServerStore, readKeys } from "../_shared/supabase-adapters.ts";
 import { handleReadPage } from "./handler.ts";
 
@@ -13,6 +15,8 @@ const deps = {
   forCaller: (token: string) => createCallerStore(keys, token),
   server: createServerStore(keys),
   gemini: createGeminiReader({ apiKey: geminiKey }),
+  service: readingServiceFrom((name) => Deno.env.get(name)),
+  background: runInBackground,
   clock: { now: () => Date.now() },
   log: consoleLogger,
 };
