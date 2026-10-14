@@ -14,7 +14,7 @@ sql() {
 }
 
 cleanup() {
-  sql -c "drop trigger if exists pause_probe on public.pages; drop function if exists public.pause_probe();" > /dev/null
+  sql -c "drop trigger if exists pause_probe on public.pages; drop function if exists public.pause_probe(); drop table if exists public.reading_a_tally;" > /dev/null
   sql -c "delete from auth.users where id::text like '${USER_PREFIX}%'; delete from public.anonymous_daily_counts where day = '${DAY}'; delete from public.email_monthly_counts where month = '2031-06-01';" > /dev/null
 }
 
@@ -147,15 +147,17 @@ check "a reading A that waits for a transfer writes no position" 0 "$(sql -c "se
 OWNER="$(id_of 000000000011)"
 make_account 000000000011 false 1 false
 PAGE="$(sql -c "select id from public.pages where user_id = '${OWNER}'")"
-OUTCOMES="$(mktemp -d)"
-for writer in $(seq 1 10); do
-  ( sql -c "$(record_a "${PAGE}" "${OWNER}")" > "${OUTCOMES}/${writer}" 2>&1 || true ) &
-done
-wait
+sql -c "drop table if exists public.reading_a_tally; create table public.reading_a_tally (recorded integer not null, refused integer not null);" > /dev/null
+install_script record_a <<EOS
+select r.recorded::integer as recorded, (r.reason = 'already_read')::integer as refused from ($(record_a "${PAGE}" "${OWNER}")) r \gset
+insert into public.reading_a_tally (recorded, refused) values (:recorded, :refused);
+EOS
+bench record_a 10
 
-check "of ten simultaneous writes of A for one page, one is recorded" 1 "$(cat "${OUTCOMES}"/* | grep -c '^t|recorded$')"
-check "of ten simultaneous writes of A for one page, nine are refused as already read, none fails" 9 "$(cat "${OUTCOMES}"/* | grep -c '^f|already_read$')"
-rm -rf "${OUTCOMES}"
+check "ten simultaneous writes of A for one page all answer, none fails" 10 "$(sql -c "select count(*) from public.reading_a_tally")"
+check "of ten simultaneous writes of A for one page, one is recorded" 1 "$(sql -c "select coalesce(sum(recorded), 0) from public.reading_a_tally")"
+check "of ten simultaneous writes of A for one page, nine are refused as already read" 9 "$(sql -c "select coalesce(sum(refused), 0) from public.reading_a_tally")"
+sql -c "drop table public.reading_a_tally;" > /dev/null
 check "ten simultaneous writes of A for one page write one reading" 1 "$(sql -c "select count(*) from public.readings where page_id = '${PAGE}' and label = 'A'")"
 check "ten simultaneous writes of A for one page write its positions once" 1 "$(sql -c "select count(*) from public.page_tokens where page_id = '${PAGE}'")"
 
