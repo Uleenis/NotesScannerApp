@@ -1,5 +1,7 @@
 import type { GeminiReading } from "./gemini.ts";
 import type { Logger } from "./log.ts";
+import type { PageType } from "./page-type.ts";
+import type { ReadingService } from "./reading-service.ts";
 
 export type PageStatus = "queued" | "processing" | "read" | "failed";
 
@@ -69,7 +71,7 @@ export type ServerStore = {
   claimForReading: (userId: string, pageId: string, expected: ClaimExpectation) => Promise<boolean>;
   insertReading: (userId: string, pageId: string, reading: ReadingInput) => Promise<void>;
   upsertPageText: (userId: string, pageId: string, text: string, pipelineVersion: string) => Promise<void>;
-  markRead: (userId: string, pageId: string, readAt: string) => Promise<void>;
+  markRead: (userId: string, pageId: string, readAt: string, pageType: PageType) => Promise<void>;
   releaseToQueue: (userId: string, pageId: string, reason: "read_error", retryCount: number) => Promise<void>;
   markFailed: (userId: string, pageId: string, retryCount: number) => Promise<void>;
   abandonQueued: (userId: string, pageId: string) => Promise<void>;
@@ -117,6 +119,8 @@ export type PreparePageDeps = {
 export type ReadingDeps = {
   server: ServerStore;
   gemini: (image: Uint8Array) => Promise<GeminiReading>;
+  service: ReadingService | null;
+  background: (task: Promise<void>) => void;
   clock: { now: () => number };
   log: Logger;
 };

@@ -11,6 +11,12 @@ export type LogEvent =
   | "account_deleted"
   | "account_files_left"
   | "account_transferred"
+  | "a_sent"
+  | "recognize_attempt_failed"
+  | "arbitrate_attempt_failed"
+  | "a_cancelled"
+  | "a_abandoned"
+  | "a_done"
   | "unexpected_error";
 
 export type LogFields = {
@@ -23,6 +29,7 @@ export type LogFields = {
   inputTokens?: number;
   outputTokens?: number;
   thoughtsTokens?: number;
+  tokens?: number;
   errorName?: string;
 };
 
@@ -34,7 +41,7 @@ const MAX_WORD_LENGTH = 64;
 const PLAIN_WORD = /^[A-Za-z0-9_.:-]+$/;
 
 const WORD_FIELDS = ["pageId", "code", "kind", "errorName"] as const;
-const NUMBER_FIELDS = ["status", "attempt", "durationMs", "inputTokens", "outputTokens", "thoughtsTokens"] as const;
+const NUMBER_FIELDS = ["status", "attempt", "durationMs", "inputTokens", "outputTokens", "thoughtsTokens", "tokens"] as const;
 
 export function createLogger(sink: (line: string) => void): Logger {
   return {

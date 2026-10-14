@@ -1,6 +1,8 @@
 import { GeminiFailure } from "../_shared/gemini.ts";
 import type { GeminiFailureKind, GeminiReading } from "../_shared/gemini.ts";
 import { photoPath } from "../_shared/photo.ts";
+import type { PageType } from "../_shared/page-type.ts";
+import type { Arbitrated, Arbitration, Recognized, ReadingService } from "../_shared/reading-service.ts";
 import type {
   AccountStore,
   Allowance,
@@ -81,6 +83,7 @@ type FakePage = {
   manualRelaunchedAt: string | null;
   notebookId: string | null;
   chapterId: string | null;
+  pageType: PageType;
 };
 
 type FakeNotebook = { id: string; userId: string; name: string };
@@ -92,6 +95,18 @@ type FakePhoto = { bytes: Uint8Array; mimeType: string | null; size: number };
 type StoredReading = ReadingInput & { userId: string; pageId: string };
 
 export type LogRecord = { event: LogEvent; fields: LogFields };
+
+export function fakeAnswer(pageId: string): string {
+  return JSON.stringify({
+    page_id: pageId,
+    width: 1200,
+    height: 1600,
+    lines: [{ row: 0, box: [10, 20, 400, 60], ink: [12, 22, 398, 58], words: [{ text: "First", box: [10, 20, 90, 60], confidence: 0.98 }] }],
+    alto: "<alto/>",
+  });
+}
+
+const CANCELLED: Recognized = { ok: false, failure: { kind: "cancelled" } };
 
 export class World {
   pages = new Map<string, FakePage>();
@@ -129,9 +144,18 @@ export class World {
   logs: LogRecord[] = [];
   brokenRowLevelSecurity = false;
   loggerOverride: Logger | null = null;
+  serviceConfigured = false;
+  recognizeOutcomes: (Recognized | "hold")[] = [];
+  arbitrateOutcomes: Arbitrated[] = [];
+  recognitions: { pageId: string; image: Uint8Array; signal: AbortSignal }[] = [];
+  arbitrations: Arbitration[] = [];
+  held: ((outcome: Recognized | null) => void)[] = [];
+  recognizeDurationMs = 26_000;
+  arbitrateDurationMs = 500;
+  backgroundTasks: Promise<void>[] = [];
 
   addPage(userId: string, status: PageStatus = "queued", id: string = PAGE_ID): void {
-    this.pages.set(id, { id, userId, status, queueReason: null, retryCount: 0, readAt: null, manualRelaunchedAt: null, notebookId: null, chapterId: null });
+    this.pages.set(id, { id, userId, status, queueReason: null, retryCount: 0, readAt: null, manualRelaunchedAt: null, notebookId: null, chapterId: null, pageType: "text" });
   }
 
   addNotebook(userId: string, name: string, id: string = crypto.randomUUID()): string {
@@ -309,13 +333,14 @@ export class World {
         if (!page || page.userId !== userId) throw new Error("write for another owner");
         this.pageTexts.set(pageId, { userId, text, pipelineVersion });
       },
-      markRead: async (userId, pageId, readAt) => {
+      markRead: async (userId, pageId, readAt, pageType) => {
         await this.tick("markRead");
         const page = this.pages.get(pageId);
         if (!page || page.userId !== userId || page.status !== "processing") throw new Error("write for another owner or state");
         page.status = "read";
         page.readAt = readAt;
         page.queueReason = null;
+        page.pageType = pageType;
       },
       releaseToQueue: async (userId, pageId, reason, retryCount) => {
         await this.tick("releaseToQueue");
@@ -477,12 +502,60 @@ export class World {
     };
   }
 
+  readingService(): ReadingService {
+    return {
+      recognize: async (pageId, image, signal): Promise<Recognized> => {
+        this.calls.push("recognize");
+        this.recognitions.push({ pageId, image, signal });
+        const outcome = this.recognizeOutcomes.shift() ?? { ok: true, answer: fakeAnswer(pageId) };
+        if (outcome === "hold") {
+          const released = await new Promise<Recognized | null>((resolve) => {
+            this.held.push(resolve);
+            signal.addEventListener("abort", () => resolve(null));
+          });
+          if (released === null) return CANCELLED;
+          this.clock += this.recognizeDurationMs;
+          return released;
+        }
+        await Promise.resolve();
+        return signal.aborted ? CANCELLED : outcome;
+      },
+      arbitrate: async (input): Promise<Arbitrated> => {
+        this.calls.push("arbitrate");
+        this.arbitrations.push(input);
+        await Promise.resolve();
+        this.clock += this.arbitrateDurationMs;
+        return this.arbitrateOutcomes.shift() ?? { ok: true, tokens: 3 };
+      },
+    };
+  }
+
+  release(outcome?: Recognized): void {
+    const resolve = this.held.shift();
+    if (!resolve) throw new Error("no reading A is held");
+    resolve(outcome ?? { ok: true, answer: fakeAnswer(PAGE_ID) });
+  }
+
+  async settle(): Promise<void> {
+    while (this.backgroundTasks.length > 0) {
+      await Promise.all(this.backgroundTasks.splice(0));
+    }
+  }
+
+  private background(): (task: Promise<void>) => void {
+    return (task) => {
+      this.backgroundTasks.push(task);
+    };
+  }
+
   readDeps(): ReadPageDeps {
     return {
       auth: this.authPort(),
       forCaller: (token) => this.caller(token),
       server: this.server(),
       gemini: this.gemini(),
+      service: this.serviceConfigured ? this.readingService() : null,
+      background: this.background(),
       clock: { now: () => this.clock },
       log: this.logger(),
     };
@@ -494,6 +567,8 @@ export class World {
       reader: this.reader(),
       server: this.server(),
       gemini: this.gemini(),
+      service: this.serviceConfigured ? this.readingService() : null,
+      background: this.background(),
       clock: { now: () => this.clock },
       log: this.logger(),
     };

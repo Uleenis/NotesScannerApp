@@ -285,10 +285,10 @@ export function createServerStore(keys: Keys, fetchImpl?: typeof fetch): ServerS
         .upsert({ page_id: pageId, user_id: userId, text, pipeline_version: pipelineVersion }, { onConflict: "page_id" });
       if (error) throw new StoreError("upsertPageText");
     },
-    markRead: async (userId, pageId, readAt) => {
+    markRead: async (userId, pageId, readAt, pageType) => {
       const { data, error } = await client
         .from("pages")
-        .update({ status: "read", read_at: readAt, queue_reason: null })
+        .update({ status: "read", read_at: readAt, queue_reason: null, page_type: pageType })
         .eq("id", pageId)
         .eq("user_id", userId)
         .eq("status", "processing")
