@@ -67,7 +67,7 @@ def secure(url: str) -> bool:
         return False
     if parts.scheme == "https":
         return bool(host)
-    return parts.scheme == "http" and (host in LOCAL_HOSTS or host.startswith(LOCAL_GATEWAY))
+    return parts.scheme == "http" and (host in LOCAL_HOSTS or (host.startswith(LOCAL_GATEWAY) and "." not in host))
 
 
 class SupabaseStore:

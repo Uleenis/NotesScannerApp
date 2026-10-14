@@ -203,6 +203,8 @@ def test_a_failure_says_whether_the_write_surely_did_not_happen(
         pytest.param("ftp://supabase.test", id="not http"),
         pytest.param("http://supabase.test", id="http off the local stack"),
         pytest.param("http://10.0.0.5:8000", id="http on the local network"),
+        pytest.param("http://supabase_kong_x.example.com", id="http to a public host named like the gateway"),
+        pytest.param("http://127.0.0.1@example.com", id="http to a public host behind a local name"),
         pytest.param("https://", id="no host"),
         pytest.param("supabase.test", id="no scheme"),
     ],
@@ -220,6 +222,7 @@ def test_the_key_travels_only_over_https_or_to_the_local_stack(url: str) -> None
         "http://supabase_kong_NotesScannerApp:8000",
         "http://127.0.0.1:54321",
         "http://localhost:54321",
+        "http://[::1]:54321",
     ],
 )
 def test_https_and_the_local_stack_are_accepted(url: str) -> None:
@@ -258,3 +261,10 @@ def test_a_whole_arbitration_calls_three_addresses_and_never_writes_the_shown_te
     assert paths[2] == ("POST", "/rest/v1/rpc/record_reading_a")
     assert len(paths) == 3
     assert not any("page_texts" in path or path.endswith("/readings") for _, path in paths)
+
+
+def test_the_key_follows_no_redirect_and_no_proxy_of_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:3128")
+    store = SupabaseStore(URL, KEY)
+    assert store._client.trust_env is False
+    assert store._client.follow_redirects is False
