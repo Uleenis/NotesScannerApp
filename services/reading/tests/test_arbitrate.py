@@ -215,6 +215,17 @@ def test_an_invalid_request_is_refused_without_its_content_coming_back(
     assert PROBE not in served(caplog)
 
 
+def test_a_query_beside_the_body_is_refused() -> None:
+    arbiter = FakeArbiter()
+    response = client_of(arbiter).post(
+        f"/arbitrate?b1={PROBE}",
+        content=json.dumps(body()).encode(),
+        headers={GATE_HEADER: SECRET, "Content-Type": JSON},
+    )
+    assert (response.status_code, response.json()) == (400, {"error": "invalid_request"})
+    assert arbiter.received == []
+
+
 @pytest.mark.parametrize(
     "content_type",
     [

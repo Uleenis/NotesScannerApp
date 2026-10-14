@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx2
 
@@ -10,6 +10,9 @@ from reading.arbitration import Model, Position
 ALTO_BUCKET = "alto"
 ALTO_TYPE = "application/xml"
 REASONS = {"page_not_found", "not_text", "already_read"}
+SETTLED = {400, 401, 403, 404, 409}
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+LOCAL_GATEWAY = "supabase_kong_"
 TIMEOUT = 30.0
 
 
@@ -56,12 +59,23 @@ def token_row(position: Position) -> dict[str, object]:
     }
 
 
+def secure(url: str) -> bool:
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname or ""
+    except ValueError:
+        return False
+    if parts.scheme == "https":
+        return bool(host)
+    return parts.scheme == "http" and (host in LOCAL_HOSTS or host.startswith(LOCAL_GATEWAY))
+
+
 class SupabaseStore:
     def __init__(
         self, url: str, key: str, transport: httpx2.BaseTransport | None = None, timeout: float = TIMEOUT
     ) -> None:
-        if not url.startswith(("http://", "https://")):
-            raise ValueError("SUPABASE_URL is not an http or https address")
+        if not secure(url):
+            raise ValueError("SUPABASE_URL is not an https address, nor http on the local stack")
         if not key:
             raise ValueError("SUPABASE_SERVICE_ROLE_KEY is not set")
         self._client = httpx2.Client(
@@ -70,6 +84,7 @@ class SupabaseStore:
             transport=transport,
             timeout=timeout,
             follow_redirects=False,
+            trust_env=False,
         )
 
     def _send(
@@ -85,7 +100,7 @@ class SupabaseStore:
             response = self._client.request(method, path, params=params, content=content, json=body, headers=headers)
         except httpx2.HTTPError as error:
             raise StoreError(settled=False) from error
-        if 400 <= response.status_code < 500:
+        if response.status_code in SETTLED:
             raise StoreError(settled=True)
         if response.status_code >= 300:
             raise StoreError(settled=False)

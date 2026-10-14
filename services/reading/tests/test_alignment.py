@@ -1,6 +1,6 @@
 import pytest
 
-from reading.alignment import Step, align_blocks, cells, sub_cost
+from reading.alignment import Step, align_blocks, cells, letter_pairs, sub_cost
 
 
 def pairs(steps: list[Step]) -> list[tuple[int | None, int | None]]:
@@ -85,3 +85,8 @@ def test_a_word_left_out_after_the_last_column_falls_in_the_last_column() -> Non
 def test_the_work_grows_with_the_budgets_of_the_holes() -> None:
     assert cells(10, 20, {}) == 11 * 21
     assert cells(10, 20, {3: 4, 7: 2}) == 11 * (21 + 6)
+
+
+def test_the_comparison_work_grows_with_the_letters_of_both_readings() -> None:
+    assert letter_pairs(["abc", "de"], ["fghi"]) == 20
+    assert letter_pairs([], ["fghi"]) == 0

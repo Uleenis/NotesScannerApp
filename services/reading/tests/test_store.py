@@ -11,7 +11,7 @@ from reading.language import Lingua
 from reading.recognition import Reading, ReadLine, Word
 from reading.store import ReadingA, StoreError, SupabaseStore
 
-URL = "http://supabase.test:8000"
+URL = "https://supabase.test"
 KEY = "k" * 40 + "-service-key-of-the-test"
 USER = "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
 PAGE = "0b6f3c1e-8d2a-4c5b-9e7f-1a2b3c4d5e6f"
@@ -177,6 +177,9 @@ CALLS: list[Callable[[SupabaseStore], object]] = [
     [
         pytest.param(answer(400, {"message": "bad"}), True, id="refused by the server"),
         pytest.param(answer(409, {"message": "exists"}), True, id="conflict"),
+        pytest.param(answer(404, {"message": "missing"}), True, id="not found"),
+        pytest.param(answer(408, None), False, id="gateway timeout before the answer"),
+        pytest.param(answer(429, None), False, id="rate limited by a gateway"),
         pytest.param(answer(500, {"message": "error"}), False, id="server error"),
         pytest.param(answer(502, None), False, id="gateway error"),
         pytest.param(failing(httpx2.ConnectError), False, id="unreachable"),
@@ -193,11 +196,37 @@ def test_a_failure_says_whether_the_write_surely_did_not_happen(
     assert KEY not in str(failed.value)
 
 
-def test_the_store_needs_an_address_and_a_key() -> None:
-    with pytest.raises(ValueError, match="SUPABASE_URL"):
-        SupabaseStore("", KEY)
-    with pytest.raises(ValueError, match="SUPABASE_URL"):
-        SupabaseStore("ftp://supabase.test", KEY)
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("ftp://supabase.test", id="not http"),
+        pytest.param("http://supabase.test", id="http off the local stack"),
+        pytest.param("http://10.0.0.5:8000", id="http on the local network"),
+        pytest.param("https://", id="no host"),
+        pytest.param("supabase.test", id="no scheme"),
+    ],
+)
+def test_the_key_travels_only_over_https_or_to_the_local_stack(url: str) -> None:
+    with pytest.raises(ValueError, match="SUPABASE_URL") as refused:
+        SupabaseStore(url, KEY)
+    assert KEY not in str(refused.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://abcdefghijklmnop.supabase.co",
+        "http://supabase_kong_NotesScannerApp:8000",
+        "http://127.0.0.1:54321",
+        "http://localhost:54321",
+    ],
+)
+def test_https_and_the_local_stack_are_accepted(url: str) -> None:
+    SupabaseStore(url, KEY)
+
+
+def test_the_store_needs_a_key() -> None:
     with pytest.raises(ValueError, match="SUPABASE_SERVICE_ROLE_KEY"):
         SupabaseStore(URL, "")
 

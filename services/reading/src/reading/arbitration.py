@@ -2,13 +2,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 
-from reading.alignment import align_blocks, cells
+from reading.alignment import align_blocks, cells, letter_pairs
 from reading.recognition import Box, ReadLine
 from reading.refusal import too_complex
 from reading.tokens import Token, line_tokens, tokens_of
 
 THRESHOLD = Decimal("0.129")
 MAX_CELLS = 1_000_000
+MAX_LETTER_PAIRS = 50_000_000
 
 
 @dataclass(frozen=True)
@@ -79,11 +80,18 @@ def nearest(index: int, candidates: Sequence[int]) -> int:
     return min(candidates, key=lambda k: (abs(index - k), k))
 
 
-def positions_of(b1_text: str, lines: Sequence[ReadLine], max_cells: int = MAX_CELLS) -> list[Position]:
+def positions_of(
+    b1_text: str,
+    lines: Sequence[ReadLine],
+    max_cells: int = MAX_CELLS,
+    max_letter_pairs: int = MAX_LETTER_PAIRS,
+) -> list[Position]:
     b1 = line_tokens(b1_text)
     stream, holes = a_stream(lines)
     budgets = budgets_of(holes, b1, len(stream))
     if cells(len(b1), len(stream), budgets) > max_cells:
+        raise too_complex()
+    if letter_pairs([token.form for token, _ in b1], [a.token.form for a in stream]) > max_letter_pairs:
         raise too_complex()
     steps = align_blocks([token.form for token, _ in b1], [a.token.form for a in stream], budgets)
 

@@ -163,6 +163,7 @@ def test_the_service_refuses_to_start_without_a_valid_secret(values: dict[str, s
     [
         pytest.param({KEY_VARIABLE: "k" * 40}, URL_VARIABLE, id="no address"),
         pytest.param({URL_VARIABLE: "ftp://127.0.0.1:9", KEY_VARIABLE: "k" * 40}, URL_VARIABLE, id="not http"),
+        pytest.param({URL_VARIABLE: "http://supabase.test", KEY_VARIABLE: "k" * 40}, URL_VARIABLE, id="clear http"),
         pytest.param({URL_VARIABLE: "http://127.0.0.1:9"}, KEY_VARIABLE, id="no key"),
         pytest.param({URL_VARIABLE: "http://127.0.0.1:9", KEY_VARIABLE: ""}, KEY_VARIABLE, id="empty key"),
     ],

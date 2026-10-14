@@ -2,9 +2,10 @@ from decimal import Decimal
 
 import pytest
 
-from reading.arbitration import THRESHOLD, Model, Position, a_text, gate_open, positions_of
+from reading.arbitration import THRESHOLD, Model, Position, a_text, budgets_of, gate_open, positions_of
 from reading.recognition import ReadLine, Word
 from reading.refusal import RefusalError
+from reading.tokens import line_tokens
 
 L1 = (10, 10, 600, 60)
 L2 = (10, 70, 600, 120)
@@ -137,11 +138,71 @@ def test_b1_is_kept_word_for_word_with_its_case_and_apostrophes() -> None:
     ]
 
 
+def test_a_hole_takes_no_word_when_b1_has_no_more_words_than_a() -> None:
+    lines = [
+        line(1, L1, ("trois", 10, 100), ("quatre", 110, 200), ("un", 210, 300)),
+        line(2, L2),
+        line(3, L3, ("cinq", 10, 100)),
+    ]
+    positions = positions_of("un trois six cinq", lines)
+    assert [(p.text, p.reading_a) for p in positions] == [
+        ("un", "trois"),
+        ("trois", "quatre"),
+        ("six", "un"),
+        ("cinq", "cinq"),
+    ]
+
+
+def test_the_budget_of_a_hole_is_the_smaller_of_its_longest_lines_and_the_surplus() -> None:
+    b1 = line_tokens("un deux trois\nquatre\ncinq\nsix")
+    assert budgets_of({1: [2]}, b1, 1) == {1: 3}
+    assert budgets_of({1: [2, 3]}, b1, 1) == {1: 4}
+    assert budgets_of({1: [2, 3]}, b1, 4) == {1: 2}
+    assert budgets_of({0: [0], 2: [3]}, b1, 6) == {0: 0, 2: 0}
+
+
+def test_words_are_compared_with_apostrophes_unified() -> None:
+    curly = chr(0x2019)
+    lines = [line(1, L1, ("l'homme", 12, 100), (f"l{curly}hommes", 110, 200))]
+    [position] = positions_of(f"l{curly}homme", lines)
+    assert (position.text, position.reading_a, position.anchor) == (f"l{curly}homme", "l'homme", (12, 10, 100, 60))
+
+
+def test_words_are_compared_with_their_case() -> None:
+    lines = [line(1, L1, ("paris", 12, 100), ("Parisx", 110, 200))]
+    [position] = positions_of("Paris", lines)
+    assert position.reading_a == "Parisx"
+
+
+def test_a_word_as_near_to_two_read_words_takes_the_line_of_the_one_before() -> None:
+    lines = [line(1, L1, ("avant", 12, 100)), line(2, L2, ("apres", 12, 100))]
+    positions = positions_of("avant zzzz apres", lines)
+    assert anchors(positions) == [
+        ("avant", "word", (12, 10, 100, 60)),
+        ("zzzz", "line", L1),
+        ("apres", "word", (12, 70, 100, 120)),
+    ]
+
+
 def test_a_page_too_long_to_align_is_refused_as_too_complex() -> None:
     lines = [line(1, L1, ("Le", 12, 60), ("chat", 70, 150))]
     with pytest.raises(RefusalError) as refused:
         positions_of("Le chat dort ici", lines, max_cells=10)
     assert (refused.value.status, refused.value.code) == (422, "too_complex")
+
+
+def test_a_page_of_words_too_long_to_compare_is_refused_as_too_complex() -> None:
+    lines = [line(1, L1, ("x" * 300, 12, 60))]
+    with pytest.raises(RefusalError) as refused:
+        positions_of(" ".join(["y" * 300] * 3), lines, max_letter_pairs=900 * 300 - 1)
+    assert (refused.value.status, refused.value.code) == (422, "too_complex")
+    assert len(positions_of(" ".join(["y" * 300] * 3), lines, max_letter_pairs=900 * 300)) == 3
+
+
+def test_the_comparison_work_of_a_page_is_bounded() -> None:
+    lines = [line(1, L1, *[("x" * 1_000, 12, 60)] * 1_000)]
+    with pytest.raises(RefusalError):
+        positions_of(" ".join(["y" * 1_000] * 100), lines)
 
 
 def test_the_text_of_a_keeps_one_line_per_line_read() -> None:

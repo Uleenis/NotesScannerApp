@@ -6,6 +6,7 @@ import uvicorn
 
 from reading.app import create_app
 from reading.secret import SecretError, load_secret
+from reading.store import SupabaseStore
 
 MODEL_VARIABLE = "READING_MODEL"
 URL_VARIABLE = "SUPABASE_URL"
@@ -22,8 +23,6 @@ def main() -> int:
     if not os.path.isfile(model):
         print(f"{MODEL_VARIABLE} does not name a model file", file=sys.stderr)
         return 1
-
-    from reading.store import SupabaseStore
 
     try:
         store = SupabaseStore(os.environ.get(URL_VARIABLE, ""), os.environ.get(KEY_VARIABLE, ""))

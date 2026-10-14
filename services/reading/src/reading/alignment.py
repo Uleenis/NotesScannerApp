@@ -39,6 +39,10 @@ def cells(n: int, m: int, budgets: Mapping[int, int]) -> int:
     return (n + 1) * (m + 1 + sum(budgets.values()))
 
 
+def letter_pairs(ref: Sequence[str], hyp: Sequence[str]) -> int:
+    return sum(map(len, ref)) * sum(map(len, hyp))
+
+
 def align_blocks(ref: Sequence[str], hyp: Sequence[str], budgets: Mapping[int, int]) -> list[Step]:
     n, m = len(ref), len(hyp)
     best = [[INFINITY] * (m + 1) for _ in range(n + 1)]
