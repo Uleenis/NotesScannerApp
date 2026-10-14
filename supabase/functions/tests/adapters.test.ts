@@ -300,7 +300,7 @@ type Storage = {
   headers: Headers[];
 };
 
-function storageWith(initial: string[], options: { keepFiles?: boolean; failList?: boolean; failCopy?: boolean } = {}): Storage {
+function storageWith(initial: string[], options: { keepFiles?: boolean; failList?: boolean; failCopy?: boolean } = {}, bucket: string = "photos"): Storage {
   const files = new Set(initial);
   const lists: { prefix: string; offset: number; limit: number }[] = [];
   const removals: string[][] = [];
@@ -317,9 +317,9 @@ function storageWith(initial: string[], options: { keepFiles?: boolean; failList
       if (files.has(body.destinationKey)) return json(400, { statusCode: "409", error: "Duplicate", message: "The resource already exists" });
       if (!files.has(body.sourceKey)) return json(400, { statusCode: "404", error: "not_found", message: "Object not found" });
       files.add(body.destinationKey);
-      return json(200, { Key: `photos/${body.destinationKey}` });
+      return json(200, { Key: `${bucket}/${body.destinationKey}` });
     }
-    if (url.pathname === "/storage/v1/object/list/photos") {
+    if (url.pathname === `/storage/v1/object/list/${bucket}`) {
       lists.push({ prefix: body.prefix, offset: body.offset, limit: body.limit });
       if (options.failList) return json(500, { message: "boom" });
       const prefix = `${body.prefix}/`;
@@ -333,7 +333,7 @@ function storageWith(initial: string[], options: { keepFiles?: boolean; failList
       }
       return json(200, [...entries.values()].slice(body.offset, body.offset + body.limit));
     }
-    if (url.pathname === "/storage/v1/object/photos" && init?.method === "DELETE") {
+    if (url.pathname === `/storage/v1/object/${bucket}` && init?.method === "DELETE") {
       removals.push(body.prefixes);
       if (!options.keepFiles) for (const path of body.prefixes) files.delete(path);
       return json(200, body.prefixes.map((name: string) => ({ name })));
@@ -347,7 +347,7 @@ const ALICE_FILES = Array.from({ length: 250 }, (_, index) => `${ALICE}/page-${S
 
 Deno.test("erasing the photos of an account lists its folders and removes every file under it, 100 at most at a time", async () => {
   const storage = storageWith([...ALICE_FILES, `${BOB}/page-1/original.jpg`]);
-  await createAccountStore(KEYS, storage.fetch).removePhotos(ALICE);
+  await createAccountStore(KEYS, storage.fetch).removeFiles("photos", ALICE);
   assertEquals([...storage.files], [`${BOB}/page-1/original.jpg`]);
   assertEquals(storage.removals.flat().length, 250);
   assertEquals(storage.removals.every((paths) => paths.length <= 100), true);
@@ -357,29 +357,45 @@ Deno.test("erasing the photos of an account lists its folders and removes every 
 
 Deno.test("the listing of a folder with more than 100 entries goes on page after page", async () => {
   const storage = storageWith(ALICE_FILES);
-  await createAccountStore(KEYS, storage.fetch).removePhotos(ALICE);
+  await createAccountStore(KEYS, storage.fetch).removeFiles("photos", ALICE);
   const offsets = storage.lists.filter((list) => list.prefix === ALICE).map((list) => list.offset);
   assertEquals(offsets.slice(0, 3), [0, 100, 200]);
 });
 
 Deno.test("an account with no file removes nothing", async () => {
   const storage = storageWith([`${BOB}/page-1/original.jpg`]);
-  await createAccountStore(KEYS, storage.fetch).removePhotos(ALICE);
+  await createAccountStore(KEYS, storage.fetch).removeFiles("photos", ALICE);
   assertEquals(storage.removals, []);
   assertEquals(storage.files.size, 1);
 });
 
 Deno.test("a file that is still there after the removal is an error, never a pass", async () => {
   const storage = storageWith([`${ALICE}/page-1/original.jpg`], { keepFiles: true });
-  const error = await thrownBy(() => createAccountStore(KEYS, storage.fetch).removePhotos(ALICE));
+  const error = await thrownBy(() => createAccountStore(KEYS, storage.fetch).removeFiles("photos", ALICE));
   assertEquals(error instanceof StoreError, true);
 });
 
 Deno.test("a listing that fails is an error, never an empty account", async () => {
   const storage = storageWith([`${ALICE}/page-1/original.jpg`], { failList: true });
-  const error = await thrownBy(() => createAccountStore(KEYS, storage.fetch).removePhotos(ALICE));
+  const error = await thrownBy(() => createAccountStore(KEYS, storage.fetch).removeFiles("photos", ALICE));
   assertEquals(error instanceof StoreError, true);
   assertEquals(storage.removals, []);
+});
+
+Deno.test("erasing the files of an account works in the bucket it is given, ALTO files and models included [14]", async () => {
+  for (const bucket of ["alto", "models"] as const) {
+    const storage = storageWith([`${ALICE}/page-1/a.xml`, `${ALICE}/1.safetensors`, `${BOB}/page-1/a.xml`], {}, bucket);
+    await createAccountStore(KEYS, storage.fetch).removeFiles(bucket, ALICE);
+    assertEquals([...storage.files], [`${BOB}/page-1/a.xml`]);
+    assertEquals(storage.headers.every((headers) => headers.get("authorization") === "Bearer secret-key"), true);
+  }
+});
+
+Deno.test("erasing the files of an account never reaches another bucket than the one it is given [14]", async () => {
+  const storage = storageWith([`${ALICE}/page-1/original.jpg`], {}, "photos");
+  const error = await thrownBy(() => createAccountStore(KEYS, storage.fetch).removeFiles("alto", ALICE));
+  assertEquals(error instanceof StoreError, true);
+  assertEquals(storage.files.size, 1);
 });
 
 Deno.test("deleting the account calls the administration of accounts with the id given, as the service, and no soft delete", async () => {
@@ -399,7 +415,7 @@ Deno.test("an account that cannot be deleted is an error", async () => {
 
 Deno.test("listing the photos of an account walks every folder and goes on page after page [9]", async () => {
   const storage = storageWith([...ALICE_FILES, `${BOB}/page-1/original.jpg`]);
-  const paths = await createTransferStore(KEYS, storage.fetch).listPhotos(ALICE);
+  const paths = await createTransferStore(KEYS, storage.fetch).listFiles("photos", ALICE);
   assertEquals([...paths].sort(), [...ALICE_FILES].sort());
   const offsets = storage.lists.filter((list) => list.prefix === ALICE).map((list) => list.offset);
   assertEquals(offsets.slice(0, 3), [0, 100, 200]);
@@ -409,39 +425,50 @@ Deno.test("listing the photos of an account walks every folder and goes on page 
 
 Deno.test("an account with no file lists no photo [9]", async () => {
   const storage = storageWith([`${BOB}/page-1/original.jpg`]);
-  assertEquals(await createTransferStore(KEYS, storage.fetch).listPhotos(ALICE), []);
+  assertEquals(await createTransferStore(KEYS, storage.fetch).listFiles("photos", ALICE), []);
 });
 
 Deno.test("a listing that fails is an error, never an empty account [9]", async () => {
   const storage = storageWith([`${ALICE}/page-1/original.jpg`], { failList: true });
-  assertEquals((await thrownBy(() => createTransferStore(KEYS, storage.fetch).listPhotos(ALICE))) instanceof StoreError, true);
+  assertEquals((await thrownBy(() => createTransferStore(KEYS, storage.fetch).listFiles("photos", ALICE))) instanceof StoreError, true);
 });
 
 Deno.test("copying a photo asks the storage to copy the old path to the new path, in the same bucket, as the service [9]", async () => {
   const from = `${ALICE}/page-1/original.jpg`;
   const to = `${BOB}/page-1/original.jpg`;
   const storage = storageWith([from]);
-  await createTransferStore(KEYS, storage.fetch).copyPhoto(from, to);
+  await createTransferStore(KEYS, storage.fetch).copyFile("photos", from, to);
   assertEquals(storage.copies, [{ bucketId: "photos", sourceKey: from, destinationKey: to }]);
   assertEquals(storage.files.has(to), true);
   assertEquals(storage.files.has(from), true);
   assertEquals(storage.headers[0].get("authorization"), "Bearer secret-key");
 });
 
+Deno.test("listing and copying the ALTO files of an account happen in the alto bucket [14]", async () => {
+  const from = `${ALICE}/page-1/a.xml`;
+  const to = `${BOB}/page-1/a.xml`;
+  const storage = storageWith([from], {}, "alto");
+  const store = createTransferStore(KEYS, storage.fetch);
+  assertEquals(await store.listFiles("alto", ALICE), [from]);
+  await store.copyFile("alto", from, to);
+  assertEquals(storage.copies, [{ bucketId: "alto", sourceKey: from, destinationKey: to }]);
+  assertEquals(await store.listFiles("alto", BOB), [to]);
+});
+
 Deno.test("a photo that is already at its new path counts as copied [9]", async () => {
   const from = `${ALICE}/page-1/original.jpg`;
   const to = `${BOB}/page-1/original.jpg`;
   const storage = storageWith([from, to]);
-  await createTransferStore(KEYS, storage.fetch).copyPhoto(from, to);
+  await createTransferStore(KEYS, storage.fetch).copyFile("photos", from, to);
   assertEquals(storage.copies.length, 1);
 });
 
 Deno.test("a copy that fails for another reason is an error [9]", async () => {
   const from = `${ALICE}/page-1/original.jpg`;
   const failing = storageWith([from], { failCopy: true });
-  assertEquals((await thrownBy(() => createTransferStore(KEYS, failing.fetch).copyPhoto(from, `${BOB}/page-1/original.jpg`))) instanceof StoreError, true);
+  assertEquals((await thrownBy(() => createTransferStore(KEYS, failing.fetch).copyFile("photos", from, `${BOB}/page-1/original.jpg`))) instanceof StoreError, true);
   const missing = storageWith([]);
-  assertEquals((await thrownBy(() => createTransferStore(KEYS, missing.fetch).copyPhoto(from, `${BOB}/page-1/original.jpg`))) instanceof StoreError, true);
+  assertEquals((await thrownBy(() => createTransferStore(KEYS, missing.fetch).copyFile("photos", from, `${BOB}/page-1/original.jpg`))) instanceof StoreError, true);
 });
 
 Deno.test("moving the rows calls transfer_account_rows with the two ids alone, as the service, and reads the counts back [9]", async () => {

@@ -1,6 +1,6 @@
 begin;
 
-select plan(13);
+select plan(22);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -120,6 +120,71 @@ select is(
   (select allowed_mime_types from storage.buckets where id = 'photos'),
   array['image/jpeg'],
   'the photos bucket accepts JPEG files only'
+);
+
+select is(
+  (select array_agg(id::text order by id) from storage.buckets where id in ('alto', 'models') and not public),
+  array['alto', 'models'],
+  'the alto and models buckets exist and are private'
+);
+
+select is(
+  (select allowed_mime_types from storage.buckets where id = 'alto'),
+  array['application/xml'],
+  'the alto bucket accepts XML files only'
+);
+
+select is(
+  (select file_size_limit from storage.buckets where id = 'alto'),
+  5242880::bigint,
+  'the alto bucket accepts files of 5 MB at most'
+);
+
+insert into storage.objects (bucket_id, name) values
+  ('alto', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/page/a.xml'),
+  ('alto', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/page/a.xml'),
+  ('models', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/1.safetensors'),
+  ('models', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/1.safetensors');
+
+select pg_temp.login('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+
+select is(
+  (select count(*) from storage.objects where bucket_id in ('alto', 'models')),
+  0::bigint,
+  'a user reads no ALTO file and no model file, not even their own'
+);
+
+select throws_ok(
+  $$insert into storage.objects (bucket_id, name) values ('alto', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/page/b.xml')$$,
+  '42501', null, 'a user cannot upload an ALTO file, even in their own folder'
+);
+
+select throws_ok(
+  $$insert into storage.objects (bucket_id, name) values ('models', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/2.safetensors')$$,
+  '42501', null, 'a user cannot upload a model file, even in their own folder'
+);
+
+select throws_ok(
+  $$delete from storage.objects where bucket_id in ('alto', 'models')$$,
+  '42501', null, 'a user cannot delete an ALTO or a model file'
+);
+
+reset role;
+
+select pg_temp.as_anon();
+
+select is(
+  (select count(*) from storage.objects where bucket_id in ('alto', 'models')),
+  0::bigint,
+  'a visitor without an account reads no ALTO file and no model file'
+);
+
+reset role;
+
+select is(
+  (select count(*) from storage.objects where bucket_id in ('alto', 'models')),
+  4::bigint,
+  'those attempts changed no ALTO file and no model file'
 );
 
 select * from finish();

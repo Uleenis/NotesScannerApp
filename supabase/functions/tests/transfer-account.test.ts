@@ -50,6 +50,7 @@ function scene(): World {
       pageId: id,
     });
   }
+  world.addReadingA(ALICE, PAGE_ID);
   world.addNotebook(BOB, "Chemistry");
   world.readyPage(BOB, OTHER_PAGE_ID);
   world.charges.push({ userId: BOB, pageId: OTHER_PAGE_ID });
@@ -67,6 +68,10 @@ function fingerprint(world: World): string {
     charges: world.charges,
     images: world.pageImages,
     readings: world.readings,
+    alto: [...world.alto.keys()].sort(),
+    models: [...world.models.keys()].sort(),
+    altoReadings: world.altoReadings,
+    pageTokens: world.pageTokens,
     texts: [...world.pageTexts],
     deleted: world.deletedUsers,
   });
@@ -82,6 +87,9 @@ function owned(world: World, userId: string) {
     images: world.pageImages.filter((image) => image.userId === userId).map((image) => image.path).sort(),
     readings: world.readings.filter((reading) => reading.userId === userId).length,
     texts: [...world.pageTexts.values()].filter((text) => text.userId === userId).length,
+    alto: world.filesOf("alto", userId),
+    altoReadings: world.altoReadings.filter((reading) => reading.userId === userId).map((reading) => reading.path).sort(),
+    tokens: world.pageTokens.filter((token) => token.userId === userId).length,
   };
 }
 
@@ -194,7 +202,7 @@ Deno.test("transfer-account moves the rows, the photos, the readings, the texts 
   assertEquals(world.deletedUsers, [ALICE]);
 
   const alice = owned(world, ALICE);
-  assertEquals(alice, { pages: [], photos: [], notebooks: [], chapters: 0, charges: 0, images: [], readings: 0, texts: 0 });
+  assertEquals(alice, { pages: [], photos: [], notebooks: [], chapters: 0, charges: 0, images: [], readings: 0, texts: 0, alto: [], altoReadings: [], tokens: 0 });
 
   const bob = owned(world, BOB);
   assertEquals(bob.pages, [OTHER_PAGE_ID, PAGE_ID, SECOND_PAGE_ID].sort());
@@ -220,8 +228,70 @@ Deno.test("transfer-account makes the photos readable by the account found and n
 Deno.test("transfer-account checks, copies, then moves the rows, then erases the old files, then deletes the account [9]", async () => {
   const world = scene();
   await call(world);
-  const names = world.calls.filter((name) => ["hasProcessingPage", "copyPhoto", "moveRows", "removePhotos", "deleteUser"].includes(name));
-  assertEquals(names, ["hasProcessingPage", "copyPhoto", "copyPhoto", "moveRows", "removePhotos", "deleteUser"]);
+  const names = world.calls.filter((name) => ["hasProcessingPage", "moveRows", "deleteUser"].includes(name) || name.startsWith("copyFile") || name.startsWith("removeFiles"));
+  assertEquals(names, [
+    "hasProcessingPage",
+    "copyFile:photos",
+    "copyFile:photos",
+    "moveRows",
+    "copyFile:alto",
+    "removeFiles:photos",
+    "removeFiles:alto",
+    "removeFiles:models",
+    "deleteUser",
+  ]);
+});
+
+Deno.test("transfer-account moves the ALTO files, the readings A that point to them and the positions to the account found [14]", async () => {
+  const world = scene();
+  const response = await call(world);
+  assertEquals(response.status, 200);
+  const bob = owned(world, BOB);
+  assertEquals(bob.alto, [`${BOB}/${PAGE_ID}/a.xml`]);
+  assertEquals(bob.altoReadings, [`${BOB}/${PAGE_ID}/a.xml`]);
+  assertEquals(bob.tokens, 2);
+  assertEquals(world.copies.filter((copy) => copy.bucket === "alto"), [{ bucket: "alto", from: `${ALICE}/${PAGE_ID}/a.xml`, to: `${BOB}/${PAGE_ID}/a.xml` }]);
+});
+
+Deno.test("transfer-account copies the ALTO files once the rows have moved, so a reading A written while the photos were copied is not left behind [14]", async () => {
+  const world = scene();
+  world.onCopy = () => {
+    if (world.altoReadings.some((reading) => reading.pageId === SECOND_PAGE_ID)) return;
+    world.addReadingA(ALICE, SECOND_PAGE_ID);
+  };
+  const response = await call(world);
+  assertEquals(response.status, 200);
+  const bob = owned(world, BOB);
+  assertEquals(bob.altoReadings, [`${BOB}/${PAGE_ID}/a.xml`, `${BOB}/${SECOND_PAGE_ID}/a.xml`].sort());
+  assertEquals(bob.alto, bob.altoReadings);
+  assertEquals(owned(world, ALICE).alto, []);
+});
+
+Deno.test("transfer-account keeps the anonymous account when an ALTO copy did not arrive, and a second try finishes [14]", async () => {
+  const world = scene();
+  world.loseCopies.add("alto");
+  const failed = await call(world);
+  assertEquals(failed.status, 500);
+  assertEquals(await readJson(failed), { error: "internal_error" });
+  assertEquals(world.deletedUsers, []);
+  assertEquals(world.calls.some((name) => name.startsWith("removeFiles")), false);
+  assertEquals(owned(world, ALICE).alto, [`${ALICE}/${PAGE_ID}/a.xml`]);
+
+  world.loseCopies.clear();
+  assertEquals((await call(world)).status, 200);
+  assertEquals(owned(world, BOB).alto, [`${BOB}/${PAGE_ID}/a.xml`]);
+  assertEquals(owned(world, BOB).altoReadings, [`${BOB}/${PAGE_ID}/a.xml`]);
+  assertEquals(owned(world, ALICE).alto, []);
+  assertEquals(world.deletedUsers, [ALICE]);
+});
+
+Deno.test("transfer-account erases every file the anonymous account had, in the photos, alto and models buckets [14]", async () => {
+  const world = scene();
+  world.models.set(`${ALICE}/1.safetensors`, new Uint8Array([1]));
+  world.models.set(`${CAROL}/1.safetensors`, new Uint8Array([2]));
+  assertEquals((await call(world)).status, 200);
+  for (const bucket of ["photos", "alto", "models"] as const) assertEquals(world.filesOf(bucket, ALICE), []);
+  assertEquals(world.filesOf("models", CAROL), [`${CAROL}/1.safetensors`]);
 });
 
 Deno.test("transfer-account takes both accounts from the tokens and never from the request [8]", async () => {
@@ -320,7 +390,7 @@ Deno.test("transfer-account keeps everything when a copy fails, and a second try
 
 Deno.test("transfer-account stops before moving any row when a copy did not arrive [9]", async () => {
   const world = scene();
-  world.loseCopies = true;
+  world.loseCopies.add("photos");
   const response = await call(world);
   assertEquals(response.status, 500);
   assertEquals(world.calls.includes("moveRows"), false);
@@ -348,7 +418,7 @@ Deno.test("transfer-account shows nothing new and loses nothing when the rows ca
 
 Deno.test("transfer-account can be played again when the old files could not be erased [9]", async () => {
   const world = scene();
-  world.failOn.add("removePhotos");
+  world.failOn.add("removeFiles:photos");
   const failed = await call(world);
   assertEquals(failed.status, 500);
   assertEquals(world.deletedUsers, []);

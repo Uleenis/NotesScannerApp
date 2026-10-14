@@ -11,6 +11,8 @@ const TABLES = [
   ["readings", "user_id"],
   ["page_texts", "user_id"],
   ["page_charges", "user_id"],
+  ["page_tokens", "user_id"],
+  ["htr_models", "user_id"],
 ];
 
 function localStatus() {
@@ -79,15 +81,43 @@ async function rowsOf(userId) {
   return total;
 }
 
-async function filesOf(userId) {
-  const { data, error } = await server.storage.from("photos").list(userId, { limit: 100 });
+async function filesOf(userId, bucket = "photos") {
+  const { data, error } = await server.storage.from(bucket).list(userId, { limit: 100 });
   if (error) throw new Error(error.message);
   let count = 0;
   for (const entry of data) {
-    const inner = await server.storage.from("photos").list(`${userId}/${entry.name}`, { limit: 100 });
+    if (entry.id !== null) {
+      count += 1;
+      continue;
+    }
+    const inner = await server.storage.from(bucket).list(`${userId}/${entry.name}`, { limit: 100 });
     count += inner.data.length;
   }
   return count;
+}
+
+async function allFilesOf(userId) {
+  return [await filesOf(userId, "photos"), await filesOf(userId, "alto"), await filesOf(userId, "models")];
+}
+
+async function addReadingAndModel(userId, pageId) {
+  const altoPath = `${userId}/${pageId}/a.xml`;
+  const alto = await server.storage.from("alto").upload(altoPath, new TextEncoder().encode("<alto/>"), { contentType: "application/xml" });
+  const written = await server.rpc("record_reading_a", {
+    p_page_id: pageId,
+    p_user_id: userId,
+    p_raw_text: "Texte",
+    p_model: "medium",
+    p_model_version: "manual",
+    p_duration_ms: 1,
+    p_alto_path: altoPath,
+    p_language: "fr",
+    p_tokens: [{ token_index: 0, line_index: 0, text: "Texte", reading_a: "Texte", reading_b1: "Texte", anchor_kind: null, anchor: null }],
+  });
+  const modelPath = `${userId}/1.safetensors`;
+  const model = await server.storage.from("models").upload(modelPath, new Uint8Array([1, 2, 3]), { contentType: "application/octet-stream" });
+  const row = await server.from("htr_models").insert({ user_id: userId, name: "personal", version: 1, status: "candidate", storage_path: modelPath });
+  if (alto.error || written.error || written.data?.[0]?.reason !== "recorded" || model.error || row.error) throw new Error("could not add a reading A and a model");
 }
 
 async function anonymousWithOnePage(client) {
@@ -100,6 +130,7 @@ async function anonymousWithOnePage(client) {
   const path = `${userId}/${page.data.id}/original.jpg`;
   const upload = await server.storage.from("photos").upload(path, new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), { contentType: "image/jpeg" });
   if (notebook.error || page.error || charge.error || upload.error) throw new Error("could not prepare the account");
+  await addReadingAndModel(userId, page.data.id);
   return { userId, pageId: page.data.id, path };
 }
 
@@ -195,7 +226,7 @@ async function callDelete(token) {
   check("a new sign-in code is refused before 30 seconds", tooSoon.error?.code === "over_email_send_rate_limit", JSON.stringify(tooSoon.error));
 
   console.log("Deletion of the account");
-  check("account A has rows and a file before the deletion", (await rowsOf(a.userId)) > 0 && (await filesOf(a.userId)) === 1);
+  check("account A has rows, a photo, an ALTO file and a model file before the deletion", (await rowsOf(a.userId)) > 0 && JSON.stringify(await allFilesOf(a.userId)) === "[1,1,1]");
   const sessionA = (await fresh.auth.getSession()).data.session;
   const forged = await callDelete("forged-token");
   check("a forged token is refused", forged.status === 401, JSON.stringify(forged));
@@ -203,15 +234,15 @@ async function callDelete(token) {
   const deleted = await callDelete(sessionA.access_token);
   check("the function answers 200 deleted", deleted.status === 200 && deleted.body?.deleted === true, JSON.stringify(deleted));
   check("every row of account A is gone", (await rowsOf(a.userId)) === 0);
-  check("every file of account A is gone", (await filesOf(a.userId)) === 0);
+  check("every file of account A is gone, photos, ALTO and models", JSON.stringify(await allFilesOf(a.userId)) === "[0,0,0]");
   check("the account itself is gone", (await server.auth.admin.getUserById(a.userId)).error !== null);
-  check("account B keeps its rows and its file", (await rowsOf(b.userId)) > 0 && (await filesOf(b.userId)) === 1);
+  check("account B keeps its rows and its files", (await rowsOf(b.userId)) > 0 && JSON.stringify(await allFilesOf(b.userId)) === "[1,1,1]");
   const replay = await callDelete(sessionA.access_token);
   check("the token of a deleted account is refused", replay.status === 401, JSON.stringify(replay));
 
   const sessionB = (await phoneB.auth.getSession()).data.session;
   const deletedB = await callDelete(sessionB.access_token);
-  check("account B can be deleted in its turn", deletedB.status === 200 && (await rowsOf(b.userId)) === 0 && (await filesOf(b.userId)) === 0, JSON.stringify(deletedB));
+  check("account B can be deleted in its turn", deletedB.status === 200 && (await rowsOf(b.userId)) === 0 && JSON.stringify(await allFilesOf(b.userId)) === "[0,0,0]", JSON.stringify(deletedB));
 
   const leftovers = [emptyPhone.data.user.id, takerId];
   for (const id of leftovers) await server.auth.admin.deleteUser(id);
