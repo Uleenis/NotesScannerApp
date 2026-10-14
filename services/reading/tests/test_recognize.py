@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw, ImageFont
 
 from reading.app import GATE_HEADER, create_app
+from reading.arbiter import Arbitration, Outcome
 from reading.photo import MAX_BYTES
 from reading.recognition import Reader, Reading, ReadLine, Recognizer, Word
 from reading.refusal import too_complex
@@ -71,8 +72,13 @@ def served(caplog: pytest.LogCaptureFixture) -> str:
     )
 
 
+class NoArbiter:
+    def arbitrate(self, arbitration: Arbitration) -> Outcome:
+        raise AssertionError("no arbitration while reading")
+
+
 def client_of(reader: FakeReader) -> TestClient:
-    return TestClient(create_app(SECRET, reader))
+    return TestClient(create_app(SECRET, reader, NoArbiter()))
 
 
 def post(
@@ -292,7 +298,7 @@ class BlockingReader:
 def test_requests_beyond_those_in_flight_are_turned_away() -> None:
     reader = BlockingReader()
     statuses: list[int] = []
-    with TestClient(create_app(SECRET, reader, max_in_flight=2)) as client:
+    with TestClient(create_app(SECRET, reader, NoArbiter(), max_in_flight=2)) as client:
 
         def call() -> None:
             statuses.append(post(client, jpeg())[0])
@@ -360,7 +366,7 @@ def test_a_real_reading_logs_neither_text_nor_image(
     reader: Reader, caplog: pytest.LogCaptureFixture, capfd: pytest.CaptureFixture[str]
 ) -> None:
     caplog.set_level(logging.DEBUG)
-    client = TestClient(create_app(SECRET, reader))
+    client = TestClient(create_app(SECRET, reader, NoArbiter()))
     photo = written_page()
     response = client.post(
         f"/recognize?page_id={PAGE}", content=photo, headers={GATE_HEADER: SECRET, "Content-Type": JPEG}

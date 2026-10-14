@@ -11,7 +11,9 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from reading.__main__ import KEY_VARIABLE, URL_VARIABLE
 from reading.app import GATE_HEADER, create_app
+from reading.arbiter import Arbitration, Outcome
 from reading.recognition import Reading
 from reading.secret import GATE_VARIABLE, SecretError, load_secret
 
@@ -24,7 +26,12 @@ class EmptyReader:
         return Reading(width=photo.width, height=photo.height, lines=(), segment_seconds=0.0, recognize_seconds=0.0)
 
 
-app = create_app(SECRET, EmptyReader())
+class NoArbiter:
+    def arbitrate(self, arbitration: Arbitration) -> Outcome:
+        raise AssertionError("no arbitration behind the gate")
+
+
+app = create_app(SECRET, EmptyReader(), NoArbiter())
 client = TestClient(app)
 
 API_ROUTES = [route for route in app.routes if isinstance(route, APIRoute)]
@@ -56,6 +63,7 @@ REFUSED_HEADERS = [
 def test_the_service_has_routes() -> None:
     assert ("GET", "/health") in ROUTES
     assert ("POST", "/recognize") in ROUTES
+    assert ("POST", "/arbitrate") in ROUTES
 
 
 @pytest.mark.parametrize(("method", "path"), PROBES)
@@ -105,7 +113,7 @@ def test_no_valid_secret_no_service(environ: dict[str, str]) -> None:
     with pytest.raises(SecretError):
         load_secret(environ)
     with pytest.raises(SecretError):
-        create_app(environ.get(GATE_VARIABLE, ""), EmptyReader())
+        create_app(environ.get(GATE_VARIABLE, ""), EmptyReader(), NoArbiter())
 
 
 def test_a_valid_secret_is_loaded() -> None:
@@ -119,8 +127,12 @@ def free_port() -> int:
         return port
 
 
+SUPABASE = {URL_VARIABLE: "http://127.0.0.1:9", KEY_VARIABLE: "k" * 40}
+
+
 def service_environ(**values: str) -> dict[str, str]:
-    environ = {key: value for key, value in os.environ.items() if key != GATE_VARIABLE}
+    left_out = {GATE_VARIABLE, URL_VARIABLE, KEY_VARIABLE}
+    environ = {key: value for key, value in os.environ.items() if key not in left_out}
     environ.update(values)
     return environ
 
@@ -136,7 +148,7 @@ def service_environ(**values: str) -> dict[str, str]:
 def test_the_service_refuses_to_start_without_a_valid_secret(values: dict[str, str]) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "reading"],
-        env=service_environ(PORT=str(free_port()), **values),
+        env=service_environ(PORT=str(free_port()), **SUPABASE, **values),
         capture_output=True,
         text=True,
         timeout=60,
@@ -146,11 +158,33 @@ def test_the_service_refuses_to_start_without_a_valid_secret(values: dict[str, s
     assert "short-secret" not in result.stderr + result.stdout
 
 
+@pytest.mark.parametrize(
+    ("values", "named"),
+    [
+        pytest.param({KEY_VARIABLE: "k" * 40}, URL_VARIABLE, id="no address"),
+        pytest.param({URL_VARIABLE: "ftp://127.0.0.1:9", KEY_VARIABLE: "k" * 40}, URL_VARIABLE, id="not http"),
+        pytest.param({URL_VARIABLE: "http://127.0.0.1:9"}, KEY_VARIABLE, id="no key"),
+        pytest.param({URL_VARIABLE: "http://127.0.0.1:9", KEY_VARIABLE: ""}, KEY_VARIABLE, id="empty key"),
+    ],
+)
+def test_the_service_refuses_to_start_without_its_database(values: dict[str, str], named: str) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "reading"],
+        env=service_environ(PORT=str(free_port()), **{GATE_VARIABLE: SECRET}, **values),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode != 0
+    assert named in result.stderr
+    assert "k" * 40 not in result.stderr + result.stdout
+
+
 def test_the_service_starts_with_a_valid_secret() -> None:
     port = free_port()
     process = subprocess.Popen(
         [sys.executable, "-m", "reading"],
-        env=service_environ(PORT=str(port), **{GATE_VARIABLE: SECRET}),
+        env=service_environ(PORT=str(port), **SUPABASE, **{GATE_VARIABLE: SECRET}),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
