@@ -44,7 +44,7 @@ if (!succeeds("git", ["diff", "--quiet", "origin/main", "--", "scripts", ".githo
 const gateDirectory = mkdtempSync(join(tmpdir(), "merge-gate-"));
 const gatePath = join(gateDirectory, "merge-gate.ts");
 writeFileSync(gatePath, run("git", ["show", "origin/main:scripts/merge-gate.ts"]));
-const { mergeRefusals, mergeArguments } = await import(pathToFileURL(gatePath).href);
+const { mergeRefusals, mergeArguments, packageRefusals, lockRefusals } = await import(pathToFileURL(gatePath).href);
 rmSync(gateDirectory, { recursive: true, force: true });
 
 function view() {
@@ -64,7 +64,21 @@ const files = run("git", ["diff", "--name-only", "--no-renames", "-z", "origin/m
   .split("\0")
   .filter((path) => path !== "");
 const mainIsAncestor = succeeds("git", ["merge-base", "--is-ancestor", "origin/main", pr.headRefOid]);
-const refusals = mergeRefusals(pr, checks, files, mainIsAncestor);
+function fileAt(revision, path) {
+  try {
+    return run("git", ["show", `${revision}:${path}`]);
+  } catch {
+    return null;
+  }
+}
+
+const refusals = [
+  ...mergeRefusals(pr, checks, files, mainIsAncestor),
+  ...(files.includes("package.json")
+    ? packageRefusals(fileAt("origin/main", "package.json"), fileAt(pr.headRefOid, "package.json"))
+    : []),
+  ...(files.includes("package-lock.json") ? lockRefusals(fileAt(pr.headRefOid, "package-lock.json")) : []),
+];
 
 if (refusals.length > 0) {
   console.error(`Pull request #${number} is not merged:`);
