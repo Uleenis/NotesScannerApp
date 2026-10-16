@@ -6,8 +6,9 @@ Paths below are from the repository root.
 
 - **Spec:** `../../02 Design/Spec tranche 2.md`, validated by the owner on 12/10/2026.
 - **Plan:** `../../02 Design/Plan tranche 2.md`, validated by the owner on 12/10/2026, with its "Points à trancher" as proposed.
-- **Next branch:** `t2/rules`, after Pause 2.
-- **Pauses:** after branches 3, 6, 9 and 12, in `../Tranche 2/Pause 1.md` to `Pause 4.md`.
+- **Method:** `../../01 Steps/Méthode de travail.md`, revised on 16/10/2026. One session builds branches 7 to 12 one after the other, each with its tests, reviews, PR and merge, with no pause in between. The phone checks of the slice wait for the owner's return.
+- **Next branch:** `t2/rules`. Two changes from the owner come with the remaining branches, in branch 7 or in a branch of their own: a bad configuration of the service lets the page be read with B1 alone and logs it, instead of stopping the function; and `$…$` makes a page math only when the opening `$` is followed and the closing `$` preceded by a character that is not a space.
+- **Decisions from now on:** `../Tranche 2/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section. Branch 12 changes `package.json` and stays the owner's to merge until the guarded files are reduced.
 - **Measures:** scripts and results in `../../04 Testing/T2 mesures/`, outside the repository.
 
 ## Branches
@@ -19,7 +20,7 @@ Paths below are from the repository root.
 | 3 | `t2/recognition` | 1 | yes | Claude | merged |
 | 4 | `t2/schema` | 2 | yes | Claude | merged |
 | 5 | `t2/arbitrate` | 2 | yes | Claude | merged |
-| 6 | `t2/read-page` | 2 | yes | Claude | done |
+| 6 | `t2/read-page` | 2 | yes | Claude | merged |
 | 7 | `t2/rules` | 3 | no | Claude | to do |
 | 8 | `t2/replay` | 3 | no | Claude | to do |
 | 9 | `t2/ner` | 3 | no | Claude | to do |
