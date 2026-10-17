@@ -4,10 +4,12 @@ version = "0.1.0"
 requires-python = "==3.13.*"
 dependencies = [
     "fastapi>=0.120",
+    "espeakng-loader==0.2.4",
     "httpx2>=2.13",
     "kraken==7.1.1",
     "lingua-language-detector>=2.1",
     "numpy==2.4.6",
+    "phonemizer==3.4.0",
     "pillow==12.3.0",
     "scikit-image==0.25.2",
     "scipy==1.15.3",
@@ -128,7 +130,18 @@ cache_dir = "/tmp/mypy"
 untyped_calls_exclude = ["skimage"]
 
 [[tool.mypy.overrides]]
-module = ["kraken", "kraken.*", "scipy", "scipy.*", "skimage", "skimage.*", "threadpoolctl"]
+module = [
+    "espeakng_loader",
+    "kraken",
+    "kraken.*",
+    "phonemizer",
+    "phonemizer.*",
+    "scipy",
+    "scipy.*",
+    "skimage",
+    "skimage.*",
+    "threadpoolctl",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

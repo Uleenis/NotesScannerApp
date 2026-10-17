@@ -1,6 +1,8 @@
 import contextlib
 import logging
 import re
+from collections.abc import Sequence
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -9,7 +11,9 @@ from reading.alto import alto_of
 from reading.arbiter import Arbiter, Arbitration, ArbitrationError
 from reading.arbitration import Model, Position
 from reading.recognition import Reading, ReadLine, Word
+from reading.rules import Rules
 from reading.store import ReadingA, StoreError
+from reading.tokens import line_tokens
 
 USER = "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
 PAGE = "0b6f3c1e-8d2a-4c5b-9e7f-1a2b3c4d5e6f"
@@ -43,9 +47,11 @@ class FakeStore:
         models: list[Model] | None = None,
         reason: str = "recorded",
         fail: dict[str, StoreError] | None = None,
+        level: str = "course",
     ) -> None:
         self._models = models or []
         self._reason = reason
+        self._level = level
         self._fail = fail or {}
         self.calls: list[str] = []
         self.uploads: dict[str, bytes] = {}
@@ -61,6 +67,11 @@ class FakeStore:
         assert user_id == USER
         self._step("models")
         return self._models
+
+    def correction_level(self, page_id: str, user_id: str) -> str:
+        assert (page_id, user_id) == (PAGE, USER)
+        self._step("level")
+        return self._level
 
     def upload_alto(self, path: str, alto: bytes) -> None:
         self._step("upload")
@@ -88,16 +99,33 @@ class FakeLanguage:
 
 class FakeRules:
     def __init__(self) -> None:
-        self.calls: list[tuple[list[Position], str | None]] = []
+        self.calls: list[tuple[list[Position], str, str, str | None, str]] = []
 
-    def decide(self, positions: list[Position], language: str | None) -> list[Position]:
-        self.calls.append((positions, language))
-        return [
-            Position(
-                p.token_index, p.line_index, p.text, 10, "none", p.reading_a, p.reading_b1, p.anchor_kind, p.anchor
-            )
-            for p in positions
-        ]
+    def decide(self, positions: list[Position], b1: str, a: str, language: str | None, level: str) -> list[Position]:
+        self.calls.append((positions, b1, a, language, level))
+        return [replace(p, rule=10, channel="none") for p in positions]
+
+
+class Untouchable:
+    def phonemes(self, words: Sequence[str], language: str) -> list[str]:
+        raise AssertionError("phonemes asked")
+
+    def flags(self, text: str) -> list[bool]:
+        raise AssertionError("entities asked")
+
+
+class Ports:
+    def __init__(self) -> None:
+        self.phoneme_calls = 0
+        self.entity_texts: list[str] = []
+
+    def phonemes(self, words: Sequence[str], language: str) -> list[str]:
+        self.phoneme_calls += 1
+        return [""] * len(words)
+
+    def flags(self, text: str) -> list[bool]:
+        self.entity_texts.append(text)
+        return [False] * len(line_tokens(text))
 
 
 def logged(caplog: pytest.LogCaptureFixture) -> str:
@@ -138,14 +166,72 @@ def test_with_the_gate_closed_the_rules_are_never_asked_and_no_position_has_a_ru
     assert all(p.rule is None and p.channel is None for p in store.writes[0].tokens)
 
 
+def test_with_the_gate_closed_neither_phonemes_nor_entities_are_asked() -> None:
+    store = FakeStore(models=[Model("active", Decimal("0.13"))])
+    untouchable = Untouchable()
+    Arbiter(store, FakeLanguage("fr"), Rules(untouchable, untouchable)).arbitrate(arbitration())
+    write = store.writes[0]
+    assert [(p.text, p.rule, p.channel) for p in write.tokens] == [
+        ("Le", None, None),
+        (B1_PROBE, None, None),
+        ("dort", None, None),
+    ]
+    assert "level" not in store.calls
+
+
 def test_with_the_gate_open_the_rules_decide_each_position() -> None:
     rules = FakeRules()
-    store = FakeStore(models=[Model("active", Decimal("0.129"))])
+    store = FakeStore(models=[Model("active", Decimal("0.129"))], level="journal")
     Arbiter(store, FakeLanguage("en"), rules).arbitrate(arbitration())
-    [(positions, language)] = rules.calls
-    assert language == "en"
-    assert [p.text for p in positions] == ["Le", B1_PROBE, "dort"]
+    [(positions, b1, a, language, level)] = rules.calls
+    assert (b1, a, language, level) == (f"Le {B1_PROBE} dort", f"Le {A_PROBE}", "en", "journal")
+    assert [(p.text, p.a_index, p.confidence) for p in positions] == [
+        ("Le", 0, 0.99),
+        (B1_PROBE, 1, 0.4),
+        ("dort", None, None),
+    ]
     assert [(p.rule, p.channel) for p in store.writes[0].tokens] == [(10, "none")] * 3
+    assert store.calls == ["models", "level", "upload", "record"]
+
+
+def test_with_the_gate_open_the_rules_write_the_words_and_their_channels() -> None:
+    store = FakeStore(models=[Model("active", Decimal("0.1"))])
+    Arbiter(store, FakeLanguage("fr"), Rules(Ports(), Ports())).arbitrate(arbitration())
+    assert [(p.text, p.rule, p.channel) for p in store.writes[0].tokens] == [
+        ("Le", 9, "none"),
+        (B1_PROBE, 8, "layer"),
+        ("dort", 10, "none"),
+    ]
+
+
+def test_with_the_gate_open_a_french_page_goes_through_the_entities() -> None:
+    ports = Ports()
+    store = FakeStore(models=[Model("active", Decimal("0.1"))])
+    Arbiter(store, FakeLanguage("fr"), Rules(ports, ports)).arbitrate(arbitration())
+    assert ports.entity_texts == [f"Le {B1_PROBE} dort", f"Le {A_PROBE}"]
+
+
+@pytest.mark.parametrize("language", ["en", "es", None])
+def test_with_the_gate_open_a_page_not_in_french_never_goes_through_the_entities(language: str | None) -> None:
+    ports = Ports()
+    store = FakeStore(models=[Model("active", Decimal("0.1"))])
+    Arbiter(store, FakeLanguage(language), Rules(ports, ports)).arbitrate(arbitration())
+    assert ports.entity_texts == []
+    assert len(store.writes) == 1
+
+
+def test_a_correction_level_out_of_reach_stops_before_anything_is_uploaded() -> None:
+    store = FakeStore(models=[Model("active", Decimal("0.1"))], fail={"level": StoreError(settled=False)})
+    with pytest.raises(ArbitrationError):
+        Arbiter(store, FakeLanguage(), FakeRules()).arbitrate(arbitration())
+    assert store.calls == ["models", "level"]
+
+
+def test_failing_rules_stop_before_anything_is_uploaded() -> None:
+    store = FakeStore(models=[Model("active", Decimal("0.1"))])
+    with pytest.raises(AssertionError):
+        Arbiter(store, FakeLanguage("fr"), Rules(Untouchable(), Untouchable())).arbitrate(arbitration())
+    assert store.calls == ["models", "level"]
 
 
 def test_a_page_whose_language_is_not_found_is_written_without_one() -> None:
@@ -233,12 +319,13 @@ def test_an_empty_a_writes_positions_without_anchors() -> None:
         pytest.param(FakeStore(), id="recorded"),
         pytest.param(FakeStore(reason="not_text"), id="refused"),
         pytest.param(FakeStore(fail={"record": StoreError(settled=False)}), id="failed"),
+        pytest.param(FakeStore(models=[Model("active", Decimal("0.1"))], level="journal"), id="gate open"),
     ],
 )
 def test_the_logs_carry_no_text_of_the_page(store: FakeStore, caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG)
     with contextlib.suppress(ArbitrationError):
-        Arbiter(store, FakeLanguage()).arbitrate(arbitration())
+        Arbiter(store, FakeLanguage(), Rules(Ports(), Ports())).arbitrate(arbitration())
     text = logged(caplog)
     assert PAGE in text
     assert B1_PROBE not in text
