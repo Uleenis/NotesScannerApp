@@ -1,4 +1,6 @@
-import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
+import { assert, assertEquals } from "jsr:@std/assert@1";
+import { createLogger } from "../_shared/log.ts";
+import type { Logger } from "../_shared/log.ts";
 import { createReadingService, readingServiceFrom, retryable } from "../_shared/reading-service.ts";
 import type { ServiceFailure } from "../_shared/reading-service.ts";
 import { ALICE, JPEG_BYTES, PAGE_ID } from "./fakes.ts";
@@ -146,53 +148,82 @@ function env(values: Record<string, string | undefined>): (name: string) => stri
   return (name) => values[name];
 }
 
-Deno.test("without an address and a secret there is no service, and B1 reads alone", () => {
-  assertEquals(readingServiceFrom(env({})), null);
+function logs(): { log: Logger; lines: string[] } {
+  const lines: string[] = [];
+  return { log: createLogger((line) => lines.push(line)), lines };
+}
+
+function serviceOf(values: Record<string, string | undefined>, log: Logger = logs().log) {
+  return readingServiceFrom(env(values), log);
+}
+
+function misconfigured(values: Record<string, string | undefined>): string | undefined {
+  const { log, lines } = logs();
+  assertEquals(serviceOf(values, log), null, JSON.stringify(values.READING_URL));
+  assertEquals(lines.length, 1, JSON.stringify(values.READING_URL));
+  const record = JSON.parse(lines[0]);
+  assertEquals(record.event, "reading_service_misconfigured");
+  for (const value of Object.values(values)) {
+    if (value) assert(!lines[0].includes(value), value);
+  }
+  return record.code;
+}
+
+Deno.test("without an address and a secret there is no service, B1 reads alone and nothing is logged", () => {
+  const { log, lines } = logs();
+  assertEquals(serviceOf({}, log), null);
+  assertEquals(lines, []);
 });
 
-Deno.test("a half or unsafe configuration of the service stops the function", () => {
-  for (const values of [
-    { READING_URL: BASE },
-    { READING_SECRET: SECRET },
-    { READING_URL: BASE, READING_SECRET: "short", SUPABASE_URL: LOCAL_STACK },
-    { READING_URL: BASE, READING_SECRET: ` ${SECRET}`, SUPABASE_URL: LOCAL_STACK },
-    { READING_URL: "http://reading.example.com", READING_SECRET: SECRET },
-    { READING_URL: "ftp://notes-reading", READING_SECRET: SECRET },
-    { READING_URL: "https://user:pass@reading.example.com", READING_SECRET: SECRET },
-    { READING_URL: "https://reading.example.com/?x=1", READING_SECRET: SECRET },
-    { READING_URL: "https://reading.example.com/base", READING_SECRET: SECRET },
-    { READING_URL: "not an address", READING_SECRET: SECRET },
-  ]) {
-    assertThrows(() => readingServiceFrom(env(values)), Error, undefined, JSON.stringify(values.READING_URL));
+Deno.test("a half or unsafe configuration of the service lets B1 read alone and logs why, without a value", () => {
+  for (const [values, code] of [
+    [{ READING_URL: BASE }, "half_configured"],
+    [{ READING_SECRET: SECRET }, "half_configured"],
+    [{ READING_URL: BASE, READING_SECRET: "short", SUPABASE_URL: LOCAL_STACK }, "weak_secret"],
+    [{ READING_URL: BASE, READING_SECRET: ` ${SECRET}`, SUPABASE_URL: LOCAL_STACK }, "weak_secret"],
+    [{ READING_URL: "http://reading.example.com", READING_SECRET: SECRET }, "not_https"],
+    [{ READING_URL: "ftp://notes-reading", READING_SECRET: SECRET }, "not_https"],
+    [{ READING_URL: "https://user:pass@reading.example.com", READING_SECRET: SECRET }, "not_an_origin"],
+    [{ READING_URL: "https://reading.example.com/?x=1", READING_SECRET: SECRET }, "not_an_origin"],
+    [{ READING_URL: "https://reading.example.com/base", READING_SECRET: SECRET }, "not_an_origin"],
+    [{ READING_URL: "not an address", READING_SECRET: SECRET }, "not_an_address"],
+  ] as [Record<string, string>, string][]) {
+    assertEquals(misconfigured(values), code, JSON.stringify(values.READING_URL));
   }
+});
+
+Deno.test("a good configuration logs nothing", () => {
+  const { log, lines } = logs();
+  assert(serviceOf({ READING_URL: "https://reading.example.com", READING_SECRET: SECRET }, log) !== null);
+  assertEquals(lines, []);
 });
 
 const LOCAL_STACK = "http://kong:8000";
 
 Deno.test("the service is reached over https, or over http on the machine or the network of the local stack", () => {
   for (const url of ["https://reading.example.com", "https://reading.example.com/"]) {
-    assert(readingServiceFrom(env({ READING_URL: url, READING_SECRET: SECRET, SUPABASE_URL: "https://project.supabase.co" })) !== null, url);
+    assert(serviceOf({ READING_URL: url, READING_SECRET: SECRET, SUPABASE_URL: "https://project.supabase.co" }) !== null, url);
   }
   for (const url of ["http://localhost:54340", "http://127.0.0.1:54340", "http://[::1]:54340", BASE, `${BASE}/`]) {
-    assert(readingServiceFrom(env({ READING_URL: url, READING_SECRET: SECRET, SUPABASE_URL: LOCAL_STACK })) !== null, url);
+    assert(serviceOf({ READING_URL: url, READING_SECRET: SECRET, SUPABASE_URL: LOCAL_STACK }) !== null, url);
   }
 });
 
-Deno.test("plain http is refused outside the local stack", () => {
+Deno.test("plain http is refused outside the local stack: B1 reads alone", () => {
   for (const supabaseUrl of ["https://project.supabase.co", undefined]) {
-    assertThrows(() => readingServiceFrom(env({ READING_URL: BASE, READING_SECRET: SECRET, SUPABASE_URL: supabaseUrl })), Error);
+    assertEquals(misconfigured({ READING_URL: BASE, READING_SECRET: SECRET, SUPABASE_URL: supabaseUrl }), "not_https");
   }
 });
 
-Deno.test("a proxy of the environment would see the secret over http: the function does not start", () => {
+Deno.test("a proxy of the environment would see the secret over http: B1 reads alone", () => {
   for (const name of ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]) {
-    assertThrows(() => readingServiceFrom(env({ READING_URL: BASE, READING_SECRET: SECRET, SUPABASE_URL: LOCAL_STACK, [name]: "http://127.0.0.1:3128" })), Error, undefined, name);
+    assertEquals(misconfigured({ READING_URL: BASE, READING_SECRET: SECRET, SUPABASE_URL: LOCAL_STACK, [name]: "http://127.0.0.1:3128" }), "proxy_on_http", name);
   }
   for (const noProxy of ["notes-reading", "localhost,notes-reading", "*", ".notes-reading"]) {
     const values = { READING_URL: BASE, READING_SECRET: SECRET, SUPABASE_URL: LOCAL_STACK, HTTP_PROXY: "http://127.0.0.1:3128", NO_PROXY: noProxy };
-    assert(readingServiceFrom(env(values)) !== null, noProxy);
+    assert(serviceOf(values) !== null, noProxy);
   }
-  assert(readingServiceFrom(env({ READING_URL: "https://reading.example.com", READING_SECRET: SECRET, HTTPS_PROXY: "http://127.0.0.1:3128" })) !== null);
+  assert(serviceOf({ READING_URL: "https://reading.example.com", READING_SECRET: SECRET, HTTPS_PROXY: "http://127.0.0.1:3128" }) !== null);
 });
 
 Deno.test("a trailing slash in the address does not change the routes", async () => {

@@ -17,6 +17,7 @@ export type LogEvent =
   | "a_cancelled"
   | "a_abandoned"
   | "a_done"
+  | "reading_service_misconfigured"
   | "unexpected_error";
 
 export type LogFields = {
