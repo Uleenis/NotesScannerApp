@@ -4,8 +4,10 @@ from collections.abc import Sequence
 
 import pytest
 
+from reading import replay as replay_module
 from reading.arbitration import a_text, positions_of
 from reading.recognition import ReadLine, Word
+from reading.refusal import too_complex
 from reading.replay import main, replay
 from reading.rules import Rules
 from reading.tokens import line_tokens
@@ -146,6 +148,54 @@ def test_a_bad_input_is_refused_without_its_text(document: object) -> None:
     assert out == ""
     assert err.strip() == "invalid replay input"
     assert PROBE not in err
+
+
+def test_one_text_read_alike_with_two_sets_of_entities_is_refused() -> None:
+    lines = [[{"text": "un", "confidence": 0.99}, {"text": "Marie", "confidence": 0.99}]]
+    entry = page(b1="un Marie", lines=lines, entities={"b1": [False, False], "a": [False, True]})
+    code, _, err = run({"pages": [entry]})
+    assert code == 2
+    assert err.strip() == "invalid replay input"
+
+
+@pytest.mark.parametrize(
+    ("b1_flag", "a_flag"),
+    [pytest.param(True, False, id="flag of b1 alone"), pytest.param(False, True, id="flag of a alone")],
+)
+def test_each_reading_brings_its_own_entities(b1_flag: bool, a_flag: bool) -> None:
+    lines = [[{"text": "le", "confidence": 0.99}, {"text": "Rhone", "confidence": 0.99}]]
+    entry = page(b1="le Rhône", lines=lines, entities={"b1": [False, b1_flag], "a": [False, a_flag]})
+    code, out, _ = run({"pages": [entry]})
+    assert code == 0
+    assert [(p["text"], p["rule"]) for p in json.loads(out)["pages"][0]["positions"]] == [("le", 9), ("Rhône", 3)]
+
+
+def test_entities_of_a_that_do_not_cover_its_words_are_refused() -> None:
+    entry = page()
+    entities = entry["entities"]
+    assert isinstance(entities, dict)
+    code, _, err = run({"pages": [page(entities={"b1": entities["b1"], "a": [*entities["a"], False]})]})
+    assert code == 2
+    assert err.strip() == "invalid replay input"
+
+
+def test_a_page_too_complex_is_refused_as_such(monkeypatch: pytest.MonkeyPatch) -> None:
+    def too_big(*_: object) -> list[object]:
+        raise too_complex()
+
+    monkeypatch.setattr(replay_module, "positions_of", too_big)
+    code, out, err = run({"pages": [page()]})
+    assert (code, out) == (2, "")
+    assert err.strip() == "page too complex to replay"
+
+
+def test_a_fault_of_the_rules_is_not_taken_for_a_bad_input() -> None:
+    class Broken(Recorder):
+        def phonemes(self, words: Sequence[str], language: str) -> list[str]:
+            return []
+
+    with pytest.raises(ValueError, match="phonemes"):
+        main(io.StringIO(json.dumps({"pages": [page()]})), io.StringIO(), io.StringIO(), Broken())
 
 
 def test_input_that_is_not_json_is_refused() -> None:

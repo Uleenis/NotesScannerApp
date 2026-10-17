@@ -8,10 +8,17 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from reading.arbitration import Position, a_text, positions_of
 from reading.recognition import Box, ReadLine, Word
+from reading.refusal import RefusalError
 from reading.rules import Phonemes, Rules
+from reading.tokens import line_tokens
 
 NO_BOX: Box = (0, 0, 1, 1)
 REFUSED = "invalid replay input"
+TOO_COMPLEX = "page too complex to replay"
+
+
+class ReplayError(ValueError):
+    pass
 
 
 class Strict(BaseModel):
@@ -57,7 +64,7 @@ class PinnedEntities:
             return self._b1_flags
         if text == self._a:
             return self._a_flags
-        raise ValueError("no entities for this text")
+        raise ReplayError("no entities for this text")
 
 
 def lines_of(page: PageIn) -> tuple[ReadLine, ...]:
@@ -78,6 +85,10 @@ def replay(document: object, phonemes: Phonemes) -> list[Replayed]:
     for page in pages:
         lines = lines_of(page)
         a = a_text(lines)
+        if len(page.entities.b1) != len(line_tokens(page.b1)) or len(page.entities.a) != len(line_tokens(a)):
+            raise ReplayError("entities do not cover the words")
+        if page.b1 == a and page.entities.b1 != page.entities.a:
+            raise ReplayError("one text with two sets of entities")
         rules = Rules(phonemes, PinnedEntities(page.b1, page.entities.b1, a, page.entities.a))
         positions = rules.decide(positions_of(page.b1, lines), page.b1, a, page.language, page.level)
         out.append(Replayed(page.page, positions))
@@ -104,8 +115,11 @@ def main(source: TextIO, target: TextIO, errors: TextIO, phonemes: Phonemes | No
 
             phonemes = Espeak()
         replayed = replay(document, phonemes)
-    except (ValueError, ValidationError):
+    except (json.JSONDecodeError, ValidationError, ReplayError):
         print(REFUSED, file=errors)
+        return 2
+    except RefusalError:
+        print(TOO_COMPLEX, file=errors)
         return 2
     pages = [{"page": r.page, "positions": [position_row(p) for p in r.positions]} for r in replayed]
     json.dump({"pages": pages}, target, ensure_ascii=False)
