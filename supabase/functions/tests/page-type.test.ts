@@ -8,7 +8,8 @@ Deno.test("B1 with LaTeX delimiters is a page of math [5]", () => {
     "On a \\[ a = b \\] donc",
     "On a \\( a = b \\) donc",
     "\\begin{align}\na &= b\n\\end{align}",
-    "Prix : 5$ et 10$",
+    "$x$",
+    "on pose $a$ et $b$",
   ]) {
     assertEquals(pageTypeOf(b1), "math", b1);
   }
@@ -24,6 +25,10 @@ Deno.test("plain text, a lone dollar or a backslash that is no math command is t
   for (const b1 of [
     "Rendez-vous chez le dentiste mardi 14h",
     "Ça coûte 5 $ seulement",
+    "Prix : 5$ et 10$",
+    "Prix : 5 $ et 10 $",
+    "De $5 à $10",
+    "Entre $ et $ rien",
     "Le dossier C:\\Users\\tim",
     "Un mot illisible [?] ici",
     "\\top secret",
@@ -55,4 +60,18 @@ Deno.test("a long run of opening delimiters with no closing one is decided at on
   const started = performance.now();
   assertEquals(pageTypeOf("\\[ \\( ".repeat(100_000)), "text");
   assertEquals(performance.now() - started < 1_000, true);
+});
+
+Deno.test("long runs of dollars with no closing one are decided at once", () => {
+  for (const b1 of [`$$${"a ".repeat(200_000)}`, `$a${" b".repeat(200_000)} $`, "$a ".repeat(100_000), "$$ ".repeat(100_000)]) {
+    const started = performance.now();
+    assertEquals(pageTypeOf(b1), "text");
+    assertEquals(performance.now() - started < 1_000, true);
+  }
+});
+
+Deno.test("an empty display or one of spaces alone is no formula", () => {
+  for (const b1 of ["$$$$", "$$ $$", "$$\n\n$$"]) {
+    assertEquals(pageTypeOf(b1), "text", b1);
+  }
 });

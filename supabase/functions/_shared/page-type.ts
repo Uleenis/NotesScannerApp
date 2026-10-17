@@ -15,7 +15,9 @@ const MATH_COMMANDS = [
   "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
 ];
 
-const DOLLARS = /\$[^$]+\$/;
+const DOLLARS = /\$[^\s$](?:[^$]*[^\s$])?\$/;
+
+const DISPLAY = /\$\$\s*[^\s$][^$]*\$\$/;
 
 const PAIRS: [string, string][] = [["\\[", "\\]"], ["\\(", "\\)"]];
 
@@ -30,7 +32,7 @@ function closes(text: string, open: string, close: string): boolean {
 }
 
 function holdsLatex(text: string): boolean {
-  return DOLLARS.test(text) || PAIRS.some(([open, close]) => closes(text, open, close)) || COMMAND.test(text);
+  return DOLLARS.test(text) || DISPLAY.test(text) || PAIRS.some(([open, close]) => closes(text, open, close)) || COMMAND.test(text);
 }
 
 function mostlyNotLatin(text: string): boolean {

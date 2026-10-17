@@ -20,7 +20,7 @@ const deps = {
   reader: createServiceReader(keys),
   server: createServerStore(keys),
   gemini: createGeminiReader({ apiKey: geminiKey }),
-  service: readingServiceFrom((name) => Deno.env.get(name)),
+  service: readingServiceFrom((name) => Deno.env.get(name), consoleLogger),
   background: runInBackground,
   clock: { now: () => Date.now() },
   log: consoleLogger,

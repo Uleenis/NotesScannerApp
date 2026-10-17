@@ -1,3 +1,5 @@
+import type { Logger } from "./log.ts";
+
 export const RECOGNIZE_TIMEOUT_MS = 135_000;
 
 export const ARBITRATE_TIMEOUT_MS = 30_000;
@@ -49,10 +51,15 @@ type ServiceOptions = {
   maxAnswerBytes?: number;
 };
 
+type ConfigProblem = "half_configured" | "weak_secret" | "not_an_address" | "not_an_origin" | "not_https" | "proxy_on_http";
+
 export class ReadingServiceConfigError extends Error {
-  constructor(reason: string) {
-    super(reason);
+  readonly code: ConfigProblem;
+
+  constructor(code: ConfigProblem) {
+    super(code);
     this.name = "ReadingServiceConfigError";
+    this.code = code;
   }
 }
 
@@ -81,21 +88,21 @@ function originOf(url: string, get: (name: string) => string | undefined): strin
   try {
     parsedUrl = new URL(url);
   } catch {
-    throw new ReadingServiceConfigError("READING_URL is not an address");
+    throw new ReadingServiceConfigError("not_an_address");
   }
   if (parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash || parsedUrl.pathname !== "/") {
-    throw new ReadingServiceConfigError("READING_URL must be an origin alone");
+    throw new ReadingServiceConfigError("not_an_origin");
   }
   if (parsedUrl.protocol === "https:") return parsedUrl.origin;
   const host = parsedUrl.hostname;
   const local = LOCAL_HOSTS.includes(host) || (!host.includes(".") && !host.includes(":") && host.length > 0);
   const stackIsLocal = (get("SUPABASE_URL") ?? "").startsWith("http://");
   if (parsedUrl.protocol !== "http:" || !local || !stackIsLocal) {
-    throw new ReadingServiceConfigError("READING_URL must use https outside the local stack");
+    throw new ReadingServiceConfigError("not_https");
   }
   const noProxy = get("NO_PROXY") ?? get("no_proxy") ?? "";
   if (HTTP_PROXY_NAMES.some((name) => get(name)) && !bypassed(host, noProxy)) {
-    throw new ReadingServiceConfigError("a proxy would see READING_SECRET over http");
+    throw new ReadingServiceConfigError("proxy_on_http");
   }
   return parsedUrl.origin;
 }
@@ -214,13 +221,23 @@ export function retryable(failure: ServiceFailure): boolean {
   return failure.status === 429 || failure.status >= 500;
 }
 
-export function readingServiceFrom(get: (name: string) => string | undefined, fetchImpl?: typeof fetch): ReadingService | null {
+function configuredService(get: (name: string) => string | undefined, fetchImpl?: typeof fetch): ReadingService | null {
   const url = get("READING_URL");
   const secret = get("READING_SECRET");
   if (!url && !secret) return null;
-  if (!url || !secret) throw new ReadingServiceConfigError("READING_URL and READING_SECRET go together");
+  if (!url || !secret) throw new ReadingServiceConfigError("half_configured");
   if (secret.length < MIN_SECRET_LENGTH || secret.trim() !== secret) {
-    throw new ReadingServiceConfigError("READING_SECRET is too short or has spaces around it");
+    throw new ReadingServiceConfigError("weak_secret");
   }
   return createReadingService({ url: originOf(url, get), secret, fetch: fetchImpl });
+}
+
+export function readingServiceFrom(get: (name: string) => string | undefined, log: Logger, fetchImpl?: typeof fetch): ReadingService | null {
+  try {
+    return configuredService(get, fetchImpl);
+  } catch (error) {
+    if (!(error instanceof ReadingServiceConfigError)) throw error;
+    log.event("reading_service_misconfigured", { code: error.code });
+    return null;
+  }
 }
