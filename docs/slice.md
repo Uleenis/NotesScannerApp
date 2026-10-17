@@ -7,7 +7,7 @@ Paths below are from the repository root.
 - **Spec:** `../../02 Design/Spec tranche 2.md`, validated by the owner on 12/10/2026.
 - **Plan:** `../../02 Design/Plan tranche 2.md`, validated by the owner on 12/10/2026, with its "Points à trancher" as proposed.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 16/10/2026. One session builds branches 7 to 12 one after the other, each with its tests, reviews, PR and merge, with no pause in between. The phone checks of the slice wait for the owner's return.
-- **Next branch:** `t2/b1-fallback`, the two changes from the owner: a bad configuration of the service lets the page be read with B1 alone and logs it, instead of stopping the function; and `$…$` makes a page math only when the opening `$` is followed and the closing `$` preceded by a character that is not a space.
+- **Next branch:** `t2/replay`.
 - **Decisions from now on:** `../Tranche 2/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section. Branch 12 changes `package.json` and stays the owner's to merge until the guarded files are reduced.
 - **Measures:** scripts and results in `../../04 Testing/T2 mesures/`, outside the repository.
 - **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 3, 4, 7, 9, 5, 6, 8. From slice 3, a slice has one document, spec and plan together, `../../02 Design/Tranche N.md`; its "Plan" table names its branches. When slice 2 is done, its last commit points this file to slice 3 if `Tranche 3.md` says it is validated by the owner, with its branches in the table below; the next session then starts slice 3. A slice whose document is missing or not validated: stop and ask.
@@ -23,7 +23,7 @@ Paths below are from the repository root.
 | 5 | `t2/arbitrate` | 2 | yes | Claude | merged |
 | 6 | `t2/read-page` | 2 | yes | Claude | merged |
 | 7 | `t2/rules` | 3 | no | Claude | merged |
-| 7b | `t2/b1-fallback` | 3 | yes | Claude | to do |
+| 7b | `t2/b1-fallback` | 3 | yes | Claude | merged |
 | 8 | `t2/replay` | 3 | no | Claude | to do |
 | 9 | `t2/ner` | 3 | no | Claude | to do |
 | 10 | `t2/page-type` | 4 | yes | Claude | to do |
@@ -75,7 +75,7 @@ Paths below are from the repository root.
 - **Retries of A** (branch 6): one more try on a network failure, 429 or 5xx; never on a timeout of `/recognize` (the service gives up at 120 s and still holds its one-page lock), on 400, 401, 409, 413, 415, 422, a redirect, or an answer that is not a JSON object for the page or is above 11 MB. A second `/arbitrate` answered `already_read` means the first one wrote A: logged `a_done` with code `already_read`.
 - **Transfer during A** (branch 6, the note of branch 5): the page is left without A. `read` comes before A, so `transfer-account` is not held back; the late `/arbitrate` names the old owner, `record_reading_a` answers `page_not_found`, the service erases its ALTO, and the page keeps B1 alone (`a_abandoned page_not_found`). Retrying with the new owner would mean reading the page again for a window of about 30 s after a sign-in; not worth it.
 - **The answer of `/recognize`** (branch 6) is passed on as it came: its text is put as is in the body of `/arbitrate`, after checking that it is one JSON object for the page. Parsing and writing it again in JavaScript would turn a confidence of `1.0` into `1`.
-- **Configuration of the service** (branch 6, partly from the security review): `READING_URL` and `READING_SECRET` together or not at all (B1 alone); the secret 32 characters at least, no space around; the address an origin alone, https, or plain http only when `SUPABASE_URL` is itself http (the local stack) and to `localhost`, `127.0.0.1`, `::1` or a name without a dot, with no `HTTP_PROXY` or `ALL_PROXY` of the environment on the way unless `NO_PROXY` covers the host; no redirect followed. Otherwise the function does not start, B1 included: a half configuration is a mistake to see at once. The code review asked whether a bad configuration should rather leave B1 alone: left to the owner (below).
+- **Configuration of the service** (branch 6, partly from the security review): `READING_URL` and `READING_SECRET` together or not at all (B1 alone); the secret 32 characters at least, no space around; the address an origin alone, https, or plain http only when `SUPABASE_URL` is itself http (the local stack) and to `localhost`, `127.0.0.1`, `::1` or a name without a dot, with no `HTTP_PROXY` or `ALL_PROXY` of the environment on the way unless `NO_PROXY` covers the host; no redirect followed. Otherwise, since branch 7b (the owner's decision of 16/10), the page is read by B1 alone and the start logs `reading_service_misconfigured` with a fixed code.
 - **Tests** (branch 6): the tests of slice 1 run without a service, as production does until the end of slice 4; `read-page-a.test.ts` runs the same flows with one.
 - **Measure of branch 6**: `read-page`'s own code, run against the local stack with the service in Docker and Gemini replaced by the ground truth of `Jour 15` (5 s), answered `read` after 5.1 s with the type `text`; A followed in the background, written after 26.8 s: 15 lines, 108 positions all anchored to a word, language `fr`, one ALTO file. The same reading with the real Gemini, launched by `read-photo.cjs` through `functions serve`, could not be done on 14/10: Gemini answered 503 to every attempt from 17:40 to 18:50 (eight readings, both tries each); each time the page went back to the queue and A was cancelled (`a_cancelled b1_failed`), as it should. To do at Pause 2.
 - **Control scripts** (branch 6) in `supabase/tests/manual/` (`scripts/` is guarded): `read-photo.cjs` reads one photo for real through `read-page` on the local stack and waits for A; `reading-report.cjs` prints, without text, the status, type, language, B1, A and positions by kind of anchor of the last pages.
@@ -87,12 +87,14 @@ Paths below are from the repository root.
 
 ## For the owner, set aside by branch 6
 
-- **A bad configuration of the service stops the reading altogether** (code review): `read-page` and `relaunch-page` do not start with half of `READING_URL`/`READING_SECRET`, a short secret, plain http outside the local stack or a proxy on the way, so B1 stops too. The other way: log it and read with B1 alone. Kept closed, as `RELAUNCH_SECRET`; say if you prefer the other.
+- **A bad configuration of the service** (code review): decided by the owner on 16/10, done in branch 7b: B1 alone, logged.
 - **Do not deploy `read-page` or `relaunch-page` before the migrations of slice 2** (code review): they now write `pages.page_type`, which production does not have; deployed alone, no page would be read. The plan deploys nothing before the end of slice 4.
 - **A cancelled recognition goes on in the service** (security review, not checked): the function stops waiting, but the service may finish the reading it started, holding its one-page lock. A few pages at once can then make it answer `busy`, retried once, then B1 alone. Cloud Run's concurrency and instance count settle it at the end of slice 4.
-- **Pages typed math by two prices** (code review): kept as the plan decided (`5$ et 10$` is math); the code review proposed asking a non-space after the opening `$` and before the closing one. Say if you want it.
+- **Pages typed math by two prices** (code review): decided by the owner on 16/10, done in branch 7b: `$…$` needs a non-space after the opening `$` and before the closing one, on one line.
 
 ## Notes for the next branches
+
+- Cloud Run (end of slice 4), from the security review of branch 7b: a bad `READING_URL` or `READING_SECRET` in production now reads every page with B1 alone, and the only trace is one `reading_service_misconfigured` line per cold start. The deploy must check for it (a smoke test that A gets written, or the logs after each deploy).
 
 - Branch 9, wiring the rules in `__main__`: `Espeak()` copies `libespeak-ng.so` into a temporary folder and loads it, and `compose.yaml` mounts `/tmp` as a `tmpfs`, which Docker makes `noexec`: the code review of branch 7 saw `failed to map segment from shared object` under the compose settings. Give the copy an exec-allowed place (`/tmp:exec`, or a `TMPDIR`), test the start under the compose constraints, and check Cloud Run's `/tmp` before the end of slice 4.
 - Branch 8: the rules take `Position.a_index` and `confidence` (A's word paired and its confidence), B1's text, A's text (`a_text`), the language and the correction level; the entities port answers one flag per token of `line_tokens(text)`, for B1 and for A.
