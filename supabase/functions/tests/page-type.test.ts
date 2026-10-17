@@ -29,6 +29,7 @@ Deno.test("plain text, a lone dollar or a backslash that is no math command is t
     "Prix : 5 $ et 10 $",
     "De $5 à $10",
     "Entre $ et $ rien",
+    "Ça coûte 5$.\nPuis 10$ le lendemain",
     "Le dossier C:\\Users\\tim",
     "Un mot illisible [?] ici",
     "\\top secret",

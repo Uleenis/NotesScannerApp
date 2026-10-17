@@ -15,7 +15,7 @@ const MATH_COMMANDS = [
   "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
 ];
 
-const DOLLARS = /\$[^\s$](?:[^$]*[^\s$])?\$/;
+const DOLLARS = /\$[^\s$](?:[^$\n]*[^\s$])?\$/;
 
 const DISPLAY = /\$\$\s*[^\s$][^$]*\$\$/;
 
