@@ -14,9 +14,13 @@ class Token:
     form: str
 
 
+def form_of(text: str) -> str:
+    return unicodedata.normalize("NFC", text).translate(APOSTROPHES).translate(DASHES)
+
+
 def tokens_of(text: str) -> list[Token]:
     composed = unicodedata.normalize("NFC", text)
-    unified = composed.translate(APOSTROPHES).translate(DASHES)
+    unified = form_of(composed)
     tokens = []
     for found in WORD.finditer(unified):
         form = found.group(0)

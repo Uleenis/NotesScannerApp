@@ -10,6 +10,8 @@ from reading.arbitration import Model, Position
 ALTO_BUCKET = "alto"
 ALTO_TYPE = "application/xml"
 REASONS = {"page_not_found", "not_text", "already_read"}
+LEVELS = {"course", "journal", "grammar"}
+DEFAULT_LEVEL = "course"
 SETTLED = {400, 401, 403, 404, 409}
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 LOCAL_GATEWAY = "supabase_kong_"
@@ -37,6 +39,8 @@ class StoreError(Exception):
 
 class Store(Protocol):
     def models(self, user_id: str) -> list[Model]: ...
+
+    def correction_level(self, page_id: str, user_id: str) -> str: ...
 
     def upload_alto(self, path: str, alto: bytes) -> None: ...
 
@@ -115,6 +119,26 @@ class SupabaseStore:
             ]
         except (ValueError, KeyError, TypeError, ArithmeticError) as error:
             raise StoreError(settled=False) from error
+
+    def correction_level(self, page_id: str, user_id: str) -> str:
+        response = self._send(
+            "GET",
+            "/rest/v1/pages",
+            params={"select": "notebooks(correction_level)", "id": f"eq.{page_id}", "user_id": f"eq.{user_id}"},
+        )
+        try:
+            rows = response.json()
+        except ValueError as error:
+            raise StoreError(settled=False) from error
+        if not isinstance(rows, list) or len(rows) > 1:
+            raise StoreError(settled=False)
+        if not rows:
+            return DEFAULT_LEVEL
+        notebook = rows[0].get("notebooks") if isinstance(rows[0], dict) else None
+        level = notebook.get("correction_level") if isinstance(notebook, dict) else None
+        if level not in LEVELS:
+            raise StoreError(settled=False)
+        return str(level)
 
     def upload_alto(self, path: str, alto: bytes) -> None:
         self._send(

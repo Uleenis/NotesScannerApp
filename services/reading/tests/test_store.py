@@ -56,8 +56,8 @@ WRITE = ReadingA(
     alto_path=PATH,
     language="fr",
     tokens=[
-        Position(0, 0, "Le", None, None, "Le", "Le", "word", (12, 10, 60, 60)),
-        Position(1, 1, "dort", None, None, None, "dort", None, None),
+        Position(0, 0, "Le", None, None, "Le", "Le", "word", (12, 10, 60, 60), 0, 0.99),
+        Position(1, 1, "dort", None, None, None, "dort", None, None, None, None),
     ],
 )
 
@@ -77,6 +77,42 @@ def test_the_models_of_the_user_are_read_with_their_status_and_measure() -> None
     assert sent.method == "GET"
     assert sent.url.path == "/rest/v1/htr_models"
     assert dict(sent.url.params) == {"select": "status,cer", "user_id": f"eq.{USER}"}
+
+
+@pytest.mark.parametrize("level", ["course", "journal", "grammar"])
+def test_the_correction_level_of_a_page_is_read_from_its_notebook(level: str) -> None:
+    store, recorder = store_of(answer(200, [{"notebooks": {"correction_level": level}}]))
+    assert store.correction_level(PAGE, USER) == level
+    sent = recorder.requests[0]
+    assert sent.method == "GET"
+    assert sent.url.path == "/rest/v1/pages"
+    assert dict(sent.url.params) == {
+        "select": "notebooks(correction_level)",
+        "id": f"eq.{PAGE}",
+        "user_id": f"eq.{USER}",
+    }
+
+
+def test_a_page_not_found_has_the_course_level() -> None:
+    store, _ = store_of(answer(200, []))
+    assert store.correction_level(PAGE, USER) == "course"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"notebooks": {"correction_level": "course"}}, id="not a list"),
+        pytest.param([{"notebooks": None}], id="no notebook"),
+        pytest.param([{}], id="no field"),
+        pytest.param([{"notebooks": {"correction_level": "loud"}}], id="unknown level"),
+        pytest.param([{"notebooks": {"correction_level": "course"}}] * 2, id="two rows"),
+    ],
+)
+def test_a_correction_level_of_another_shape_is_an_unsettled_failure(body: object) -> None:
+    store, _ = store_of(answer(200, body))
+    with pytest.raises(StoreError) as failed:
+        store.correction_level(PAGE, USER)
+    assert failed.value.settled is False
 
 
 def test_the_alto_is_uploaded_as_xml_without_overwriting() -> None:

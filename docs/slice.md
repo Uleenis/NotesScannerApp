@@ -7,7 +7,7 @@ Paths below are from the repository root.
 - **Spec:** `../../02 Design/Spec tranche 2.md`, validated by the owner on 12/10/2026.
 - **Plan:** `../../02 Design/Plan tranche 2.md`, validated by the owner on 12/10/2026, with its "Points à trancher" as proposed.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 16/10/2026. One session builds branches 7 to 12 one after the other, each with its tests, reviews, PR and merge, with no pause in between. The phone checks of the slice wait for the owner's return.
-- **Next branch:** `t2/rules`. Two changes from the owner come with the remaining branches, in branch 7 or in a branch of their own: a bad configuration of the service lets the page be read with B1 alone and logs it, instead of stopping the function; and `$…$` makes a page math only when the opening `$` is followed and the closing `$` preceded by a character that is not a space.
+- **Next branch:** `t2/b1-fallback`, the two changes from the owner: a bad configuration of the service lets the page be read with B1 alone and logs it, instead of stopping the function; and `$…$` makes a page math only when the opening `$` is followed and the closing `$` preceded by a character that is not a space.
 - **Decisions from now on:** `../Tranche 2/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section. Branch 12 changes `package.json` and stays the owner's to merge until the guarded files are reduced.
 - **Measures:** scripts and results in `../../04 Testing/T2 mesures/`, outside the repository.
 - **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 3, 4, 7, 9, 5, 6, 8. From slice 3, a slice has one document, spec and plan together, `../../02 Design/Tranche N.md`; its "Plan" table names its branches. When slice 2 is done, its last commit points this file to slice 3 if `Tranche 3.md` says it is validated by the owner, with its branches in the table below; the next session then starts slice 3. A slice whose document is missing or not validated: stop and ask.
@@ -22,7 +22,8 @@ Paths below are from the repository root.
 | 4 | `t2/schema` | 2 | yes | Claude | merged |
 | 5 | `t2/arbitrate` | 2 | yes | Claude | merged |
 | 6 | `t2/read-page` | 2 | yes | Claude | merged |
-| 7 | `t2/rules` | 3 | no | Claude | to do |
+| 7 | `t2/rules` | 3 | no | Claude | merged |
+| 7b | `t2/b1-fallback` | 3 | yes | Claude | to do |
 | 8 | `t2/replay` | 3 | no | Claude | to do |
 | 9 | `t2/ner` | 3 | no | Claude | to do |
 | 10 | `t2/page-type` | 4 | yes | Claude | to do |
@@ -92,6 +93,9 @@ Paths below are from the repository root.
 - **Pages typed math by two prices** (code review): kept as the plan decided (`5$ et 10$` is math); the code review proposed asking a non-space after the opening `$` and before the closing one. Say if you want it.
 
 ## Notes for the next branches
+
+- Branch 9, wiring the rules in `__main__`: `Espeak()` copies `libespeak-ng.so` into a temporary folder and loads it, and `compose.yaml` mounts `/tmp` as a `tmpfs`, which Docker makes `noexec`: the code review of branch 7 saw `failed to map segment from shared object` under the compose settings. Give the copy an exec-allowed place (`/tmp:exec`, or a `TMPDIR`), test the start under the compose constraints, and check Cloud Run's `/tmp` before the end of slice 4.
+- Branch 8: the rules take `Position.a_index` and `confidence` (A's word paired and its confidence), B1's text, A's text (`a_text`), the language and the correction level; the entities port answers one flag per token of `line_tokens(text)`, for B1 and for A.
 
 - Branch 6 is done: what follows was its brief, kept for branch 10.
 - Branch 6, calling `/arbitrate`: `Content-Type: application/json` exactly, no query, body `{page_id, user_id, b1, a, duration_ms}` with `a` the answer of `/recognize` untouched and `b1` the text B1 shows. 200 `{page_id, outcome: "recorded", tokens}`; 409 `{error}` with `page_not_found`, `not_text` or `already_read` (final, never retried); 400, 413, 415 and 422 are final too; retry once on 500 `arbitration_failed`, 503 `busy` or a network failure (a retry after a write that did go through answers `already_read`).

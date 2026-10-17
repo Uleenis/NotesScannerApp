@@ -29,6 +29,8 @@ class Position:
     reading_b1: str
     anchor_kind: str | None
     anchor: Box | None
+    a_index: int | None
+    confidence: float | None
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,7 @@ class AToken:
     token: Token
     line: int
     box: Box
+    confidence: float
 
 
 def gate_open(models: Sequence[Model]) -> bool:
@@ -54,7 +57,7 @@ def a_stream(lines: Sequence[ReadLine]) -> tuple[list[AToken], dict[int, list[in
             holes.setdefault(len(stream), []).append(index)
             continue
         for word in line.words:
-            stream.extend(AToken(token, index, word.box) for token in tokens_of(word.text))
+            stream.extend(AToken(token, index, word.box, word.confidence) for token in tokens_of(word.text))
     return stream, holes
 
 
@@ -136,6 +139,21 @@ def positions_of(
     positions = []
     for index, (token, line) in enumerate(b1):
         kind, anchor = anchor_of(index)
-        reading_a = stream[paired[index]].token.text if index in paired else None
-        positions.append(Position(index, line, token.text, None, None, reading_a, token.text, kind, anchor))
+        a_index = paired.get(index)
+        read = None if a_index is None else stream[a_index]
+        positions.append(
+            Position(
+                index,
+                line,
+                token.text,
+                None,
+                None,
+                None if read is None else read.token.text,
+                token.text,
+                kind,
+                anchor,
+                a_index,
+                None if read is None else read.confidence,
+            )
+        )
     return positions
