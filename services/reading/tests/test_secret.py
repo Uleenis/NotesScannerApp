@@ -181,6 +181,19 @@ def test_the_service_refuses_to_start_without_its_database(values: dict[str, str
     assert "k" * 40 not in result.stderr + result.stdout
 
 
+@pytest.mark.parametrize("folder", [pytest.param("", id="empty"), pytest.param("/nowhere/ner", id="missing")])
+def test_the_service_refuses_to_start_without_its_entity_model(folder: str) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "reading"],
+        env=service_environ(PORT=str(free_port()), **SUPABASE, **{GATE_VARIABLE: SECRET}, READING_NER=folder),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode != 0
+    assert "READING_NER" in result.stderr
+
+
 def test_the_service_starts_with_a_valid_secret() -> None:
     port = free_port()
     process = subprocess.Popen(

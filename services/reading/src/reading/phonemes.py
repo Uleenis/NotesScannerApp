@@ -1,4 +1,5 @@
 import logging
+import tempfile
 import threading
 from collections.abc import Sequence
 
@@ -6,7 +7,7 @@ VOICES = {"fr": "fr-fr", "en": "en-us"}
 
 
 class Espeak:
-    def __init__(self) -> None:
+    def __init__(self, library_dir: str | None = None) -> None:
         import espeakng_loader
         from phonemizer.backend.espeak.wrapper import EspeakWrapper
 
@@ -17,16 +18,21 @@ class Espeak:
         quiet = logging.getLogger("reading.phonemizer")
         quiet.propagate = False
         quiet.disabled = True
-        self._backends = {
-            language: EspeakBackend(
-                voice,
-                with_stress=False,
-                language_switch="remove-utterance",
-                words_mismatch="ignore",
-                logger=quiet,
-            )
-            for language, voice in VOICES.items()
-        }
+        previous = tempfile.tempdir
+        tempfile.tempdir = library_dir or previous
+        try:
+            self._backends = {
+                language: EspeakBackend(
+                    voice,
+                    with_stress=False,
+                    language_switch="remove-utterance",
+                    words_mismatch="ignore",
+                    logger=quiet,
+                )
+                for language, voice in VOICES.items()
+            }
+        finally:
+            tempfile.tempdir = previous
         self._lock = threading.Lock()
 
     def phonemes(self, words: Sequence[str], language: str) -> list[str]:

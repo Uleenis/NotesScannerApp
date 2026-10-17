@@ -1,4 +1,4 @@
-from reading.tokens import Token, line_tokens, tokens_of
+from reading.tokens import Token, form_of, line_tokens, token_spans, tokens_of
 
 ACUTE = chr(0x301)
 CURLY = chr(0x2019)
@@ -69,3 +69,10 @@ def test_line_tokens_and_tokens_agree() -> None:
 def test_no_text_no_word() -> None:
     assert tokens_of("") == []
     assert line_tokens(" \n\n") == []
+
+
+def test_the_spans_of_the_words_point_into_their_form_line_after_line() -> None:
+    text = f"l{CURLY}homme est-il là\r\n\n  Paris, 12 h - fin\ne{ACUTE}té{EM_DASH}hiver"
+    spans = token_spans(text)
+    form = form_of(text)
+    assert [form[start:end] for start, end in spans] == [token.form for token, _ in line_tokens(text)]
