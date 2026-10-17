@@ -6,10 +6,13 @@ from pathlib import Path
 import numpy as np
 from tokenizers import Tokenizer
 
+from reading.refusal import too_complex
 from reading.tokens import form_of, token_spans
 
 SCOPE = {"PER", "LOC", "ORG", "MISC"}
 WINDOW = 510
+MAX_PIECES = 15_000
+NEUTRAL = str.maketrans("<>", "  ")
 OUTSIDE = "O"
 TELEMETRY_SWITCH = "ORT_DISABLE_TELEMETRY"
 
@@ -66,7 +69,9 @@ class Camembert:
         return [label in SCOPE for label in self.labels(text)]
 
     def _pieces(self, form: str) -> list[tuple[Span, str]]:
-        encoded = self._tokenizer.encode(form, add_special_tokens=False)
+        encoded = self._tokenizer.encode(form.translate(NEUTRAL), add_special_tokens=False)
+        if len(encoded.ids) > MAX_PIECES:
+            raise too_complex()
         pieces: list[tuple[Span, str]] = []
         for first in range(0, len(encoded.ids), WINDOW):
             ids = encoded.ids[first : first + WINDOW]

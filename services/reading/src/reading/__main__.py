@@ -2,18 +2,32 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import uvicorn
 
 from reading.app import create_app
 from reading.secret import SecretError, load_secret
-from reading.store import SupabaseStore
+from reading.store import Store, SupabaseStore
+
+if TYPE_CHECKING:
+    from reading.arbiter import Arbiter
 
 MODEL_VARIABLE = "READING_MODEL"
 NER_VARIABLE = "READING_NER"
 ESPEAK_VARIABLE = "READING_ESPEAK_DIR"
 URL_VARIABLE = "SUPABASE_URL"
 KEY_VARIABLE = "SUPABASE_SERVICE_ROLE_KEY"
+
+
+def arbiter_of(store: Store, ner: Path, espeak_dir: str | None) -> "Arbiter":
+    from reading.arbiter import Arbiter
+    from reading.entities import Camembert
+    from reading.language import Lingua
+    from reading.phonemes import Espeak
+    from reading.rules import Rules
+
+    return Arbiter(store, Lingua(), Rules(Espeak(espeak_dir), Camembert(ner)))
 
 
 def main() -> int:
@@ -39,18 +53,13 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     logging.getLogger("httpx2").setLevel(logging.WARNING)
 
-    from reading.arbiter import Arbiter
-    from reading.entities import Camembert
-    from reading.language import Lingua
-    from reading.phonemes import Espeak
     from reading.recognition import Reader, Recognizer
-    from reading.rules import Rules
     from reading.segmentation import Segmenter
 
     reader = Reader(Segmenter(), Recognizer(model))
-    rules = Rules(Espeak(os.environ.get(ESPEAK_VARIABLE) or None), Camembert(Path(ner)))
+    arbiter = arbiter_of(store, Path(ner), os.environ.get(ESPEAK_VARIABLE) or None)
     uvicorn.run(
-        create_app(secret, reader, Arbiter(store, Lingua(), rules)),
+        create_app(secret, reader, arbiter),
         host="0.0.0.0",  # noqa: S104
         port=int(os.environ.get("PORT", "8080")),
         access_log=False,

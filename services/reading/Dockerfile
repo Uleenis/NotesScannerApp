@@ -24,7 +24,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH=/opt/venv/bin:$PATH \
     READING_MODEL=/models/medium.safetensors \
     READING_NER=/models/ner \
-    ORT_DISABLE_TELEMETRY=1
+    ORT_DISABLE_TELEMETRY=1 \
+    HF_HUB_OFFLINE=1
 WORKDIR /app
 COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./

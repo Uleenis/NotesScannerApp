@@ -19,7 +19,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /run/espeak:exec,size=16m
+      - /run/espeak:exec,nosuid,nodev,size=16m,mode=0700,uid=10001
     security_opt:
       - no-new-privileges:true
     cap_drop:
