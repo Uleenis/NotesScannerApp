@@ -105,6 +105,16 @@ def test_a_number_outranks_a_proper_noun() -> None:
     assert decide(witness, entities=FakeEntities({"15"}))[1] == ("15", 2, "queue")
 
 
+def test_a_number_flagged_as_a_proper_noun_both_read_alike_is_harvested() -> None:
+    witness = Witness("Jour 15", [("Jour", SURE), ("15", SURE)])
+    assert decide(witness, entities=FakeEntities({"15"}))[1] == ("15", 9, "none")
+
+
+def test_a_number_flagged_as_a_proper_noun_a_did_not_read_falls_to_rule_ten() -> None:
+    witness = Witness("Jour 15", [("Jour", SURE), None])
+    assert decide(witness, entities=FakeEntities({"15"}))[1] == ("15", 10, "none")
+
+
 def test_homophones_one_edit_apart_write_a_on_a_journal_notebook() -> None:
     witness = Witness("je fait", [("je", SURE), ("fais", SURE)])
     phonemes = FakePhonemes(HOMOPHONES)

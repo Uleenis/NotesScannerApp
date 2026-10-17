@@ -82,7 +82,7 @@ class Rules:
             a_form, b1_form = forms(position)
             if digit and a_form is not None and a_form != b1_form:
                 out.append(decided(position, 2, QUEUE, position.reading_b1))
-            elif name:
+            elif name and not digit:
                 out.append(decided(position, 3, LAYER, position.reading_b1))
             elif candidate and a_form is not None and codes.get(a_form) and codes.get(a_form) == codes.get(b1_form):
                 written = position.reading_a if level == VERBATIM and position.reading_a else position.reading_b1
