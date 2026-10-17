@@ -31,9 +31,9 @@ def test_each_word_of_b1_is_one_position_with_its_rank_line_and_readings() -> No
     lines = [line(1, L1, ("Le", 12, 60), ("chut", 70, 150))]
     positions = positions_of("Le chat\ndort", lines)
     assert positions == [
-        Position(0, 0, "Le", None, None, "Le", "Le", "word", (12, 10, 60, 60)),
-        Position(1, 0, "chat", None, None, "chut", "chat", "word", (70, 10, 150, 60)),
-        Position(2, 1, "dort", None, None, None, "dort", None, None),
+        Position(0, 0, "Le", None, None, "Le", "Le", "word", (12, 10, 60, 60), 0, 0.9),
+        Position(1, 0, "chat", None, None, "chut", "chat", "word", (70, 10, 150, 60), 1, 0.9),
+        Position(2, 1, "dort", None, None, None, "dort", None, None, None, None),
     ]
 
 

@@ -41,7 +41,9 @@ class LanguageSource(Protocol):
 
 
 class Rules(Protocol):
-    def decide(self, positions: list[Position], language: str | None) -> list[Position]: ...
+    def decide(
+        self, positions: list[Position], b1: str, a: str, language: str | None, level: str
+    ) -> list[Position]: ...
 
 
 class PageArbiter(Protocol):
@@ -77,7 +79,14 @@ class Arbiter:
         positions = positions_of(arbitration.b1, arbitration.reading.lines)
         language = self._language.language_of(arbitration.b1)
         if opened and self._rules is not None:
-            positions = self._rules.decide(positions, language)
+            try:
+                level = self._store.correction_level(page, arbitration.user_id)
+            except StoreError as error:
+                log.error("arbitration failed page=%s step=level settled=%s", page, error.settled)
+                raise ArbitrationError from error
+            positions = self._rules.decide(
+                positions, arbitration.b1, a_text(arbitration.reading.lines), language, level
+            )
 
         path = f"{arbitration.user_id}/{page}/{self._name()}"
         try:
