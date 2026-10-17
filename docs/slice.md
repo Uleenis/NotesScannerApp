@@ -10,6 +10,7 @@ Paths below are from the repository root.
 - **Next branch:** `t2/rules`. Two changes from the owner come with the remaining branches, in branch 7 or in a branch of their own: a bad configuration of the service lets the page be read with B1 alone and logs it, instead of stopping the function; and `$…$` makes a page math only when the opening `$` is followed and the closing `$` preceded by a character that is not a space.
 - **Decisions from now on:** `../Tranche 2/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section. Branch 12 changes `package.json` and stays the owner's to merge until the guarded files are reduced.
 - **Measures:** scripts and results in `../../04 Testing/T2 mesures/`, outside the repository.
+- **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 3, 4, 7, 9, 5, 6, 8. From slice 3, a slice has one document, spec and plan together, `../../02 Design/Tranche N.md`; its "Plan" table names its branches. When slice 2 is done, its last commit points this file to slice 3 if `Tranche 3.md` says it is validated by the owner, with its branches in the table below; the next session then starts slice 3. A slice whose document is missing or not validated: stop and ask.
 
 ## Branches
 
