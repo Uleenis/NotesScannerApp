@@ -1,4 +1,4 @@
-import { acceptable, checkedSvg, depth, MAX_DEPTH, MAX_REPEAT, MAX_TEX_LENGTH, renderTex } from "@/pages/tex";
+import { acceptable, checkedSvg, depth, MAX_DEPTH, MAX_TEX_LENGTH, renderTex } from "@/pages/tex";
 
 const B = String.fromCharCode(92);
 
@@ -119,9 +119,22 @@ describe("the second bounds of a formula", () => {
     [`${B}pmb{`.repeat(12) + "x" + "}".repeat(12)],
     [`${B}newcolumntype{c}{ccc}x`],
     [`${B}begin{alignedat}{10000000}x${B}end{alignedat}`],
-    [`${B}begin{alignat*}{${MAX_REPEAT + 1}}x${B}end{alignat*}`],
+    [`${B}begin {alignedat}{10000000}x${B}end{alignedat}`],
+    [`${B}begin\t{alignedat}{10000000}x${B}end{alignedat}`],
+    [`${B}begin{alignedat}[t]{10000000}x${B}end{alignedat}`],
+    [`${B}begin{alignat*}{2}x${B}end{alignat*}`],
     [`${B}begin{array}{*{100000000}{c}}x${B}end{array}`],
-    [`${B}begin{array}{*{n}{c}}x${B}end{array}`],
+    [`${B}begin{array}{*{3}{c}}x${B}end{array}`],
+    [`${B}begin{array}{>{${B}displaystyle}c}x${B}end{array}`],
+    [`${B}begin{array}{<{x}c}x${B}end{array}`],
+    [`${B}begin{array}{@{}c}x${B}end{array}`],
+    [`${B}begin{array}{!{x}c}x${B}end{array}`],
+    [`${B}begin{array}{p{1em}}x${B}end{array}`],
+    [`${B}begin{array}x${B}end{array}`],
+    [`${B}begin{subarray}{c}x${B}end{subarray}`],
+    [`${B}begin{unknown}x${B}end{unknown}`],
+    [`${B}begin x`],
+    [`${B}begin{matrix}x${B}end{matrix}${B}begin {9}`],
     [`x ${B}label{a}`],
     [`x ${B}tag{1}`],
     [`${B}ref{a}`],
@@ -132,9 +145,37 @@ describe("the second bounds of a formula", () => {
     expect(Date.now() - started).toBeLessThan(200);
   });
 
-  test("still draws a small repetition and a small alignat", async () => {
-    expect(await renderTex(`${B}begin{array}{*{3}{c}}a&b&c${B}end{array}`, true)).not.toBeNull();
-    expect(await renderTex(`${B}begin{alignedat}{2}a&=b&c&=d${B}end{alignedat}`, true)).not.toBeNull();
+  test.each([
+    [`${B}begin{array}{c|lr}a&b&c${B}end{array}`],
+    [`${B}begin{array}[t]{cc}a&b${B}end{array}`],
+    [`${B}begin {bmatrix}a${B}end{bmatrix}`],
+    [`${B}begin{aligned}a&=b${B}${B}c&=d${B}end{aligned}`],
+    [`${B}begin{equation*}x${B}end{equation*}`],
+    [`${B}operatorname*{lim}_{x ${B}to 0} x`],
+  ])("still draws %s, written with the common environments", async (tex) => {
+    expect(acceptable(tex)).toBe(true);
+    expect(await renderTex(tex, true)).not.toBeNull();
+  });
+
+  test("counts depth with what is open, so a closing word out of place resets nothing", () => {
+    const lefts = `${B}left(`.repeat(MAX_DEPTH + 1);
+    expect(depth(`${lefts}${B}text{${B}right)}x`)).toBeGreaterThan(MAX_DEPTH);
+    expect(acceptable(`${lefts}${B}text{${B}right)}x`)).toBe(false);
+    expect(depth(`${B}begin {matrix}`.repeat(25) + "x")).toBe(25);
+    expect(depth(`{x${B}end{matrix}}{y}`)).toBe(1);
+    expect(depth(`${B}left( {x ${B}right) } y`)).toBe(2);
+    expect(depth(`${B}left( {x} ${B}right) {y}`)).toBe(2);
+  });
+
+  test("lets the screen draw between two formulas", async () => {
+    const ticks: number[] = [];
+    const timer = setInterval(() => ticks.push(Date.now()), 0);
+    try {
+      await Promise.all([1, 2, 3, 4].map((n) => renderTex(`${B}frac{${n}}{${n + 7}} + ${B}sqrt{${n}}`, true)));
+    } finally {
+      clearInterval(timer);
+    }
+    expect(ticks.length).toBeGreaterThanOrEqual(3);
   });
 
   test.each([

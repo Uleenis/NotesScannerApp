@@ -7,14 +7,35 @@ export const MAX_SVG_LENGTH = 512 * 1024;
 export const MAX_WIDTH_EX = 300;
 export const MAX_HEIGHT_EX = 120;
 export const MAX_DEPTH = 20;
-export const MAX_REPEAT = 20;
 const CACHE_SIZE = 50;
 
 const BACKSLASH = String.fromCharCode(92);
 const REFUSED_COMMANDS = ["DeclareMathOperator", "mmlToken", "pmb", "newcolumntype", "label", "tag", "ref", "eqref"];
+const ENVIRONMENTS = new Set([
+  "matrix",
+  "pmatrix",
+  "bmatrix",
+  "Bmatrix",
+  "vmatrix",
+  "Vmatrix",
+  "smallmatrix",
+  "cases",
+  "aligned",
+  "align",
+  "align*",
+  "gathered",
+  "gather",
+  "gather*",
+  "equation",
+  "equation*",
+  "split",
+  "array",
+]);
 const COMMAND = /\\([A-Za-z]+)/g;
-const REPEAT = /\*\s*\{\s*([^}]*)\}/g;
-const ALIGNAT = /\\begin\{\s*[a-z]*align(?:ed)?at\*?\s*\}\s*\{\s*([^}]*)\}/g;
+const BEGIN = /\\begin(?![A-Za-z])/g;
+const BEGIN_NAME = /\\begin\s*\{\s*([A-Za-z]+\*?)\s*\}/g;
+const ARRAY_TEMPLATE = /^\s*(?:\[[tcb]?\]\s*)?\{([^}]*)\}/;
+const PLAIN_TEMPLATE = /^[lcr|\s]*$/;
 const SIZE = /^-?\d+(?:\.\d+)?ex$/;
 const UNSAFE = /<a[\s>]|<image[\s>]|href|url\(/i;
 
@@ -32,39 +53,75 @@ function word(tex: string, at: number, name: string): boolean {
   return tex.startsWith(name, at) && !/[A-Za-z]/.test(tex[at + name.length] ?? "");
 }
 
+function opens(tex: string, at: number, name: string): number {
+  if (!word(tex, at, name)) {
+    return -1;
+  }
+  let next = at + name.length;
+  while (/\s/.test(tex[next] ?? "")) {
+    next += 1;
+  }
+  return tex[next] === "{" ? tex.indexOf("}", next) : -1;
+}
+
 export function depth(tex: string): number {
+  const open: ("brace" | "left" | "environment")[] = [];
   let deepest = 0;
-  let current = 0;
   for (let index = 0; index < tex.length; index += 1) {
     const char = tex[index];
     if (char === BACKSLASH) {
       const next = index + 1;
-      const environment = tex.startsWith("begin{", next) || tex.startsWith("end{", next);
-      if (word(tex, next, "left") || tex.startsWith("begin{", next)) {
-        current += 1;
-      } else if (word(tex, next, "right") || tex.startsWith("end{", next)) {
-        current = Math.max(0, current - 1);
+      const begin = opens(tex, next, "begin");
+      const end = opens(tex, next, "end");
+      if (begin !== -1) {
+        open.push("environment");
+        index = begin;
+      } else if (end !== -1) {
+        if (open[open.length - 1] === "environment") {
+          open.pop();
+        }
+        index = end;
+      } else if (word(tex, next, "left")) {
+        open.push("left");
+        index = next + 3;
+      } else if (word(tex, next, "right")) {
+        if (open[open.length - 1] === "left") {
+          open.pop();
+        }
+        index = next + 4;
+      } else {
+        index += 1;
       }
-      const close = environment ? tex.indexOf("}", next) : -1;
-      index = close === -1 ? index + 1 : close;
     } else if (char === "{") {
-      current += 1;
+      open.push("brace");
     } else if (char === "}") {
-      current = Math.max(0, current - 1);
+      const brace = open.lastIndexOf("brace");
+      if (brace !== -1) {
+        open.length = brace;
+      }
     }
-    deepest = Math.max(deepest, current);
+    deepest = Math.max(deepest, open.length);
   }
   return deepest;
 }
 
-function repeatsWithinBound(tex: string, pattern: RegExp): boolean {
-  for (const found of tex.matchAll(pattern)) {
-    const count = found[1].trim();
-    if (!/^\d{1,3}$/.test(count) || Number(count) > MAX_REPEAT) {
+function environmentsAllowed(tex: string): boolean {
+  const begins = [...tex.matchAll(BEGIN)].length;
+  const named = [...tex.matchAll(BEGIN_NAME)];
+  if (named.length !== begins) {
+    return false;
+  }
+  return named.every((found) => {
+    const name = found[1];
+    if (!ENVIRONMENTS.has(name)) {
       return false;
     }
-  }
-  return true;
+    if (name !== "array") {
+      return true;
+    }
+    const template = ARRAY_TEMPLATE.exec(tex.slice((found.index ?? 0) + found[0].length));
+    return template !== null && PLAIN_TEMPLATE.test(template[1]);
+  });
 }
 
 export function acceptable(tex: string): boolean {
@@ -76,10 +133,7 @@ export function acceptable(tex: string): boolean {
       return false;
     }
   }
-  if (!repeatsWithinBound(tex, REPEAT) || !repeatsWithinBound(tex, ALIGNAT)) {
-    return false;
-  }
-  return depth(tex) <= MAX_DEPTH;
+  return environmentsAllowed(tex) && depth(tex) <= MAX_DEPTH;
 }
 
 function size(value: string | undefined): number | null {
@@ -119,7 +173,14 @@ export function cachedTex(tex: string, display: boolean): DrawnTex | null | unde
   return cache.get(keyOf(tex, display));
 }
 
+function yieldToScreen(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
 async function draw(tex: string, display: boolean): Promise<DrawnTex | null> {
+  await yieldToScreen();
   try {
     engine ??= loadEngine();
     return checkedSvg(await engine.convert(tex, display));
