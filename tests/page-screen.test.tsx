@@ -39,7 +39,7 @@ jest.mock("@/capture/service", () => ({
   captureService: { allowance: jest.fn(), latestNotebookId: jest.fn(), send: jest.fn(), preparePhoto: jest.fn(), discardPhoto: jest.fn() },
 }));
 jest.mock("@/pages/service", () => ({
-  pageService: { list: jest.fn(), get: jest.fn(), photoUrl: jest.fn(), startReading: jest.fn() },
+  pageService: { list: jest.fn(), get: jest.fn(), photoUrl: jest.fn(), startReading: jest.fn(), setPageType: jest.fn() },
 }));
 
 const fr = strings.fr;
@@ -581,5 +581,109 @@ describe("a page that is not there", () => {
     await fireEvent.press(screen.getByText(fr.common.retry));
 
     expect(await screen.findByText(TITLE)).toBeTruthy();
+  });
+});
+
+type JsonNode = { type: string; props: Record<string, unknown>; children: (JsonNode | string)[] | null };
+
+function textNodes(tree: unknown): JsonNode[] {
+  const found: JsonNode[] = [];
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (node === null || typeof node !== "object") {
+      return;
+    }
+    const element = node as JsonNode;
+    if (element.type === "Text") {
+      found.push(element);
+    }
+    element.children?.forEach(visit);
+  };
+  visit(tree);
+  return found;
+}
+
+describe("the switch of a page of math", () => {
+  test("is shown off on a page of text, and turns it into a page of math [9]", async () => {
+    await openPage();
+    await screen.findByText(TITLE);
+
+    const toggle = screen.getByLabelText(fr.document.mathPage);
+    expect(toggle.props.value).toBe(false);
+    await fireEvent(toggle, "valueChange", true);
+
+    await waitFor(() => expect(pageService.setPageType).toHaveBeenCalledWith("page-1", "math"));
+    await waitFor(() => expect(screen.getByLabelText(fr.document.mathPage).props.value).toBe(true));
+  });
+
+  test("is shown on on a page of math, and turns it back into a page of text [9]", async () => {
+    pages.change("page-1", { pageType: "math" });
+    await openPage();
+    await screen.findByText(TITLE);
+
+    const toggle = screen.getByLabelText(fr.document.mathPage);
+    expect(toggle.props.value).toBe(true);
+    await fireEvent(toggle, "valueChange", false);
+
+    await waitFor(() => expect(pageService.setPageType).toHaveBeenCalledWith("page-1", "text"));
+    await waitFor(() => expect(screen.getByLabelText(fr.document.mathPage).props.value).toBe(false));
+  });
+
+  test.each([{ status: "network" }, { status: "refused" }, { status: "error" }] as const)(
+    "comes back to the type the page has when the change fails ($status), and says so",
+    async (failure) => {
+      jest.mocked(pageService.setPageType).mockResolvedValue(failure);
+      await openPage();
+      await screen.findByText(TITLE);
+
+      await fireEvent(screen.getByLabelText(fr.document.mathPage), "valueChange", true);
+
+      expect(await screen.findByText(fr.document.switchFailed)).toBeTruthy();
+      expect(screen.getByLabelText(fr.document.mathPage).props.value).toBe(false);
+      expect(pages.store[0].pageType).toBe("text");
+    },
+  );
+
+  test("is not shown on a page in an unsupported script, which says it is read by the reading AI alone, under its title", async () => {
+    pages.change("page-1", { pageType: "unsupported_script" });
+    await openPage();
+    await screen.findByText(TITLE);
+
+    expect(screen.queryByLabelText(fr.document.mathPage)).toBeNull();
+    const warning = screen.getByText(fr.document.unsupportedScript);
+    const texts = textNodes(screen.toJSON());
+    const title = texts.findIndex((node) => node.props.accessibilityRole === "header" && node.children?.includes(TITLE));
+    const said = texts.findIndex((node) => node.children?.includes(fr.document.unsupportedScript));
+    const body = texts.findIndex((node) => node.props.selectable === true && node.children?.includes("Nationalité: Portugaise"));
+    expect(title).toBeGreaterThanOrEqual(0);
+    expect(said).toBe(title + 1);
+    expect(body).toBeGreaterThan(said);
+    expect(StyleSheet.flatten(warning.props.style).color).toBe(colors.inkSecondary);
+  });
+
+  test.each(["text", "math"] as const)("is shown on a page of %s, without the warning", async (pageType) => {
+    pages.change("page-1", { pageType });
+    await openPage();
+    await screen.findByText(TITLE);
+    expect(screen.getByLabelText(fr.document.mathPage)).toBeTruthy();
+    expect(screen.queryByText(fr.document.unsupportedScript)).toBeNull();
+  });
+
+  test("speaks English on an English phone", async () => {
+    jest.mocked(useLocales).mockReturnValue([phoneLocale("en")]);
+    await openPage();
+    await screen.findByText(TITLE);
+    expect(screen.getByLabelText(en.document.mathPage)).toBeTruthy();
+    expect(screen.getByText(en.document.mathPage)).toBeTruthy();
+  });
+
+  test("shows its warning in English on an English phone", async () => {
+    jest.mocked(useLocales).mockReturnValue([phoneLocale("en")]);
+    pages.change("page-1", { pageType: "unsupported_script" });
+    await openPage();
+    expect(await screen.findByText(en.document.unsupportedScript)).toBeTruthy();
   });
 });

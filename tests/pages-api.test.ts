@@ -1,6 +1,6 @@
 import { FunctionsFetchError, FunctionsHttpError } from "@supabase/supabase-js";
 
-import { countPages, getPage, listPages, newestFirst, numberPages, photoUrl, startReading, type PageRecord, type PagesClient } from "@/pages/pages";
+import { countPages, getPage, listPages, newestFirst, numberPages, photoUrl, setPageType, startReading, type PageRecord, type PagesClient } from "@/pages/pages";
 
 type Outcome = { data: unknown; error: unknown; count?: number | null };
 type Call = [string, unknown[]];
@@ -38,6 +38,7 @@ function row(overrides: Record<string, unknown> = {}) {
     captured_at: "2026-09-26T12:32:00+00:00",
     uploaded_at: "2026-09-26T12:32:05+00:00",
     attempted_at: null,
+    page_type: "text",
     page_texts: [{ text: "Titre\nCorps" }],
     ...overrides,
   };
@@ -53,6 +54,7 @@ function record(overrides: Partial<PageRecord>): PageRecord {
     uploadedAt: "2026-09-26T12:32:05+00:00",
     attemptedAt: null,
     text: null,
+    pageType: "text",
     ...overrides,
   };
 }
@@ -142,6 +144,7 @@ describe("listPages", () => {
         uploadedAt: "2026-09-26T12:32:05+00:00",
         attemptedAt: "2026-09-26T12:40:00+00:00",
         text: null,
+        pageType: "text",
         number: 1,
       },
     ]);
@@ -340,5 +343,55 @@ describe("counting the pages of the account", () => {
     const { client } = database({ data: null, error: null, count: null });
 
     await expect(countPages(client)).rejects.toThrow("The pages could not be counted.");
+  });
+});
+
+describe("the type of a page", () => {
+  test.each(["text", "math", "unsupported_script"] as const)("is read with the page: %s", async (pageType) => {
+    const db = database({ data: [row({ page_type: pageType })], error: null });
+    const [page] = await listPages(db.client);
+    expect(page.pageType).toBe(pageType);
+  });
+
+  test("an unknown or missing type is an error, never a page of text", async () => {
+    for (const pageType of ["drawing", null, undefined]) {
+      const db = database({ data: [row({ page_type: pageType })], error: null });
+      await expect(listPages(db.client)).rejects.toThrow();
+    }
+  });
+});
+
+describe("setPageType", () => {
+  const functionsClient = (outcome: Outcome | (() => Promise<Outcome>)) => {
+    const invoke = jest.fn(typeof outcome === "function" ? outcome : async () => outcome);
+    return { client: { functions: { invoke } } as unknown as PagesClient, invoke };
+  };
+  const refusal = (status: number, error: string) => new FunctionsHttpError(new Response(JSON.stringify({ error }), { status }));
+
+  test.each(["text", "math"] as const)("calls set-page-type with the page and the type %s alone, and reads the type back", async (pageType) => {
+    const fake = functionsClient({ data: { page_type: pageType }, error: null });
+    expect(await setPageType(fake.client, "page-1", pageType)).toEqual({ status: "done", pageType });
+    expect(fake.invoke).toHaveBeenCalledWith("set-page-type", { body: { page_id: "page-1", page_type: pageType } });
+  });
+
+  test("a refusal of the server is a refusal", async () => {
+    for (const [status, code] of [
+      [409, "unsupported_script"],
+      [409, "page_not_read"],
+      [404, "page_not_found"],
+      [400, "invalid_request"],
+    ] as const) {
+      expect(await setPageType(functionsClient({ data: null, error: refusal(status, code) }).client, "p", "math")).toEqual({ status: "refused" });
+    }
+  });
+
+  test("no network is a network failure", async () => {
+    expect(await setPageType(functionsClient({ data: null, error: new FunctionsFetchError(new Error("offline")) }).client, "p", "math")).toEqual({ status: "network" });
+    expect(await setPageType(functionsClient(async () => Promise.reject(new TypeError("Network request failed"))).client, "p", "math")).toEqual({ status: "network" });
+  });
+
+  test("an answer with another type, or none, is an error", async () => {
+    expect(await setPageType(functionsClient({ data: { page_type: "text" }, error: null }).client, "p", "math")).toEqual({ status: "error" });
+    expect(await setPageType(functionsClient({ data: null, error: null }).client, "p", "math")).toEqual({ status: "error" });
   });
 });

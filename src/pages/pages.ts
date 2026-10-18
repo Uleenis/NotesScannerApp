@@ -8,6 +8,10 @@ export type PageStatus = "queued" | "processing" | "read" | "failed";
 
 export type QueueReason = "read_error" | "offline";
 
+export type PageType = "text" | "math" | "unsupported_script";
+
+export type SwitchableType = Exclude<PageType, "unsupported_script">;
+
 export type PageRecord = {
   id: string;
   notebookId: string;
@@ -17,6 +21,7 @@ export type PageRecord = {
   uploadedAt: string;
   attemptedAt: string | null;
   text: string | null;
+  pageType: PageType;
 };
 
 export type NumberedPage = PageRecord & { number: number };
@@ -35,10 +40,13 @@ export type StartResult =
   | { status: "network" }
   | { status: "error" };
 
-const PAGE_COLUMNS = "id, notebook_id, status, queue_reason, captured_at, uploaded_at, attempted_at, page_texts(text)";
+export type SetTypeResult = { status: "done"; pageType: SwitchableType } | { status: "refused" } | { status: "network" } | { status: "error" };
+
+const PAGE_COLUMNS = "id, notebook_id, status, queue_reason, captured_at, uploaded_at, attempted_at, page_type, page_texts(text)";
 
 const STATUSES: readonly string[] = ["queued", "processing", "read", "failed"];
 const QUEUE_REASONS: readonly string[] = ["read_error", "offline"];
+const PAGE_TYPES: readonly string[] = ["text", "math", "unsupported_script"];
 
 const PHOTO_URL_SECONDS = 3600;
 
@@ -56,6 +64,7 @@ function readPage(value: unknown): PageRecord {
   const capturedAt = field(value, "captured_at");
   const uploadedAt = field(value, "uploaded_at");
   const attemptedAt = field(value, "attempted_at") ?? null;
+  const pageType = field(value, "page_type");
   if (
     typeof id !== "string" ||
     typeof notebookId !== "string" ||
@@ -64,7 +73,9 @@ function readPage(value: unknown): PageRecord {
     (queueReason !== null && (typeof queueReason !== "string" || !QUEUE_REASONS.includes(queueReason))) ||
     typeof capturedAt !== "string" ||
     typeof uploadedAt !== "string" ||
-    (attemptedAt !== null && typeof attemptedAt !== "string")
+    (attemptedAt !== null && typeof attemptedAt !== "string") ||
+    typeof pageType !== "string" ||
+    !PAGE_TYPES.includes(pageType)
   ) {
     throw new Error("A page could not be read.");
   }
@@ -77,6 +88,7 @@ function readPage(value: unknown): PageRecord {
     uploadedAt,
     attemptedAt,
     text: readText(field(value, "page_texts")),
+    pageType: pageType as PageType,
   };
 }
 
@@ -191,6 +203,24 @@ export async function startReading(client: PagesClient, pageId: string): Promise
       return { status: "error" };
     }
     return { status };
+  } catch (error) {
+    return { status: looksLikeNetworkFailure(error) ? "network" : "error" };
+  }
+}
+
+export async function setPageType(client: PagesClient, pageId: string, pageType: SwitchableType): Promise<SetTypeResult> {
+  try {
+    const { data, error } = await client.functions.invoke("set-page-type", { body: { page_id: pageId, page_type: pageType } });
+    if (error instanceof FunctionsFetchError) {
+      return { status: "network" };
+    }
+    if (error instanceof FunctionsHttpError) {
+      return { status: "refused" };
+    }
+    if (error || field(data, "page_type") !== pageType) {
+      return { status: "error" };
+    }
+    return { status: "done", pageType };
   } catch (error) {
     return { status: looksLikeNetworkFailure(error) ? "network" : "error" };
   }

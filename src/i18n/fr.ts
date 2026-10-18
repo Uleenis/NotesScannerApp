@@ -123,6 +123,9 @@ export const fr: Strings = {
     stateInProgress: "Lecture en cours",
     stateDeferred: (minutes: number) => `Lecture reportée · nouvel essai dans ${minutes} min`,
     stateFailed: "La lecture a échoué",
+    mathPage: "Page de math",
+    switchFailed: "La page n'a pas pu être changée. Réessayez.",
+    unsupportedScript: "Cette écriture n'est lue que par l'IA de lecture : aucun second lecteur ne la vérifie.",
   },
   photo: {
     title: "Photo d'origine",

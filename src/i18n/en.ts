@@ -121,6 +121,9 @@ export const en = {
     stateInProgress: "Reading in progress",
     stateDeferred: (minutes: number) => `Reading delayed · trying again in ${minutes} min`,
     stateFailed: "The reading failed",
+    mathPage: "Math page",
+    switchFailed: "The page could not be changed. Try again.",
+    unsupportedScript: "This script is read by the reading AI alone: no second reader checks it.",
   },
   photo: {
     title: "Original photo",
