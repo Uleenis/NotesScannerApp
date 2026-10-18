@@ -195,7 +195,18 @@ describe("the second bounds of a formula", () => {
     expect(acceptable(tex)).toBe(false);
   });
 
+  test.each([
+    [`${"c    ".repeat(MAX_COLUMNS)}x`],
+    [`${"c ".repeat(MAX_COLUMNS)}${" ".repeat(160)}x`],
+    ["c ".repeat(MAX_COLUMNS + 1)],
+  ])("refuses the spaced column template %j at once", (template) => {
+    const started = Date.now();
+    expect(acceptable(`${B}begin{array}{${template}}a${B}end{array}`)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(50);
+  });
+
   test("still draws an array with a rule between each column, up to the bound", async () => {
+    expect(acceptable(`${B}begin{array}{ ${"c | ".repeat(MAX_COLUMNS)}}x${B}end{array}`)).toBe(true);
     expect(acceptable(`${B}begin{array}{|${"c|".repeat(MAX_COLUMNS)}}x${B}end{array}`)).toBe(true);
     expect(await renderTex(`${B}begin{array}{|c|c|c|}a&b&c${B}end{array}`, true)).not.toBeNull();
   });
@@ -224,6 +235,16 @@ describe("the second bounds of a formula", () => {
     expect(await asked).toBeUndefined();
     expect(cachedTex(tex, true)).toBeUndefined();
     expect(await renderTex(tex, true)).not.toBeNull();
+  });
+
+  test("still draws a formula when one of the two who asked for it leaves", async () => {
+    const tex = `${B}frac{t}{u} + ${B}sqrt{v}`;
+    const first = renderTex(tex, true);
+    const second = renderTex(tex, true);
+    releaseTex(tex, true);
+    expect(await first).not.toBeUndefined();
+    expect(await second).not.toBeNull();
+    expect(cachedTex(tex, true)).not.toBeUndefined();
   });
 
   test("lets the screen draw between two formulas", async () => {

@@ -60,7 +60,7 @@ const COMMENT = /(?:^|[^\\])(?:\\\\)*%/;
 const BEGIN = /\\begin(?![A-Za-z])/g;
 const BEGIN_NAME = /\\begin\s*\{\s*([A-Za-z]+\*?)\s*\}/g;
 const ARRAY_TEMPLATE = /^\s*(?:\[[tcb]?\]\s*)?\{([^}]*)\}/;
-const PLAIN_TEMPLATE = new RegExp(`^\\s*\\|?(?:\\s*[lcr]\\s*\\|?){1,${MAX_COLUMNS}}\\s*$`);
+const PLAIN_TEMPLATE = new RegExp(`^\\|?(?:[lcr]\\|?){1,${MAX_COLUMNS}}$`);
 const SIZE = /^-?\d+(?:\.\d+)?ex$/;
 const UNSAFE = /<a[\s>]|<image[\s>]|href|url\(/i;
 
@@ -146,7 +146,7 @@ function environmentsAllowed(tex: string): boolean {
       return true;
     }
     const template = ARRAY_TEMPLATE.exec(tex.slice((found.index ?? 0) + found[0].length));
-    return template !== null && PLAIN_TEMPLATE.test(template[1]);
+    return template !== null && PLAIN_TEMPLATE.test(template[1].replace(/\s+/g, ""));
   });
 }
 
