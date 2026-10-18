@@ -17,6 +17,7 @@ import type {
   PageRow,
   PageReader,
   PageStatus,
+  PageTypeStore,
   PhotoInfo,
   PreparePageDeps,
   QueueReason,
@@ -24,6 +25,7 @@ import type {
   ReadPageDeps,
   RelaunchPageDeps,
   ServerStore,
+  SetPageTypeDeps,
   TransferAccountDeps,
   TransferStore,
 } from "../_shared/ports.ts";
@@ -62,6 +64,18 @@ export const DEFAULT_READING: GeminiReading = {
   inputTokens: 1100,
   outputTokens: 216,
   thoughtsTokens: 0,
+};
+
+const DEFAULT_B1_INPUT: ReadingInput = {
+  label: "B1",
+  rawText: "",
+  model: "gemini-3.6-flash",
+  modelVersion: "gemini-3.6-flash-001",
+  promptVersion: "V0",
+  thinkingBudget: 0,
+  inputTokens: 1100,
+  outputTokens: 216,
+  durationMs: 1500,
 };
 
 export const OPEN_ALLOWANCE: Allowance = {
@@ -182,6 +196,10 @@ export class World {
   readyPage(userId: string = ALICE, id: string = PAGE_ID): void {
     this.addPage(userId, "queued", id);
     this.addPhoto(userId, id);
+  }
+
+  addB1(userId: string, pageId: string, text: string): void {
+    this.readings.push({ ...DEFAULT_B1_INPUT, rawText: text, userId, pageId });
   }
 
   addReadingA(userId: string, pageId: string, words: number = 2): string {
@@ -402,6 +420,43 @@ export class World {
     };
   }
 
+  pageTypes(): PageTypeStore {
+    const switchable = (userId: string, pageId: string): FakePage | "page_not_found" | "page_not_read" | "unsupported_script" => {
+      const page = this.pages.get(pageId);
+      if (!page || page.userId !== userId) return "page_not_found";
+      if (page.status !== "read") return "page_not_read";
+      if (page.pageType === "unsupported_script") return "unsupported_script";
+      return page;
+    };
+    return {
+      setMath: async (userId, pageId) => {
+        await this.tick("setMath");
+        const found = switchable(userId, pageId);
+        if (typeof found === "string") return { outcome: found, altoPath: null };
+        if (found.pageType === "math") return { outcome: "unchanged", altoPath: null };
+        const a = this.altoReadings.find((reading) => reading.pageId === pageId);
+        this.altoReadings = this.altoReadings.filter((reading) => reading.pageId !== pageId);
+        this.pageTokens = this.pageTokens.filter((token) => token.pageId !== pageId);
+        found.pageType = "math";
+        return { outcome: "switched", altoPath: a?.path ?? null };
+      },
+      setText: async (userId, pageId) => {
+        await this.tick("setText");
+        const found = switchable(userId, pageId);
+        if (typeof found === "string") return { outcome: found, b1: null };
+        if (found.pageType === "text") return { outcome: "unchanged", b1: null };
+        const b1 = this.readings.filter((reading) => reading.pageId === pageId && reading.label === "B1");
+        if (b1.length !== 1) return { outcome: "no_reading", b1: null };
+        found.pageType = "text";
+        return { outcome: "switched", b1: b1[0].rawText };
+      },
+      removeAlto: async (path) => {
+        await this.tick("removeAlto");
+        this.alto.delete(path);
+      },
+    };
+  }
+
   accounts(): AccountStore {
     return {
       removeFiles: async (bucket, userId) => {
@@ -527,6 +582,8 @@ export class World {
         this.arbitrateTimeouts.push(timeoutMs);
         await Promise.resolve();
         this.clock += this.arbitrateDurationMs;
+        const page = this.pages.get(input.pageId);
+        if (page && page.pageType !== "text") return { ok: false, failure: { kind: "http_error", status: 409, code: "not_text" } };
         return this.arbitrateOutcomes.shift() ?? { ok: true, tokens: 3 };
       },
     };
@@ -569,6 +626,18 @@ export class World {
       reader: this.reader(),
       server: this.server(),
       gemini: this.gemini(),
+      service: this.serviceConfigured ? this.readingService() : null,
+      background: this.background(),
+      clock: { now: () => this.clock },
+      log: this.logger(),
+    };
+  }
+
+  pageTypeDeps(): SetPageTypeDeps {
+    return {
+      auth: this.authPort(),
+      forCaller: (token) => this.caller(token),
+      pageTypes: this.pageTypes(),
       service: this.serviceConfigured ? this.readingService() : null,
       background: this.background(),
       clock: { now: () => this.clock },

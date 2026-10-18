@@ -125,6 +125,24 @@ export type ReadingDeps = {
   log: Logger;
 };
 
+export type SwitchOutcome = "switched" | "unchanged" | "page_not_found" | "page_not_read" | "unsupported_script" | "no_reading";
+
+export type PageTypeStore = {
+  setMath: (userId: string, pageId: string) => Promise<{ outcome: SwitchOutcome; altoPath: string | null }>;
+  setText: (userId: string, pageId: string) => Promise<{ outcome: SwitchOutcome; b1: string | null }>;
+  removeAlto: (path: string) => Promise<void>;
+};
+
+export type SetPageTypeDeps = {
+  auth: Auth;
+  forCaller: (token: string) => CallerStore;
+  pageTypes: PageTypeStore;
+  service: ReadingService | null;
+  background: (task: Promise<void>) => void;
+  clock: { now: () => number };
+  log: Logger;
+};
+
 export type ReadPageDeps = ReadingDeps & {
   auth: Auth;
   forCaller: (token: string) => CallerStore;

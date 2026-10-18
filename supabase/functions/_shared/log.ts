@@ -17,6 +17,8 @@ export type LogEvent =
   | "a_cancelled"
   | "a_abandoned"
   | "a_done"
+  | "page_type_set"
+  | "alto_left"
   | "reading_service_misconfigured"
   | "unexpected_error";
 

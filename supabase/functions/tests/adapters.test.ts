@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createAccountStore, createAuth, createCallerStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAccountStore, createAuth, createCallerStore, createPageTypeStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -517,4 +517,58 @@ Deno.test("looking for a page that is being read filters by owner and by the pro
 Deno.test("no page being read gives false, and a failed lookup is an error, never false [8]", async () => {
   assertEquals(await createTransferStore(KEYS, answer(200, [])).hasProcessingPage(ALICE), false);
   assertEquals((await thrownBy(() => createTransferStore(KEYS, answer(500, { message: "boom" })).hasProcessingPage(ALICE))) instanceof StoreError, true);
+});
+
+async function storeError(run: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await run();
+  } catch (error) {
+    return error instanceof StoreError;
+  }
+  return false;
+}
+
+Deno.test("the switch to math calls set_page_math with the page and its owner, as the service, and reads the ALTO path back [9]", async () => {
+  const path = `${ALICE}/${PAGE_ID}/a-0123456789abcdef0123456789abcdef.xml`;
+  const { fetch, calls } = stub(() => [{ outcome: "switched", alto_path: path }]);
+  assertEquals(await createPageTypeStore(KEYS, fetch).setMath(ALICE, PAGE_ID), { outcome: "switched", altoPath: path });
+  assertEquals(calls[0].method, "POST");
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/set_page_math");
+  assertEquals(calls[0].body, { p_page_id: PAGE_ID, p_user_id: ALICE });
+  assertEquals(calls[0].headers.get("apikey"), "secret-key");
+});
+
+Deno.test("the switch to text calls set_page_text and reads B1 back [9]", async () => {
+  const { fetch, calls } = stub(() => [{ outcome: "switched", b1: "Bonjour" }]);
+  assertEquals(await createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID), { outcome: "switched", b1: "Bonjour" });
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/set_page_text");
+  assertEquals(calls[0].body, { p_page_id: PAGE_ID, p_user_id: BOB });
+});
+
+Deno.test("a refusal of a switch is read back as such", async () => {
+  for (const outcome of ["unchanged", "page_not_found", "page_not_read", "unsupported_script", "no_reading"] as const) {
+    const { fetch } = stub(() => [{ outcome, b1: null }]);
+    assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID), { outcome, b1: null }, outcome);
+  }
+});
+
+Deno.test("an unknown outcome of a switch, or one of another shape, is an error, never a pass", async () => {
+  for (const answer of [[{ outcome: "something_new", alto_path: null }], [], [{ outcome: "switched", alto_path: 3 }], { outcome: "switched" }]) {
+    const { fetch } = stub(() => answer);
+    assertEquals(await storeError(() => createPageTypeStore(KEYS, fetch).setMath(ALICE, PAGE_ID)), true, JSON.stringify(answer));
+  }
+});
+
+Deno.test("a switch to text that answers no B1 is an error, never a pass", async () => {
+  const { fetch } = stub(() => [{ outcome: "switched", b1: null }]);
+  assertEquals(await storeError(() => createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID)), true);
+});
+
+Deno.test("the ALTO file of the page is removed from the alto bucket by its path", async () => {
+  const path = `${ALICE}/${PAGE_ID}/a.xml`;
+  const { fetch, calls } = stub(() => [{ name: path }]);
+  await createPageTypeStore(KEYS, fetch).removeAlto(path);
+  assertEquals(calls[0].method, "DELETE");
+  assertEquals(calls[0].url.pathname, "/storage/v1/object/alto");
+  assertEquals(calls[0].body, { prefixes: [path] });
 });
