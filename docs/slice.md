@@ -7,7 +7,7 @@ Paths below are from the repository root.
 - **Spec:** `../../02 Design/Spec tranche 2.md`, validated by the owner on 12/10/2026.
 - **Plan:** `../../02 Design/Plan tranche 2.md`, validated by the owner on 12/10/2026, with its "Points à trancher" as proposed.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 16/10/2026. One session builds branches 7 to 12 one after the other, each with its tests, reviews, PR and merge, with no pause in between. The phone checks of the slice wait for the owner's return.
-- **Next branch:** `t2/document`.
+- **Next branch:** `t2/formulas`.
 - **Decisions from now on:** `../Tranche 2/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section. Branch 12 changes `package.json` and stays the owner's to merge until the guarded files are reduced.
 - **Measures:** scripts and results in `../../04 Testing/T2 mesures/`, outside the repository.
 - **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 3, 4, 7, 9, 5, 6, 8. From slice 3, a slice has one document, spec and plan together, `../../02 Design/Tranche N.md`; its "Plan" table names its branches. When slice 2 is done, its last commit points this file to slice 3 if `Tranche 3.md` says it is validated by the owner, with its branches in the table below; the next session then starts slice 3. A slice whose document is missing or not validated: stop and ask.
@@ -27,7 +27,7 @@ Paths below are from the repository root.
 | 8 | `t2/replay` | 3 | no | Claude | merged |
 | 9 | `t2/ner` | 3 | no | Claude | merged |
 | 10 | `t2/page-type` | 4 | yes | Claude | merged |
-| 11 | `t2/document` | 4 | no | Claude | to do |
+| 11 | `t2/document` | 4 | no | Claude | merged |
 | 12 | `t2/formulas` | 4 | yes | owner | to do |
 
 ## Decisions taken without the owner
@@ -94,6 +94,7 @@ Paths below are from the repository root.
 
 ## Notes for the next branches
 
+- Branch 12: `@mathjax/src` 4.1.3 (Apache-2.0) renders TeX to an SVG string with no DOM (`liteAdaptor`, packages `base` and `ams`, `fontCache: "none"`), checked in Node: `\href` and `\url` are not in those packages and are refused as undefined, like any unknown command or a missing brace. `src/components/reading/document-view.tsx` holds the switch; a page of math is the one to render with formulas.
 - Branch 11, calling `set-page-type`: POST with the caller's token, body exactly `{page_id, page_type}` with `text` or `math`; 200 `{page_type}`, 400 `invalid_request`, 404 `page_not_found`, 409 `page_not_read`, `unsupported_script` or `no_reading`. The app reads `pages.page_type` (the client has `select` on the whole row). A switch to the type the page has answers 200 and changes nothing.
 - `set-page-type` has no section in `supabase/config.toml` (guarded): `verify_jwt` defaults to true and the handler checks the token itself. Adding `[functions.set-page-type] verify_jwt = true` would match the other functions; it is the owner's patch, not needed to work.
 
