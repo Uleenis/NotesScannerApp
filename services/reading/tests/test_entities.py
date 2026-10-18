@@ -59,6 +59,16 @@ def test_special_tokens_written_on_the_page_are_read_as_text() -> None:
     assert NER.labels("Marie" + " <pad>" * 600 + " part à Lyon")[0] == plain[0]
 
 
+@pytest.mark.parametrize(
+    ("opening", "closing"),
+    [pytest.param(chr(0xFF1C), chr(0xFF1E), id="fullwidth"), pytest.param(chr(0xFE64), chr(0xFE65), id="small form")],
+)
+def test_look_alike_brackets_cannot_write_special_tokens(opening: str, closing: str) -> None:
+    plain = NER.labels("Marie part à Lyon")
+    assert NER.labels(f"{opening}mask{closing} " * 600 + "Marie part à Lyon")[-4:] == plain
+    assert NER.labels("Marie" + f" {opening}pad{closing}" * 600 + " part à Lyon")[0] == plain[0]
+
+
 def test_a_text_too_long_for_the_entities_is_refused_as_too_complex() -> None:
     with pytest.raises(RefusalError) as refused:
         NER.flags("a " * (MAX_PIECES + 1))
@@ -165,7 +175,7 @@ print(len(seen))
 """
 
 
-def test_reading_entities_opens_no_connection_but_to_the_machine_itself() -> None:
+def test_reading_entities_keeps_no_connection_open_but_to_the_machine_itself() -> None:
     environ = {key: value for key, value in os.environ.items() if key not in ("XDG_CACHE_HOME", "HOME")}
     result = subprocess.run([sys.executable, "-c", WATCH], env=environ, capture_output=True, text=True, timeout=180)
     assert result.returncode == 0
