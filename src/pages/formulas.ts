@@ -17,8 +17,45 @@ const ENVIRONMENT = /^[A-Za-z]+\*?$/;
 
 type Found = { piece: FormulaPiece; end: number };
 
+function endPositions(text: string): Map<string, number[]> {
+  const open = `${BACKSLASH}end{`;
+  const positions = new Map<string, number[]>();
+  let at = text.indexOf(open);
+  while (at !== -1) {
+    const offset = text.slice(at + open.length, at + open.length + 41).indexOf("}");
+    if (offset !== -1) {
+      const name = text.slice(at + open.length, at + open.length + offset);
+      if (ENVIRONMENT.test(name)) {
+        const known = positions.get(name);
+        if (known === undefined) {
+          positions.set(name, [at]);
+        } else {
+          known.push(at);
+        }
+      }
+    }
+    at = text.indexOf(open, at + 1);
+  }
+  return positions;
+}
+
+function firstFrom(positions: number[], from: number): number {
+  let low = 0;
+  let high = positions.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (positions[middle] < from) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low < positions.length ? positions[low] : -1;
+}
+
 class Scanner {
   private readonly missing = new Map<string, number>();
+  private ends: Map<string, number[]> | null = null;
 
   constructor(private readonly text: string) {}
 
@@ -58,12 +95,13 @@ class Scanner {
     if (!ENVIRONMENT.test(name)) {
       return null;
     }
-    const close = `${BACKSLASH}end{${name}}`;
-    const at = this.closer(close, nameEnd + 1);
+    this.ends ??= endPositions(this.text);
+    const positions = this.ends.get(name);
+    const at = positions === undefined ? -1 : firstFrom(positions, nameEnd + 1);
     if (at === -1) {
       return null;
     }
-    const end = at + close.length;
+    const end = at + `${BACKSLASH}end{${name}}`.length;
     const source = this.text.slice(start, end);
     return { piece: { kind: "display", tex: source, source }, end };
   }

@@ -126,3 +126,24 @@ test("cuts a page full of unclosed environments in linear time", () => {
   expect(Date.now() - started).toBeLessThan(150);
   expect(pieces).toEqual([{ kind: "text", text: page }]);
 });
+
+test("cuts a page of many distinct unclosed environments in linear time, and still closes each one at its own end", () => {
+  const B = String.fromCharCode(92);
+  const names: string[] = [];
+  for (let n = 0, length = 0; length < 120_000; n += 1) {
+    const name = n.toString(26).replace(/\d/g, (digit) => "qrstuvwxyz"[Number(digit)]);
+    names.push(name);
+    length += name.length;
+  }
+  const page = names.map((name) => `${B}begin{${name}}`).join("");
+  const started = Date.now();
+  const pieces = mathPieces(page);
+  expect(Date.now() - started).toBeLessThan(150);
+  expect(pieces).toEqual([{ kind: "text", text: page }]);
+
+  const closed = `${B}begin{a}x${B}end{ab} ${B}end{a} ${B}begin{a}y${B}end{a}`;
+  expect(mathPieces(closed).filter((piece) => piece.kind === "display").map((piece) => piece.kind === "display" && piece.tex)).toEqual([
+    `${B}begin{a}x${B}end{ab} ${B}end{a}`,
+    `${B}begin{a}y${B}end{a}`,
+  ]);
+});
