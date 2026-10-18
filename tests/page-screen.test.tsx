@@ -721,3 +721,60 @@ describe("the switch of a page of math", () => {
     expect(await screen.findByText(en.document.unsupportedScript)).toBeTruthy();
   });
 });
+
+describe("a page of math", () => {
+  const B = String.fromCharCode(92);
+  const MATH_TEXT = ["Chapitre 1", "", `Soit $f(x) = ${B}frac{1}{x}$ sur $${B}mathbb{R}^*$.`, "$$", `${B}int_1^2 f(x)${B},dx = ${B}ln 2`, "$$", `Faux : $${B}frac{1}{$ et lien $${B}href{https://example.test}{x}$`].join("\n");
+
+  test("draws its formulas, inline and on their own, and keeps the words around them in the document font [17]", async () => {
+    pages.change("page-1", { pageType: "math", text: MATH_TEXT });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    expect(await screen.findByLabelText(`$f(x) = ${B}frac{1}{x}$`)).toBeTruthy();
+    expect(await screen.findByLabelText(`$${B}mathbb{R}^*$`)).toBeTruthy();
+    expect(await screen.findByLabelText(`$$\n${B}int_1^2 f(x)${B},dx = ${B}ln 2\n$$`)).toBeTruthy();
+    const words = screen.getByText(/^Soit /);
+    expect(StyleSheet.flatten(words.props.style).fontFamily).toBe("SourceSerif4-Regular");
+  });
+
+  test("shows a formula the engine refuses as it was read, never an error, and a link command as inert text", async () => {
+    pages.change("page-1", { pageType: "math", text: MATH_TEXT });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    expect(await screen.findByText(`$${B}frac{1}{$`)).toBeTruthy();
+    expect(await screen.findByText(`$${B}href{https://example.test}{x}$`)).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  test("keeps the LaTeX of a page of text as it was read", async () => {
+    pages.change("page-1", { pageType: "text", text: MATH_TEXT });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    expect(screen.queryByLabelText(`$f(x) = ${B}frac{1}{x}$`)).toBeNull();
+    expect(screen.getByText(`Soit $f(x) = ${B}frac{1}{x}$ sur $${B}mathbb{R}^*$.`)).toBeTruthy();
+  });
+
+  test("loads nothing from the network to draw them", async () => {
+    const fetchSpy = jest.spyOn(globalThis, "fetch");
+    const opened = jest.fn();
+    const scope = globalThis as { XMLHttpRequest?: unknown };
+    const original = scope.XMLHttpRequest;
+    scope.XMLHttpRequest = class {
+      open = opened;
+      send = opened;
+    };
+    try {
+      pages.change("page-1", { pageType: "math", text: MATH_TEXT });
+      await openPage();
+      await screen.findByLabelText(`$${B}mathbb{R}^*$`);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(opened).not.toHaveBeenCalled();
+    } finally {
+      scope.XMLHttpRequest = original;
+      fetchSpy.mockRestore();
+    }
+  });
+});

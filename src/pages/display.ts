@@ -36,6 +36,12 @@ function glue(previous: string, line: string): string {
   return spaced ? previous + line : `${previous} ${line}`;
 }
 
+export function documentBody(text: string): string {
+  const lines = splitLines(text);
+  const titleIndex = lines.findIndex((line) => !isBlank(line));
+  return titleIndex === -1 ? "" : lines.slice(titleIndex + 1).join("\n");
+}
+
 export function displayDocument(text: string): DisplayDocument {
   const lines = splitLines(text);
   const titleIndex = lines.findIndex((line) => !isBlank(line));

@@ -3,10 +3,12 @@ import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import { useStrings } from "@/i18n";
 import { dateParts } from "@/pages/dates";
-import { displayDocument } from "@/pages/display";
+import { displayDocument, documentBody } from "@/pages/display";
+import { mathRows } from "@/pages/formulas";
 import type { NumberedPage, PageType } from "@/pages/pages";
 import { useSetPageType } from "@/pages/queries";
 import { colors, typography } from "@/theme";
+import { Formula } from "./formula";
 
 const BLOCK_SPACING = typography.documentBody.lineHeight * 0.4;
 
@@ -49,6 +51,22 @@ function MathSwitch({ page }: { page: NumberedPage }) {
   );
 }
 
+function MathBody({ text }: { text: string }) {
+  return mathRows(documentBody(text)).map((row, index) => {
+    if (row.kind === "gap") {
+      return <View key={index} style={styles.gap} />;
+    }
+    if (row.kind === "display") {
+      return <Formula key={index} tex={row.tex} source={row.source} display />;
+    }
+    return (
+      <Text key={index} style={styles.line}>
+        {row.parts.map((part, at) => (part.kind === "text" ? part.text : <Formula key={at} tex={part.tex} source={part.source} display={false} />))}
+      </Text>
+    );
+  });
+}
+
 export function DocumentView({ page }: { page: NumberedPage }) {
   const t = useStrings();
   const { title, blocks } = displayDocument(page.text ?? "");
@@ -66,14 +84,18 @@ export function DocumentView({ page }: { page: NumberedPage }) {
       ) : (
         <MathSwitch page={page} />
       )}
-      {blocks.map((block, index) =>
-        block.kind === "gap" ? (
-          <View key={index} style={styles.gap} />
-        ) : (
-          <Text key={index} selectable style={styles.line}>
-            {block.text}
-          </Text>
-        ),
+      {page.pageType === "math" ? (
+        <MathBody text={page.text ?? ""} />
+      ) : (
+        blocks.map((block, index) =>
+          block.kind === "gap" ? (
+            <View key={index} style={styles.gap} />
+          ) : (
+            <Text key={index} selectable style={styles.line}>
+              {block.text}
+            </Text>
+          ),
+        )
       )}
     </ScrollView>
   );
