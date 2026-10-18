@@ -117,3 +117,12 @@ test("a page with CRLF line ends keeps no carriage return in its title or rows",
   expect(page.title).toBe("Chapitre 1");
   expect(JSON.stringify(page.rows)).not.toContain(String.fromCharCode(13));
 });
+
+test("cuts a page full of unclosed environments in linear time", () => {
+  const opener = `${String.fromCharCode(92)}begin{`;
+  const page = opener.repeat(800_000 / opener.length);
+  const started = Date.now();
+  const pieces = mathPieces(page);
+  expect(Date.now() - started).toBeLessThan(150);
+  expect(pieces).toEqual([{ kind: "text", text: page }]);
+});

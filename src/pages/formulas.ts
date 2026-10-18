@@ -49,10 +49,11 @@ class Scanner {
 
   private environment(start: number): Found | null {
     const open = `${BACKSLASH}begin{`;
-    const nameEnd = this.text.indexOf("}", start + open.length);
-    if (nameEnd === -1 || nameEnd - start > 40) {
+    const offset = this.text.slice(start + open.length, start + 41).indexOf("}");
+    if (offset === -1) {
       return null;
     }
+    const nameEnd = start + open.length + offset;
     const name = this.text.slice(start + open.length, nameEnd);
     if (!ENVIRONMENT.test(name)) {
       return null;
