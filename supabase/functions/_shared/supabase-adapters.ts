@@ -359,7 +359,6 @@ export function createPageTypeStore(keys: Keys, fetchImpl?: typeof fetch): PageT
       const { data, error } = await client.rpc("set_page_text", { p_page_id: pageId, p_user_id: userId });
       if (error) throw new StoreError("setText");
       const { outcome, value } = switched(data, "setText", "b1");
-      if (outcome === "switched" && value === null) throw new StoreError("setText");
       return { outcome, b1: value };
     },
     removeAlto: async (path) => {

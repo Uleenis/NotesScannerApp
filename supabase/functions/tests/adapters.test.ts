@@ -559,9 +559,9 @@ Deno.test("an unknown outcome of a switch, or one of another shape, is an error,
   }
 });
 
-Deno.test("a switch to text that answers no B1 is an error, never a pass", async () => {
+Deno.test("a switch to text that answers no B1 means no A to read again", async () => {
   const { fetch } = stub(() => [{ outcome: "switched", b1: null }]);
-  assertEquals(await storeError(() => createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID)), true);
+  assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID), { outcome: "switched", b1: null });
 });
 
 Deno.test("the ALTO file of the page is removed from the alto bucket by its path", async () => {

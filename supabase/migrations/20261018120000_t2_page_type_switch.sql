@@ -1,3 +1,7 @@
+alter table public.pages
+  add column a_relaunches integer not null default 0 check (a_relaunches between 0 and 3),
+  add column a_relaunched_at timestamptz;
+
 create function public.set_page_math(p_page_id uuid, p_user_id uuid)
 returns table (outcome text, alto_path text)
 language plpgsql
@@ -51,8 +55,12 @@ declare
   v_type text;
   v_b1 text;
   v_count bigint;
+  v_relaunches integer;
+  v_relaunched_at timestamptz;
 begin
-  select p.user_id, p.status, p.page_type into v_owner, v_status, v_type from public.pages p where p.id = p_page_id for update;
+  select p.user_id, p.status, p.page_type, p.a_relaunches, p.a_relaunched_at
+  into v_owner, v_status, v_type, v_relaunches, v_relaunched_at
+  from public.pages p where p.id = p_page_id for update;
   if not found or p_user_id is null or v_owner <> p_user_id then
     return query select 'page_not_found'::text, null::text;
     return;
@@ -76,7 +84,15 @@ begin
     return;
   end if;
 
-  update public.pages p set page_type = 'text' where p.id = p_page_id;
+  if v_relaunches >= 3 or (v_relaunched_at is not null and v_relaunched_at > now() - interval '10 minutes') then
+    update public.pages p set page_type = 'text' where p.id = p_page_id;
+    return query select 'switched'::text, null::text;
+    return;
+  end if;
+
+  update public.pages p
+  set page_type = 'text', a_relaunches = v_relaunches + 1, a_relaunched_at = now()
+  where p.id = p_page_id;
 
   return query select 'switched'::text, v_b1;
 end;

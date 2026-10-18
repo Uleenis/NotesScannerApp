@@ -51,13 +51,20 @@ async function toText(deps: SetPageTypeDeps, token: string, userId: string, page
   const { outcome, b1 } = await deps.pageTypes.setText(userId, pageId);
   if (outcome !== "switched" && outcome !== "unchanged") return refuse(deps.log, REFUSALS[outcome], pageId);
   deps.log.event("page_type_set", { pageId, code: outcome === "switched" ? "text" : "text_unchanged" });
+  if (outcome === "switched" && b1 === null) deps.log.event("a_abandoned", { pageId, code: "relaunch_limit" });
   if (outcome === "switched" && b1 !== null) await readAgain(deps, token, userId, pageId, b1);
   return json(200, { page_type: "text" });
 }
 
 async function readAgain(deps: SetPageTypeDeps, token: string, userId: string, pageId: string, b1: string): Promise<void> {
   if (!deps.service) return;
-  const image = await deps.forCaller(token).downloadPhoto(photoPath(userId, pageId));
+  let image: Uint8Array | null;
+  try {
+    image = await deps.forCaller(token).downloadPhoto(photoPath(userId, pageId));
+  } catch (error) {
+    deps.log.event("a_abandoned", { pageId, code: "photo_unreadable", errorName: errorName(error) });
+    return;
+  }
   if (!image || image.length > MAX_PHOTO_BYTES || !looksLikeJpeg(image)) {
     deps.log.event("a_abandoned", { pageId, code: "photo_missing" });
     return;

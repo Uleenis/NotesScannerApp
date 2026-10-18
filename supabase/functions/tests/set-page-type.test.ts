@@ -208,3 +208,72 @@ Deno.test("the logs carry neither B1 nor the photo", async () => {
   assert(!text.includes(ALICE));
   assert(text.includes(PAGE_ID));
 });
+
+Deno.test("A is read again at most once in ten minutes for a page, and the switch still stands", async () => {
+  const world = withService();
+  readPageOf(world, "math", false);
+  await ask(world, { page_id: PAGE_ID, page_type: "text" });
+  await ask(world, { page_id: PAGE_ID, page_type: "math" });
+  const again = await ask(world, { page_id: PAGE_ID, page_type: "text" });
+  await world.settle();
+  assertEquals(again.status, 200);
+  assertEquals(world.page().pageType, "text");
+  assertEquals(world.recognitions.length, 1);
+  assert(world.logs.some((record) => record.event === "a_abandoned" && record.fields.code === "relaunch_limit"));
+
+  world.clock += 11 * 60_000;
+  await ask(world, { page_id: PAGE_ID, page_type: "math" });
+  await ask(world, { page_id: PAGE_ID, page_type: "text" });
+  await world.settle();
+  assertEquals(world.recognitions.length, 2);
+});
+
+Deno.test("A is read again three times at most for a page", async () => {
+  const world = withService();
+  readPageOf(world, "math", false);
+  for (let round = 0; round < 5; round++) {
+    await ask(world, { page_id: PAGE_ID, page_type: "text" });
+    await ask(world, { page_id: PAGE_ID, page_type: "math" });
+    world.clock += 11 * 60_000;
+  }
+  await world.settle();
+  assertEquals(world.recognitions.length, 3);
+});
+
+Deno.test("a photo missing or not a JPEG leaves the page text without A", async () => {
+  for (const bytes of [null, new Uint8Array([1, 2, 3, 4])]) {
+    const world = withService();
+    readPageOf(world, "math", false);
+    if (bytes === null) world.photos.clear();
+    else world.addPhoto(ALICE, PAGE_ID, bytes);
+    const response = await ask(world, { page_id: PAGE_ID, page_type: "text" });
+    await world.settle();
+    assertEquals(response.status, 200);
+    assertEquals(world.page().pageType, "text");
+    assertEquals(world.recognitions, []);
+    assertEquals(world.logs.at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "photo_missing" } });
+  }
+});
+
+Deno.test("a photo that cannot be downloaded leaves the page text without A, and the switch is answered", async () => {
+  const world = withService();
+  readPageOf(world, "math", false);
+  world.failOn.add("download");
+  const response = await ask(world, { page_id: PAGE_ID, page_type: "text" });
+  await world.settle();
+  assertEquals(response.status, 200);
+  assertEquals(world.page().pageType, "text");
+  assertEquals(world.recognitions, []);
+  assertEquals(world.logs.at(-1)?.event, "a_abandoned");
+  assertEquals(world.logs.at(-1)?.fields.code, "photo_unreadable");
+});
+
+Deno.test("a page of math without B1 is not switched to text", async () => {
+  const world = withService();
+  world.addPage(ALICE, "read");
+  world.addPhoto(ALICE, PAGE_ID);
+  world.page().pageType = "math";
+  const response = await ask(world, { page_id: PAGE_ID, page_type: "text" });
+  assertEquals([response.status, await readJson(response)], [409, { error: "no_reading" }]);
+  assertEquals(world.page().pageType, "math");
+});

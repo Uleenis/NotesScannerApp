@@ -98,6 +98,8 @@ type FakePage = {
   notebookId: string | null;
   chapterId: string | null;
   pageType: PageType;
+  aRelaunches: number;
+  aRelaunchedAt: number | null;
 };
 
 type FakeNotebook = { id: string; userId: string; name: string };
@@ -170,7 +172,7 @@ export class World {
   backgroundTasks: Promise<void>[] = [];
 
   addPage(userId: string, status: PageStatus = "queued", id: string = PAGE_ID): void {
-    this.pages.set(id, { id, userId, status, queueReason: null, retryCount: 0, readAt: null, manualRelaunchedAt: null, notebookId: null, chapterId: null, pageType: "text" });
+    this.pages.set(id, { id, userId, status, queueReason: null, retryCount: 0, readAt: null, manualRelaunchedAt: null, notebookId: null, chapterId: null, pageType: "text", aRelaunches: 0, aRelaunchedAt: null });
   }
 
   addNotebook(userId: string, name: string, id: string = crypto.randomUUID()): string {
@@ -448,6 +450,11 @@ export class World {
         const b1 = this.readings.filter((reading) => reading.pageId === pageId && reading.label === "B1");
         if (b1.length !== 1) return { outcome: "no_reading", b1: null };
         found.pageType = "text";
+        if (found.aRelaunches >= 3 || (found.aRelaunchedAt !== null && found.aRelaunchedAt > this.clock - 10 * 60_000)) {
+          return { outcome: "switched", b1: null };
+        }
+        found.aRelaunches += 1;
+        found.aRelaunchedAt = this.clock;
         return { outcome: "switched", b1: b1[0].rawText };
       },
       removeAlto: async (path) => {

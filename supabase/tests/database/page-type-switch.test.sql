@@ -1,10 +1,17 @@
 begin;
 
-select plan(24);
+select plan(34);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
   insert into auth.users (id, email) values (uid, uid::text || '@example.test');
+$$;
+
+create function pg_temp.login(uid uuid) returns void
+language sql as $$
+  select
+    set_config('role', 'authenticated', true),
+    set_config('request.jwt.claims', json_build_object('sub', uid, 'role', 'authenticated')::text, true);
 $$;
 
 create function pg_temp.as_server() returns void
@@ -34,11 +41,18 @@ insert into public.pages (id, user_id, notebook_id, status, page_type, language)
   ('a4000000-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'unsupported_script', null),
   ('a4000000-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'processing', 'text', null),
   ('a4000000-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'text', null),
-  ('a4000000-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'math', null);
+  ('a4000000-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'math', null),
+  ('a4000000-0000-0000-0000-000000000007', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'math', null),
+  ('a4000000-0000-0000-0000-000000000008', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'math', null);
+
+update public.pages set a_relaunches = 3, a_relaunched_at = now() - interval '1 day' where id = 'a4000000-0000-0000-0000-000000000007';
+update public.pages set a_relaunches = 1, a_relaunched_at = now() - interval '11 minutes' where id = 'a4000000-0000-0000-0000-000000000008';
 
 insert into public.readings (user_id, page_id, label, raw_text, model, model_version, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 'B1', E'Bonjour Paul\nfin', 'gemini-3.6-flash', 'gemini-3.6-flash-001', 'V0', 0, 10, 2, 1500),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000002', 'B1', 'Soit $x^2$', 'gemini-3.6-flash', 'gemini-3.6-flash-001', 'V0', 0, 10, 2, 1500);
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000002', 'B1', 'Soit $x^2$', 'gemini-3.6-flash', 'gemini-3.6-flash-001', 'V0', 0, 10, 2, 1500),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000007', 'B1', 'Soit $y$', 'gemini-3.6-flash', 'gemini-3.6-flash-001', 'V0', 0, 10, 2, 1500),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000008', 'B1', 'Soit $z$', 'gemini-3.6-flash', 'gemini-3.6-flash-001', 'V0', 0, 10, 2, 1500);
 
 insert into public.readings (user_id, page_id, label, raw_text, model, model_version, duration_ms, alto_path) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 'A', E'Bonjonr\nfin', 'medium', '1', 28000, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/a4000000-0000-0000-0000-000000000001/a-0123456789abcdef0123456789abcdef.xml');
@@ -71,6 +85,14 @@ select is(pg_temp.text('a4000000-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aa
 select is(pg_temp.math('a4000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), '(unchanged,)', 'a page already of math stays as it is');
 select is(pg_temp.text('a4000000-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), '(unchanged,)', 'a page already of text stays as it is');
 
+reset role;
+
+select is((select count(*) from public.readings where page_id = 'a4000000-0000-0000-0000-000000000001' and label = 'A'), 1::bigint, 'a refused switch leaves A');
+select is((select count(*) from public.page_tokens where page_id = 'a4000000-0000-0000-0000-000000000001'), 2::bigint, 'a refused switch leaves the positions');
+select is((select row(page_type, language)::text from public.pages where id = 'a4000000-0000-0000-0000-000000000001'), '(text,fr)', 'a refused switch leaves the type and the language');
+
+select pg_temp.as_server();
+
 select is(
   pg_temp.math('a4000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
   '(switched,aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/a4000000-0000-0000-0000-000000000001/a-0123456789abcdef0123456789abcdef.xml)',
@@ -96,6 +118,27 @@ reset role;
 
 select is((select page_type from public.pages where id = 'a4000000-0000-0000-0000-000000000001'), 'text', 'the page becomes text');
 select is((select count(*) from public.readings where page_id = 'a4000000-0000-0000-0000-000000000001' and label = 'A'), 0::bigint, 'the switch to text writes no A by itself');
+select is((select a_relaunches from public.pages where id = 'a4000000-0000-0000-0000-000000000001'), 1, 'the switch to text counts one more reading of A');
+
+select pg_temp.as_server();
+
+select is(pg_temp.math('a4000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), '(switched,)', 'the page goes back to math at once');
+select is(pg_temp.text('a4000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), '(switched,)', 'a second switch to text within ten minutes switches the type but asks for no A');
+select is(pg_temp.text('a4000000-0000-0000-0000-000000000007', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), '(switched,)', 'a page whose A was read again three times asks for no more');
+select is(pg_temp.text('a4000000-0000-0000-0000-000000000008', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), '(switched,"Soit $z$")', 'after ten minutes A can be read again');
+
+reset role;
+
+select is((select a_relaunches from public.pages where id = 'a4000000-0000-0000-0000-000000000008'), 2, 'each reading of A again is counted');
+
+select pg_temp.login('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+select throws_ok(
+  $$update public.pages set a_relaunches = 0, a_relaunched_at = null where id = 'a4000000-0000-0000-0000-000000000001'$$,
+  '42501',
+  null,
+  'the owner cannot reset the count of the readings of A'
+);
+reset role;
 
 select * from finish();
 rollback;
