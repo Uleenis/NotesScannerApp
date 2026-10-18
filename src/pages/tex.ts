@@ -1,78 +1,57 @@
-import "./mathjax-context";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/accents.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/arrows.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/calligraphic.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/double-struck.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/fraktur.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/latin.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/latin-b.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/latin-i.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/marrows.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/math.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/mshapes.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/script.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/shapes.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/symbols.js";
-import "@mathjax/mathjax-newcm-font/js/svg/dynamic/variants.js";
-import { liteAdaptor } from "@mathjax/src/js/adaptors/liteAdaptor.js";
-import { RegisterHTMLHandler } from "@mathjax/src/js/handlers/html.js";
-import "@mathjax/src/js/input/tex/ams/AmsConfiguration.js";
-import "@mathjax/src/js/input/tex/base/BaseConfiguration.js";
-import { TeX } from "@mathjax/src/js/input/tex.js";
-import { mathjax } from "@mathjax/src/js/mathjax.js";
-import { SVG } from "@mathjax/src/js/output/svg.js";
+import type { Engine } from "./mathjax-engine";
 
 export type DrawnTex = { svg: string; width: number; height: number; shift: number };
 
-const RANGES = new Set([
-  "accents",
-  "arrows",
-  "calligraphic",
-  "double-struck",
-  "fraktur",
-  "latin",
-  "latin-b",
-  "latin-i",
-  "marrows",
-  "math",
-  "mshapes",
-  "script",
-  "shapes",
-  "symbols",
-  "variants",
-]);
+export const MAX_TEX_LENGTH = 2_000;
+export const MAX_SVG_LENGTH = 512 * 1024;
+export const MAX_WIDTH_EX = 300;
+export const MAX_HEIGHT_EX = 120;
+export const MAX_DEPTH = 40;
+const CACHE_SIZE = 200;
 
-const RANGE_NAME = /\/svg\/dynamic\/([a-z-]+)\.js$/;
+const BACKSLASH = String.fromCharCode(92);
+const REFUSED_COMMANDS = ["DeclareMathOperator", "mmlToken"];
 const SIZE = /^-?\d+(?:\.\d+)?ex$/;
-const LINK = /<a[\s>]|href/i;
-
-type Engine = { convert: (tex: string, display: boolean) => Promise<string> };
+const UNSAFE = /<a[\s>]|<image[\s>]|href|url\(/i;
 
 let engine: Engine | null = null;
+const cache = new Map<string, DrawnTex | null>();
 
-function loadRange(name: string): Promise<void> {
-  const range = RANGE_NAME.exec(name)?.[1];
-  return range !== undefined && RANGES.has(range) ? Promise.resolve() : Promise.reject(new Error("font range not in the app"));
+function loadEngine(): Engine {
+  const { createEngine } = require("./mathjax-engine") as typeof import("./mathjax-engine");
+  return createEngine();
 }
 
-function startEngine(): Engine {
-  mathjax.asyncLoad = loadRange;
-  const adaptor = liteAdaptor();
-  RegisterHTMLHandler(adaptor);
-  const input = new TeX({
-    packages: ["base", "ams"],
-    formatError: (_jax: unknown, error: Error) => {
-      throw error;
-    },
-  });
-  const output = new SVG({ fontCache: "none" });
-  const document = mathjax.document("", { InputJax: input, OutputJax: output });
-  return {
-    convert: async (tex, display) => {
-      const node = await document.convertPromise(tex, { display });
-      return adaptor.innerHTML(node);
-    },
-  };
+function depth(tex: string): number {
+  let deepest = 0;
+  let current = 0;
+  for (let index = 0; index < tex.length; index += 1) {
+    const char = tex[index];
+    if (char === BACKSLASH) {
+      if (tex.startsWith("left", index + 1)) {
+        current += 1;
+      } else if (tex.startsWith("right", index + 1)) {
+        current -= 1;
+      }
+      index += 1;
+    } else if (char === "{") {
+      current += 1;
+    } else if (char === "}") {
+      current -= 1;
+    }
+    deepest = Math.max(deepest, current);
+  }
+  return deepest;
+}
+
+export function acceptable(tex: string): boolean {
+  if (tex.trim() === "" || tex.length > MAX_TEX_LENGTH) {
+    return false;
+  }
+  if (REFUSED_COMMANDS.some((command) => tex.includes(`${BACKSLASH}${command}`))) {
+    return false;
+  }
+  return depth(tex) <= MAX_DEPTH;
 }
 
 function size(value: string | undefined): number | null {
@@ -83,24 +62,40 @@ function measured(svg: string): DrawnTex | null {
   const width = size(/^<svg[^>]*\swidth="([^"]+)"/.exec(svg)?.[1]);
   const height = size(/^<svg[^>]*\sheight="([^"]+)"/.exec(svg)?.[1]);
   const shift = /^<svg[^>]*\sstyle="vertical-align:\s*(-?\d+(?:\.\d+)?)ex/.exec(svg)?.[1];
-  if (width === null || height === null || width <= 0 || height <= 0) {
+  if (width === null || height === null || width <= 0 || height <= 0 || width > MAX_WIDTH_EX || height > MAX_HEIGHT_EX) {
     return null;
   }
   return { svg, width, height, shift: shift === undefined ? 0 : Number.parseFloat(shift) };
 }
 
+function remember(key: string, value: DrawnTex | null): DrawnTex | null {
+  if (cache.size >= CACHE_SIZE) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) {
+      cache.delete(oldest);
+    }
+  }
+  cache.set(key, value);
+  return value;
+}
+
 export async function renderTex(tex: string, display: boolean): Promise<DrawnTex | null> {
-  if (tex.trim() === "") {
-    return null;
+  const key = `${display ? "display" : "inline"}:${tex}`;
+  const known = cache.get(key);
+  if (known !== undefined) {
+    return known;
+  }
+  if (!acceptable(tex)) {
+    return remember(key, null);
   }
   try {
-    engine ??= startEngine();
+    engine ??= loadEngine();
     const svg = await engine.convert(tex, display);
-    if (!svg.startsWith("<svg") || LINK.test(svg) || svg.includes("data-mjx-error")) {
-      return null;
+    if (!svg.startsWith("<svg") || svg.indexOf("<svg", 1) !== -1 || svg.length > MAX_SVG_LENGTH || UNSAFE.test(svg) || svg.includes("data-mjx-error")) {
+      return remember(key, null);
     }
-    return measured(svg);
+    return remember(key, measured(svg));
   } catch {
-    return null;
+    return remember(key, null);
   }
 }

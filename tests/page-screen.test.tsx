@@ -748,6 +748,25 @@ describe("a page of math", () => {
     expect(screen.queryByRole("link")).toBeNull();
   });
 
+  test("draws a formula that opens the page, and names the page by its number", async () => {
+    pages.change("page-1", { pageType: "math", text: ["$$", "x = 2", "$$", "fin"].join(String.fromCharCode(10)) });
+    await openPage();
+
+    expect(await screen.findByLabelText(["$$", "x = 2", "$$"].join(String.fromCharCode(10)))).toBeTruthy();
+    expect(screen.getByText(fr.document.pageNumber(4))).toBeTruthy();
+    expect(screen.queryByText("$$")).toBeNull();
+  });
+
+  test("shows an inline formula too wide for its line as it was read", async () => {
+    const wide = `$${"x + ".repeat(30)}x$`;
+    pages.change("page-1", { pageType: "math", text: ["Chapitre 1", `Soit ${wide} fin`].join(String.fromCharCode(10)) });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    expect(await screen.findByText(wide)).toBeTruthy();
+    expect(screen.queryByLabelText(wide)).toBeNull();
+  });
+
   test("keeps the LaTeX of a page of text as it was read", async () => {
     pages.change("page-1", { pageType: "text", text: MATH_TEXT });
     await openPage();

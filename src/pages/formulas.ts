@@ -75,9 +75,9 @@ class Scanner {
     }
     let at = start + 1;
     while (at < text.length && text[at] !== "$" && text[at] !== "\n") {
-      at += 1;
+      at += text[at] === BACKSLASH && text[at + 1] === "$" ? 2 : 1;
     }
-    if (text[at] !== "$" || /\s/.test(text[at - 1]) || text[at - 1] === BACKSLASH) {
+    if (text[at] !== "$" || /\s/.test(text[at - 1])) {
       return null;
     }
     const source = text.slice(start, at + 1);
@@ -193,4 +193,25 @@ export function mathRows(text: string): MathRow[] {
     push({ kind: "line", parts });
   }
   return rows;
+}
+
+export type MathDocument = { title: string | null; rows: MathRow[] };
+
+export function mathDocument(text: string): MathDocument {
+  const lines = text.split("\n");
+  const titleIndex = lines.findIndex((line) => line.trim() !== "");
+  if (titleIndex === -1) {
+    return { title: null, rows: [] };
+  }
+  const start = lines.slice(0, titleIndex).reduce((total, line) => total + line.length + 1, 0);
+  const end = start + lines[titleIndex].length;
+  let offset = 0;
+  for (const piece of mathPieces(text)) {
+    const length = piece.kind === "text" ? piece.text.length : piece.source.length;
+    if (piece.kind !== "text" && offset < end && offset + length > start) {
+      return { title: null, rows: mathRows(text) };
+    }
+    offset += length;
+  }
+  return { title: lines[titleIndex].trim(), rows: mathRows(lines.slice(titleIndex + 1).join("\n")) };
 }

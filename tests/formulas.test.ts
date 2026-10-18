@@ -1,4 +1,4 @@
-import { mathPieces, mathRows } from "@/pages/formulas";
+import { mathDocument, mathPieces, mathRows } from "@/pages/formulas";
 
 const B = String.fromCharCode(92);
 
@@ -75,6 +75,39 @@ describe("mathRows", () => {
       { kind: "line", parts: [{ kind: "text", text: "a" }] },
       { kind: "gap" },
       { kind: "line", parts: [{ kind: "text", text: "b" }] },
+    ]);
+  });
+});
+
+describe("mathDocument", () => {
+  test("takes the first line as the title when no formula starts on it", () => {
+    const page = mathDocument("\nChapitre 1\nSoit $x$.");
+    expect(page.title).toBe("Chapitre 1");
+    expect(page.rows).toEqual([{ kind: "line", parts: [{ kind: "text", text: "Soit " }, { kind: "inline", tex: "x", source: "$x$" }, { kind: "text", text: "." }] }]);
+  });
+
+  test.each([
+    ["$$", "\nx = 2\n$$\nfin"],
+    [`${B}[`, ` a ${B}]`],
+    [`${B}begin{align} a &= b`, `\n${B}end{align}`],
+    ["Soit $f(x)$", " sur R"],
+  ])("gives no title when a formula starts on the first line: %j", (first, rest) => {
+    const page = mathDocument(first + rest);
+    expect(page.title).toBeNull();
+    expect(page.rows.some((row) => row.kind === "display" || (row.kind === "line" && row.parts.some((part) => part.kind === "inline")))).toBe(true);
+  });
+
+  test("an empty page has no title and no row", () => {
+    expect(mathDocument("\n  \n")).toEqual({ title: null, rows: [] });
+  });
+});
+
+describe("dollars written inside a formula", () => {
+  test("an escaped dollar stays inside the inline formula", () => {
+    expect(mathPieces(`prix $a ${B}$ b$ fin`)).toEqual([
+      { kind: "text", text: "prix " },
+      { kind: "inline", tex: `a ${B}$ b`, source: `$a ${B}$ b$` },
+      { kind: "text", text: " fin" },
     ]);
   });
 });

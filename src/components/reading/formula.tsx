@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 
 import { renderTex, type DrawnTex } from "@/pages/tex";
 import { colors, typography } from "@/theme";
 
 const EX = typography.documentBody.fontSize * 0.5;
+const MAX_INLINE_WIDTH_EX = 36;
 
 type FormulaProps = { tex: string; source: string; display: boolean };
 
@@ -40,17 +41,26 @@ export function Formula({ tex, source, display }: FormulaProps) {
   const drawn = useDrawn(tex, display);
 
   if (display) {
-    return drawn ? (
-      <View style={styles.display}>
+    if (drawn === undefined) {
+      return <View style={styles.pending} />;
+    }
+    if (drawn === null) {
+      return (
+        <Text selectable style={styles.raw}>
+          {source}
+        </Text>
+      );
+    }
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.display}>
         <Drawing drawn={drawn} source={source} />
-      </View>
-    ) : (
-      <Text selectable style={styles.raw}>
-        {source}
-      </Text>
+      </ScrollView>
     );
   }
-  if (!drawn) {
+  if (drawn === undefined) {
+    return null;
+  }
+  if (drawn === null || drawn.width > MAX_INLINE_WIDTH_EX) {
     return <Text style={styles.inlineRaw}>{source}</Text>;
   }
   return (
@@ -62,8 +72,12 @@ export function Formula({ tex, source, display }: FormulaProps) {
 
 const styles = StyleSheet.create({
   display: {
-    alignItems: "center",
+    flexGrow: 1,
+    justifyContent: "center",
     paddingVertical: typography.documentBody.lineHeight * 0.4,
+  },
+  pending: {
+    height: typography.documentBody.lineHeight * 1.8,
   },
   raw: {
     ...typography.documentBody,

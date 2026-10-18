@@ -1,4 +1,4 @@
-import { renderTex } from "@/pages/tex";
+import { MAX_DEPTH, MAX_TEX_LENGTH, renderTex } from "@/pages/tex";
 
 const B = String.fromCharCode(92);
 
@@ -56,4 +56,50 @@ describe("renderTex", () => {
       fetchSpy.mockRestore();
     }
   });
+});
+
+describe("the bounds of a formula", () => {
+  test("refuses a chain of operators that doubles at each step", async () => {
+    let tex = `${B}DeclareMathOperator{${B}za}{xx}`;
+    let last = "za";
+    for (let level = 0; level < 14; level += 1) {
+      const next = `${last}q`;
+      tex += `${B}DeclareMathOperator{${B}${next}}{${B}${last}${B}${last}}`;
+      last = next;
+    }
+    tex += `${B}${last}`;
+    const started = Date.now();
+    expect(await renderTex(tex, true)).toBeNull();
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  test.each([
+    [`${B}rule{999999999em}{999999999em}`],
+    [`${B}rule{1000em}{1ex}`],
+    [`x${B}kern{9999em}x`],
+    [`${B}hspace{100000000em}`],
+  ])("refuses %s, drawn larger than a page", async (tex) => {
+    expect(await renderTex(tex, true)).toBeNull();
+  });
+
+  test("refuses a formula longer than the bound, and one nested deeper than the bound", async () => {
+    expect(await renderTex("x+".repeat(MAX_TEX_LENGTH), false)).toBeNull();
+    expect(await renderTex(`${"{".repeat(MAX_DEPTH + 1)}x${"}".repeat(MAX_DEPTH + 1)}`, false)).toBeNull();
+    expect(await renderTex(`${B}sqrt{`.repeat(MAX_DEPTH + 1) + "x" + "}".repeat(MAX_DEPTH + 1), false)).toBeNull();
+  });
+
+  test("refuses the MathML token command, which could set an image to fetch", async () => {
+    expect(await renderTex(`${B}mmlToken{mglyph}[src="https://example.test/x.png"]{}`, false)).toBeNull();
+    expect(await renderTex(`${B}mmlToken{mi}[href="https://example.test"]{x}`, false)).toBeNull();
+  });
+
+  test("still draws an ordinary formula with braces and sizes", async () => {
+    expect(await renderTex(`${B}left( ${B}frac{a}{b} ${B}right)^{2} + ${B}quad ${B}sqrt{${B}sqrt{x}}`, true)).not.toBeNull();
+  });
+});
+
+test("draws a long inline formula in one piece, measured whole", async () => {
+  const drawn = await renderTex(`${"x + ".repeat(30)}x`, false);
+  expect(drawn?.svg.indexOf("<svg", 1)).toBe(-1);
+  expect(drawn?.width).toBeGreaterThan(100);
 });

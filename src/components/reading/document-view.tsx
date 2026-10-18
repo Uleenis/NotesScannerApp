@@ -3,8 +3,8 @@ import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import { useStrings } from "@/i18n";
 import { dateParts } from "@/pages/dates";
-import { displayDocument, documentBody } from "@/pages/display";
-import { mathRows } from "@/pages/formulas";
+import { displayDocument } from "@/pages/display";
+import { mathDocument, type MathRow } from "@/pages/formulas";
 import type { NumberedPage, PageType } from "@/pages/pages";
 import { useSetPageType } from "@/pages/queries";
 import { colors, typography } from "@/theme";
@@ -51,8 +51,8 @@ function MathSwitch({ page }: { page: NumberedPage }) {
   );
 }
 
-function MathBody({ text }: { text: string }) {
-  return mathRows(documentBody(text)).map((row, index) => {
+function MathBody({ rows }: { rows: MathRow[] }) {
+  return rows.map((row, index) => {
     if (row.kind === "gap") {
       return <View key={index} style={styles.gap} />;
     }
@@ -60,7 +60,7 @@ function MathBody({ text }: { text: string }) {
       return <Formula key={index} tex={row.tex} source={row.source} display />;
     }
     return (
-      <Text key={index} style={styles.line}>
+      <Text key={index} selectable style={styles.line}>
         {row.parts.map((part, at) => (part.kind === "text" ? part.text : <Formula key={at} tex={part.tex} source={part.source} display={false} />))}
       </Text>
     );
@@ -69,7 +69,8 @@ function MathBody({ text }: { text: string }) {
 
 export function DocumentView({ page }: { page: NumberedPage }) {
   const t = useStrings();
-  const { title, blocks } = displayDocument(page.text ?? "");
+  const math = page.pageType === "math" ? mathDocument(page.text ?? "") : null;
+  const { title, blocks } = math === null ? displayDocument(page.text ?? "") : { title: math.title, blocks: [] };
   const parts = dateParts(page.capturedAt, new Date());
   const info = parts === null ? t.document.pageNumber(page.number) : t.document.info(page.number, t.dates.long(parts.day, parts.month, parts.year));
 
@@ -84,8 +85,8 @@ export function DocumentView({ page }: { page: NumberedPage }) {
       ) : (
         <MathSwitch page={page} />
       )}
-      {page.pageType === "math" ? (
-        <MathBody text={page.text ?? ""} />
+      {math !== null ? (
+        <MathBody rows={math.rows} />
       ) : (
         blocks.map((block, index) =>
           block.kind === "gap" ? (
