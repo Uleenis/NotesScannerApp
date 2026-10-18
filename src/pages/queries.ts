@@ -3,7 +3,7 @@ import { useIsFocused } from "expo-router";
 import { useEffect, useRef } from "react";
 
 import { useAuth } from "@/auth/auth-provider";
-import type { PageStatus, StartResult } from "./pages";
+import type { PageStatus, SetTypeResult, StartResult, SwitchableType } from "./pages";
 import { pageService } from "./service";
 import { LIST_POLL_MS, PAGE_POLL_MS } from "./timing";
 
@@ -78,6 +78,17 @@ export function useStartReading() {
     onSettled: async (_result, _error, pageId) => {
       await queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] });
       await refreshPages(queryClient, userId);
+    },
+  });
+}
+
+export function useSetPageType(pageId: string) {
+  const { userId } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation<SetTypeResult, Error, SwitchableType>({
+    mutationFn: (pageType) => pageService.setPageType(pageId, pageType),
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] });
     },
   });
 }
