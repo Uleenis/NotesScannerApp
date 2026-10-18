@@ -22,8 +22,8 @@ function MathSwitch({ page }: { page: NumberedPage }) {
     setFailed(false);
     setWanted({ math, from: page.pageType });
     const result = await change.mutateAsync(math ? "math" : "text").catch(() => ({ status: "error" }) as const);
+    setWanted(null);
     if (result.status !== "done") {
-      setWanted(null);
       setFailed(true);
     }
   }
@@ -31,7 +31,9 @@ function MathSwitch({ page }: { page: NumberedPage }) {
   return (
     <View style={styles.switchBlock}>
       <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>{t.document.mathPage}</Text>
+        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.switchLabel}>
+          {t.document.mathPage}
+        </Text>
         <Switch
           accessibilityLabel={t.document.mathPage}
           value={shown}

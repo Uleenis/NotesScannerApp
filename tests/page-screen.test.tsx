@@ -7,7 +7,7 @@ import type { Allowance } from "@/capture/allowance";
 import { captureService } from "@/capture/service";
 import { strings } from "@/i18n";
 import { notebookService } from "@/notebooks/service";
-import type { StartResult } from "@/pages/pages";
+import type { SetTypeResult, StartResult } from "@/pages/pages";
 import { pageService } from "@/pages/service";
 import { deferred } from "./fake-auth-client";
 import { colors } from "@/theme";
@@ -677,7 +677,41 @@ describe("the switch of a page of math", () => {
     await openPage();
     await screen.findByText(TITLE);
     expect(screen.getByLabelText(en.document.mathPage)).toBeTruthy();
-    expect(screen.getByText(en.document.mathPage)).toBeTruthy();
+    expect(screen.getByText(en.document.mathPage, { includeHiddenElements: true })).toBeTruthy();
+  });
+
+  test("moves at once and waits, disabled, for the server, then comes back when the server refuses", async () => {
+    const answer = deferred<SetTypeResult>();
+    jest.mocked(pageService.setPageType).mockReturnValue(answer.promise);
+    await openPage();
+    await screen.findByText(TITLE);
+
+    await fireEvent(screen.getByLabelText(fr.document.mathPage), "valueChange", true);
+    expect(screen.getByLabelText(fr.document.mathPage).props.value).toBe(true);
+    await waitFor(() => expect(screen.getByLabelText(fr.document.mathPage).props.disabled).toBe(true));
+
+    await act(async () => answer.resolve({ status: "refused" }));
+    await waitFor(() => expect(screen.getByLabelText(fr.document.mathPage).props.value).toBe(false));
+    expect(screen.getByLabelText(fr.document.mathPage).props.disabled).toBe(false);
+    expect(screen.getByText(fr.document.switchFailed)).toBeTruthy();
+  });
+
+  test("comes back to the stored type when the call throws", async () => {
+    jest.mocked(pageService.setPageType).mockRejectedValue(new Error("offline"));
+    await openPage();
+    await screen.findByText(TITLE);
+
+    await fireEvent(screen.getByLabelText(fr.document.mathPage), "valueChange", true);
+
+    expect(await screen.findByText(fr.document.switchFailed)).toBeTruthy();
+    expect(screen.getByLabelText(fr.document.mathPage).props.value).toBe(false);
+  });
+
+  test("names the switch once for a screen reader", async () => {
+    await openPage();
+    await screen.findByText(TITLE);
+    expect(screen.queryByText(fr.document.mathPage)).toBeNull();
+    expect(screen.getAllByLabelText(fr.document.mathPage)).toHaveLength(1);
   });
 
   test("shows its warning in English on an English phone", async () => {
