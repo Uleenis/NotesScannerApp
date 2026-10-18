@@ -147,3 +147,9 @@ test("cuts a page of many distinct unclosed environments in linear time, and sti
     `${B}begin{a}y${B}end{a}`,
   ]);
 });
+
+test("an environment closed only before it opens stays text", () => {
+  const B = String.fromCharCode(92);
+  const page = `${B}end{a} ${B}begin{a}x`;
+  expect(mathPieces(page)).toEqual([{ kind: "text", text: page }]);
+});
