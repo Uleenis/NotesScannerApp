@@ -32,3 +32,11 @@ def tokens_of(text: str) -> list[Token]:
 
 def line_tokens(text: str) -> list[tuple[Token, int]]:
     return [(token, index) for index, line in enumerate(text.splitlines()) for token in tokens_of(line)]
+
+
+def token_spans(text: str) -> list[tuple[int, int]]:
+    return [
+        (found.start(), found.end())
+        for found in WORD.finditer(form_of(text))
+        if found.group(0) == "[?]" or JOINERS.sub("", found.group(0))
+    ]

@@ -1,5 +1,7 @@
 import logging
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 
@@ -63,3 +65,11 @@ def test_phonemes_log_and_print_nothing(caplog: pytest.LogCaptureFixture, capfd:
         assert PROBE not in text
         assert "line" not in text
         assert "curls" not in text
+
+
+def test_espeak_copies_its_library_into_the_folder_it_is_given(tmp_path: Path) -> None:
+    before = tempfile.tempdir
+    engine = Espeak(str(tmp_path))
+    assert any(tmp_path.iterdir())
+    assert tempfile.tempdir == before
+    assert engine.phonemes(["fais"], "fr") == ESPEAK.phonemes(["fais"], "fr")

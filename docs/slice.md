@@ -7,7 +7,7 @@ Paths below are from the repository root.
 - **Spec:** `../../02 Design/Spec tranche 2.md`, validated by the owner on 12/10/2026.
 - **Plan:** `../../02 Design/Plan tranche 2.md`, validated by the owner on 12/10/2026, with its "Points à trancher" as proposed.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 16/10/2026. One session builds branches 7 to 12 one after the other, each with its tests, reviews, PR and merge, with no pause in between. The phone checks of the slice wait for the owner's return.
-- **Next branch:** `t2/ner`.
+- **Next branch:** `t2/page-type`.
 - **Decisions from now on:** `../Tranche 2/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section. Branch 12 changes `package.json` and stays the owner's to merge until the guarded files are reduced.
 - **Measures:** scripts and results in `../../04 Testing/T2 mesures/`, outside the repository.
 - **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 3, 4, 7, 9, 5, 6, 8. From slice 3, a slice has one document, spec and plan together, `../../02 Design/Tranche N.md`; its "Plan" table names its branches. When slice 2 is done, its last commit points this file to slice 3 if `Tranche 3.md` says it is validated by the owner, with its branches in the table below; the next session then starts slice 3. A slice whose document is missing or not validated: stop and ask.
@@ -25,7 +25,7 @@ Paths below are from the repository root.
 | 7 | `t2/rules` | 3 | no | Claude | merged |
 | 7b | `t2/b1-fallback` | 3 | yes | Claude | merged |
 | 8 | `t2/replay` | 3 | no | Claude | merged |
-| 9 | `t2/ner` | 3 | no | Claude | to do |
+| 9 | `t2/ner` | 3 | no | Claude | merged |
 | 10 | `t2/page-type` | 4 | yes | Claude | to do |
 | 11 | `t2/document` | 4 | no | Claude | to do |
 | 12 | `t2/formulas` | 4 | yes | owner | to do |
@@ -93,6 +93,8 @@ Paths below are from the repository root.
 - **Pages typed math by two prices** (code review): decided by the owner on 16/10, done in branch 7b: `$…$` needs a non-space after the opening `$` and before the closing one, on one line.
 
 ## Notes for the next branches
+
+- Cloud Run (end of slice 4), from the reviews of branch 9: keep the request timeout of the service above `ARBITRATE_TIMEOUT_MS` (30 s), or a 504 would be retried while the first arbitration goes on; give espeak an exec-allowed folder (`READING_ESPEAK_DIR`) and set `ORT_DISABLE_TELEMETRY=1` (the image does); restrict the egress of the service to Supabase; measure again the time of an arbitration near the NER bound (about 12 s on the PC) on Cloud Run's processor.
 
 - Branch 9, measure of criterion 8: the replay kit `../../04 Testing/T2 mesures/replay/` (`run.sh`) already builds, from the pinned data of the Pipeline Spike, the readings of the 18 pages in the shape `python -m reading.replay` takes (`results/replay-input.json`); the NER of the service can be run on the same B1 and A texts and its flags compared with those of `camembert-ner` in that file.
 

@@ -72,6 +72,10 @@ async function arbitrate(
       deps.log.event("a_done", { pageId, durationMs: deps.clock.now() - sentAt, code: "already_read" });
       return;
     }
+    if (result.failure.kind === "timeout") {
+      deps.log.event("a_abandoned", { pageId, code: "arbitrate_timeout" });
+      return;
+    }
     if (!retryable(result.failure)) {
       deps.log.event("a_abandoned", { pageId, code: result.failure.code ?? "arbitrate_refused" });
       return;

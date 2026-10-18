@@ -10,6 +10,8 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      READING_ESPEAK_DIR: /run/espeak
     ports:
       - "127.0.0.1:54340:8080"
     networks:
@@ -17,6 +19,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /run/espeak:exec,nosuid,nodev,size=16m,mode=0700,uid=10001
     security_opt:
       - no-new-privileges:true
     cap_drop:

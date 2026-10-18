@@ -200,7 +200,7 @@ Deno.test("no arbitration starts once the budget of A is spent", async () => {
 Deno.test("already_read on the second arbitration means the first one wrote A", async () => {
   const world = withService();
   world.readyPage();
-  world.arbitrateOutcomes.push({ ok: false, failure: { kind: "timeout" } }, { ok: false, failure: { kind: "http_error", status: 409, code: "already_read" } });
+  world.arbitrateOutcomes.push({ ok: false, failure: { kind: "network" } }, { ok: false, failure: { kind: "http_error", status: 409, code: "already_read" } });
   await call(world);
   await world.settle();
   assertEquals(world.arbitrations.length, 2);
@@ -232,11 +232,19 @@ Deno.test("a failed arbitration is tried once more, a refusal is not [11]", asyn
 
   const twice = withService();
   twice.readyPage();
-  twice.arbitrateOutcomes.push({ ok: false, failure: { kind: "timeout" } }, { ok: false, failure: { kind: "network" } });
+  twice.arbitrateOutcomes.push({ ok: false, failure: { kind: "http_error", status: 500, code: "arbitration_failed" } }, { ok: false, failure: { kind: "network" } });
   await call(twice);
   await twice.settle();
   assertEquals(twice.arbitrations.length, 2);
   assertEquals(twice.logs.at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "arbitrate_failed" } });
+
+  const late = withService();
+  late.readyPage();
+  late.arbitrateOutcomes.push({ ok: false, failure: { kind: "timeout" } });
+  await call(late);
+  await late.settle();
+  assertEquals(late.arbitrations.length, 1);
+  assertEquals(late.logs.at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "arbitrate_timeout" } });
 
   for (const code of ["page_not_found", "not_text", "already_read"]) {
     const refused = withService();
