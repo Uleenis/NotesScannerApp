@@ -13,9 +13,11 @@ import type {
   PageReader,
   PageRow,
   PageStatus,
+  PageTypeStore,
   PhotoInfo,
   QueueReason,
   ServerStore,
+  SwitchOutcome,
   TransferStore,
 } from "./ports.ts";
 
@@ -25,6 +27,7 @@ const PAGE_STATUSES: readonly string[] = ["queued", "processing", "read", "faile
 const QUEUE_REASONS: readonly string[] = ["read_error", "offline"];
 const BLOCK_REASONS: readonly string[] = ["monthly_limit", "anonymous_limit", "anonymous_daily_cap"];
 const CHARGE_REASONS: readonly string[] = ["charged", "already_charged", "page_not_found", ...BLOCK_REASONS];
+const SWITCH_OUTCOMES: readonly string[] = ["switched", "unchanged", "page_not_found", "page_not_read", "unsupported_script", "no_reading"];
 
 export class StoreError extends Error {
   constructor(operation: string) {
@@ -330,6 +333,37 @@ export function createServerStore(keys: Keys, fetchImpl?: typeof fetch): ServerS
       const { data, error } = await client.storage.from(BUCKET).createSignedUploadUrl(path);
       if (error || !data) throw new StoreError("createUploadUrl");
       return { signedUrl: data.signedUrl, token: data.token };
+    },
+  };
+}
+
+function switched(data: unknown, operation: string, field: "alto_path" | "b1"): { outcome: SwitchOutcome; value: string | null } {
+  const found = first(data);
+  const outcome = found?.outcome;
+  if (!found || typeof outcome !== "string" || !SWITCH_OUTCOMES.includes(outcome) || !(field in found)) throw new StoreError(operation);
+  const value = found[field];
+  if (value !== null && typeof value !== "string") throw new StoreError(operation);
+  return { outcome: outcome as SwitchOutcome, value };
+}
+
+export function createPageTypeStore(keys: Keys, fetchImpl?: typeof fetch): PageTypeStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    setMath: async (userId, pageId) => {
+      const { data, error } = await client.rpc("set_page_math", { p_page_id: pageId, p_user_id: userId });
+      if (error) throw new StoreError("setMath");
+      const { outcome, value } = switched(data, "setMath", "alto_path");
+      return { outcome, altoPath: value };
+    },
+    setText: async (userId, pageId, readAgain) => {
+      const { data, error } = await client.rpc("set_page_text", { p_page_id: pageId, p_user_id: userId, p_read_again: readAgain });
+      if (error) throw new StoreError("setText");
+      const { outcome, value } = switched(data, "setText", "b1");
+      return { outcome, b1: value };
+    },
+    removeAlto: async (path) => {
+      const { error } = await client.storage.from("alto").remove([path]);
+      if (error) throw new StoreError("removeAlto");
     },
   };
 }
