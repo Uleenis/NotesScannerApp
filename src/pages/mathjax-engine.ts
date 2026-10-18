@@ -53,15 +53,22 @@ export function createEngine(): Engine {
   mathjax.asyncLoad = loadRange;
   const adaptor = liteAdaptor();
   RegisterHTMLHandler(adaptor);
-  const input = new TeX({
-    packages: ["base", "ams"],
-    formatError: (_jax: unknown, error: Error) => {
-      throw error;
-    },
-  });
   const output = new SVG({ fontCache: "none", linebreaks: { inline: false } });
-  const document = mathjax.document("", { InputJax: input, OutputJax: output });
   return {
-    convert: async (tex, display) => adaptor.innerHTML(await document.convertPromise(tex, { display })),
+    convert: async (tex, display) => {
+      const input = new TeX({
+        packages: ["base", "ams"],
+        formatError: (_jax: unknown, error: Error) => {
+          throw error;
+        },
+      });
+      const document = mathjax.document("", { InputJax: input, OutputJax: output });
+      const node = await document.convertPromise(tex, { display });
+      const children = adaptor.childNodes(node);
+      if (children.length !== 1 || adaptor.kind(children[0]) !== "svg") {
+        throw new Error("the drawing is not one picture");
+      }
+      return adaptor.innerHTML(node);
+    },
   };
 }

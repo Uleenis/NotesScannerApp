@@ -111,3 +111,9 @@ describe("dollars written inside a formula", () => {
     ]);
   });
 });
+
+test("a page with CRLF line ends keeps no carriage return in its title or rows", () => {
+  const page = mathDocument(["Chapitre 1", "Soit $x$", "fin"].join(String.fromCharCode(13, 10)));
+  expect(page.title).toBe("Chapitre 1");
+  expect(JSON.stringify(page.rows)).not.toContain(String.fromCharCode(13));
+});

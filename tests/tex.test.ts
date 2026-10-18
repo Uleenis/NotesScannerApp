@@ -1,4 +1,4 @@
-import { MAX_DEPTH, MAX_TEX_LENGTH, renderTex } from "@/pages/tex";
+import { acceptable, checkedSvg, depth, MAX_DEPTH, MAX_REPEAT, MAX_TEX_LENGTH, renderTex } from "@/pages/tex";
 
 const B = String.fromCharCode(92);
 
@@ -83,7 +83,8 @@ describe("the bounds of a formula", () => {
   });
 
   test("refuses a formula longer than the bound, and one nested deeper than the bound", async () => {
-    expect(await renderTex("x+".repeat(MAX_TEX_LENGTH), false)).toBeNull();
+    expect(acceptable("x" + "{}".repeat(MAX_TEX_LENGTH / 2))).toBe(false);
+    expect(acceptable("x" + "{}".repeat(MAX_TEX_LENGTH / 2 - 1))).toBe(true);
     expect(await renderTex(`${"{".repeat(MAX_DEPTH + 1)}x${"}".repeat(MAX_DEPTH + 1)}`, false)).toBeNull();
     expect(await renderTex(`${B}sqrt{`.repeat(MAX_DEPTH + 1) + "x" + "}".repeat(MAX_DEPTH + 1), false)).toBeNull();
   });
@@ -102,4 +103,65 @@ test("draws a long inline formula in one piece, measured whole", async () => {
   const drawn = await renderTex(`${"x + ".repeat(30)}x`, false);
   expect(drawn?.svg.indexOf("<svg", 1)).toBe(-1);
   expect(drawn?.width).toBeGreaterThan(100);
+});
+
+describe("the second bounds of a formula", () => {
+  test("counts left and right only as delimiters, and environments as depth", () => {
+    expect(depth(`${B}rightarrow `.repeat(100) + "{".repeat(30) + "x" + "}".repeat(30))).toBe(30);
+    expect(depth(`${B}leftarrow `.repeat(100) + "x")).toBe(0);
+    expect(depth(`${B}left( x ${B}right)`)).toBe(1);
+    expect(depth(`${B}begin{matrix}`.repeat(25) + "x" + `${B}end{matrix}`.repeat(25))).toBe(25);
+    expect(acceptable(`${B}leftarrow `.repeat(41) + "x")).toBe(true);
+    expect(acceptable(`${B}rightarrow `.repeat(100) + "{".repeat(MAX_DEPTH + 1) + "x" + "}".repeat(MAX_DEPTH + 1))).toBe(false);
+  });
+
+  test.each([
+    [`${B}pmb{`.repeat(12) + "x" + "}".repeat(12)],
+    [`${B}newcolumntype{c}{ccc}x`],
+    [`${B}begin{alignedat}{10000000}x${B}end{alignedat}`],
+    [`${B}begin{alignat*}{${MAX_REPEAT + 1}}x${B}end{alignat*}`],
+    [`${B}begin{array}{*{100000000}{c}}x${B}end{array}`],
+    [`${B}begin{array}{*{n}{c}}x${B}end{array}`],
+    [`x ${B}label{a}`],
+    [`x ${B}tag{1}`],
+    [`${B}ref{a}`],
+  ])("refuses %s before drawing it", async (tex) => {
+    const started = Date.now();
+    expect(acceptable(tex)).toBe(false);
+    expect(await renderTex(tex, true)).toBeNull();
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+
+  test("still draws a small repetition and a small alignat", async () => {
+    expect(await renderTex(`${B}begin{array}{*{3}{c}}a&b&c${B}end{array}`, true)).not.toBeNull();
+    expect(await renderTex(`${B}begin{alignedat}{2}a&=b&c&=d${B}end{alignedat}`, true)).not.toBeNull();
+  });
+
+  test.each([
+    [`${B}begin{pmatrix}1&2${B}${B}3&4${B}${B}5&6${B}end{pmatrix}`],
+    [`${B}begin{cases}a${B}${B}b${B}${B}c${B}end{cases}`],
+    [`${B}overline{abcdef}`],
+    [`${B}underline{x}`],
+    [`${B}left${B}{ ${B}begin{matrix}1${B}${B}2${B}${B}3${B}end{matrix} ${B}right.`],
+  ])("draws %s, whose drawing holds stretched pieces", async (tex) => {
+    expect(await renderTex(tex, true)).not.toBeNull();
+  });
+
+  test("refuses a drawing that holds a link, an image, a url or is too large, after drawing", () => {
+    const frame = (inside: string, width = "10ex") => `<svg width="${width}" height="2ex" style="vertical-align: -0.5ex">${inside}</svg>`;
+    expect(checkedSvg(frame("<g/>"))).not.toBeNull();
+    expect(checkedSvg(frame('<a href="https://example.test"><g/></a>'))).toBeNull();
+    expect(checkedSvg(frame('<image href="https://example.test/x.png"/>'))).toBeNull();
+    expect(checkedSvg(frame('<rect fill="url(https://example.test/x)"/>'))).toBeNull();
+    expect(checkedSvg(frame("<g/>", "301ex"))).toBeNull();
+    expect(checkedSvg(frame("<g/>", "100%"))).toBeNull();
+    expect(checkedSvg(frame("x".repeat(512 * 1024)))).toBeNull();
+  });
+
+  test("draws a formula asked twice at once only once, and reads it back from the cache", async () => {
+    const tex = `${B}frac{a}{b} + ${B}sqrt{y}`;
+    const [first, second] = await Promise.all([renderTex(tex, false), renderTex(tex, false)]);
+    expect(first).toBe(second);
+    expect(await renderTex(tex, false)).toBe(first);
+  });
 });

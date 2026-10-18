@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 
-import { renderTex, type DrawnTex } from "@/pages/tex";
+import { cachedTex, renderTex, type DrawnTex } from "@/pages/tex";
 import { colors, typography } from "@/theme";
 
 const EX = typography.documentBody.fontSize * 0.5;
@@ -26,7 +26,7 @@ function useDrawn(tex: string, display: boolean): DrawnTex | null | undefined {
     };
   }, [tex, display, key]);
 
-  return drawn !== null && drawn.key === key ? drawn.value : undefined;
+  return drawn !== null && drawn.key === key ? drawn.value : cachedTex(tex, display);
 }
 
 function Drawing({ drawn, source }: { drawn: DrawnTex; source: string }) {

@@ -197,7 +197,8 @@ export function mathRows(text: string): MathRow[] {
 
 export type MathDocument = { title: string | null; rows: MathRow[] };
 
-export function mathDocument(text: string): MathDocument {
+export function mathDocument(raw: string): MathDocument {
+  const text = raw.replace(/\r\n?/g, "\n");
   const lines = text.split("\n");
   const titleIndex = lines.findIndex((line) => line.trim() !== "");
   if (titleIndex === -1) {
