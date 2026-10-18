@@ -129,7 +129,7 @@ export type SwitchOutcome = "switched" | "unchanged" | "page_not_found" | "page_
 
 export type PageTypeStore = {
   setMath: (userId: string, pageId: string) => Promise<{ outcome: SwitchOutcome; altoPath: string | null }>;
-  setText: (userId: string, pageId: string) => Promise<{ outcome: SwitchOutcome; b1: string | null }>;
+  setText: (userId: string, pageId: string, readAgain: boolean) => Promise<{ outcome: SwitchOutcome; b1: string | null }>;
   removeAlto: (path: string) => Promise<void>;
 };
 

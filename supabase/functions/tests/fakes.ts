@@ -442,7 +442,7 @@ export class World {
         found.pageType = "math";
         return { outcome: "switched", altoPath: a?.path ?? null };
       },
-      setText: async (userId, pageId) => {
+      setText: async (userId, pageId, readAgain) => {
         await this.tick("setText");
         const found = switchable(userId, pageId);
         if (typeof found === "string") return { outcome: found, b1: null };
@@ -450,7 +450,7 @@ export class World {
         const b1 = this.readings.filter((reading) => reading.pageId === pageId && reading.label === "B1");
         if (b1.length !== 1) return { outcome: "no_reading", b1: null };
         found.pageType = "text";
-        if (found.aRelaunches >= 3 || (found.aRelaunchedAt !== null && found.aRelaunchedAt > this.clock - 10 * 60_000)) {
+        if (!readAgain || found.aRelaunches >= 3 || (found.aRelaunchedAt !== null && found.aRelaunchedAt > this.clock - 10 * 60_000)) {
           return { outcome: "switched", b1: null };
         }
         found.aRelaunches += 1;

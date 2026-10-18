@@ -355,8 +355,8 @@ export function createPageTypeStore(keys: Keys, fetchImpl?: typeof fetch): PageT
       const { outcome, value } = switched(data, "setMath", "alto_path");
       return { outcome, altoPath: value };
     },
-    setText: async (userId, pageId) => {
-      const { data, error } = await client.rpc("set_page_text", { p_page_id: pageId, p_user_id: userId });
+    setText: async (userId, pageId, readAgain) => {
+      const { data, error } = await client.rpc("set_page_text", { p_page_id: pageId, p_user_id: userId, p_read_again: readAgain });
       if (error) throw new StoreError("setText");
       const { outcome, value } = switched(data, "setText", "b1");
       return { outcome, b1: value };

@@ -1,6 +1,6 @@
 begin;
 
-select plan(34);
+select plan(37);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -24,9 +24,9 @@ language sql as $$
   select row(r.outcome, r.alto_path)::text from public.set_page_math(page, owner) r;
 $$;
 
-create function pg_temp.text(page uuid, owner uuid) returns text
+create function pg_temp.text(page uuid, owner uuid, read_again boolean default true) returns text
 language sql as $$
-  select row(r.outcome, r.b1)::text from public.set_page_text(page, owner) r;
+  select row(r.outcome, r.b1)::text from public.set_page_text(page, owner, read_again) r;
 $$;
 
 select pg_temp.make_user('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
@@ -69,9 +69,9 @@ select is(
 select is(has_function_privilege('anon', 'public.set_page_math(uuid, uuid)', 'execute'), false, 'a visitor cannot switch a page to math');
 select is(has_function_privilege('authenticated', 'public.set_page_math(uuid, uuid)', 'execute'), false, 'a signed-in user cannot call the switch to math directly');
 select is(has_function_privilege('service_role', 'public.set_page_math(uuid, uuid)', 'execute'), true, 'the server can switch a page to math');
-select is(has_function_privilege('anon', 'public.set_page_text(uuid, uuid)', 'execute'), false, 'a visitor cannot switch a page to text');
-select is(has_function_privilege('authenticated', 'public.set_page_text(uuid, uuid)', 'execute'), false, 'a signed-in user cannot call the switch to text directly');
-select is(has_function_privilege('service_role', 'public.set_page_text(uuid, uuid)', 'execute'), true, 'the server can switch a page to text');
+select is(has_function_privilege('anon', 'public.set_page_text(uuid, uuid, boolean)', 'execute'), false, 'a visitor cannot switch a page to text');
+select is(has_function_privilege('authenticated', 'public.set_page_text(uuid, uuid, boolean)', 'execute'), false, 'a signed-in user cannot call the switch to text directly');
+select is(has_function_privilege('service_role', 'public.set_page_text(uuid, uuid, boolean)', 'execute'), true, 'the server can switch a page to text');
 
 select pg_temp.as_server();
 
@@ -130,6 +130,13 @@ select is(pg_temp.text('a4000000-0000-0000-0000-000000000008', 'aaaaaaaa-aaaa-aa
 reset role;
 
 select is((select a_relaunches from public.pages where id = 'a4000000-0000-0000-0000-000000000008'), 2, 'each reading of A again is counted');
+
+select pg_temp.as_server();
+select is(pg_temp.math('a4000000-0000-0000-0000-000000000008', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), '(switched,)', 'the page goes back to math');
+update public.pages set a_relaunched_at = now() - interval '11 minutes' where id = 'a4000000-0000-0000-0000-000000000008';
+select is(pg_temp.text('a4000000-0000-0000-0000-000000000008', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', false), '(switched,)', 'without a reading service the switch to text asks for no A');
+reset role;
+select is((select a_relaunches from public.pages where id = 'a4000000-0000-0000-0000-000000000008'), 2, 'a switch with no reading service uses up none of the readings of A');
 
 select pg_temp.login('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 select throws_ok(

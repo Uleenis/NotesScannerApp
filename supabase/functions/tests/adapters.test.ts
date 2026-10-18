@@ -540,15 +540,15 @@ Deno.test("the switch to math calls set_page_math with the page and its owner, a
 
 Deno.test("the switch to text calls set_page_text and reads B1 back [9]", async () => {
   const { fetch, calls } = stub(() => [{ outcome: "switched", b1: "Bonjour" }]);
-  assertEquals(await createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID), { outcome: "switched", b1: "Bonjour" });
+  assertEquals(await createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID, true), { outcome: "switched", b1: "Bonjour" });
   assertEquals(calls[0].url.pathname, "/rest/v1/rpc/set_page_text");
-  assertEquals(calls[0].body, { p_page_id: PAGE_ID, p_user_id: BOB });
+  assertEquals(calls[0].body, { p_page_id: PAGE_ID, p_user_id: BOB, p_read_again: true });
 });
 
 Deno.test("a refusal of a switch is read back as such", async () => {
   for (const outcome of ["unchanged", "page_not_found", "page_not_read", "unsupported_script", "no_reading"] as const) {
     const { fetch } = stub(() => [{ outcome, b1: null }]);
-    assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID), { outcome, b1: null }, outcome);
+    assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID, true), { outcome, b1: null }, outcome);
   }
 });
 
@@ -561,7 +561,7 @@ Deno.test("an unknown outcome of a switch, or one of another shape, is an error,
 
 Deno.test("a switch to text that answers no B1 means no A to read again", async () => {
   const { fetch } = stub(() => [{ outcome: "switched", b1: null }]);
-  assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID), { outcome: "switched", b1: null });
+  assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID, true), { outcome: "switched", b1: null });
 });
 
 Deno.test("the ALTO file of the page is removed from the alto bucket by its path", async () => {

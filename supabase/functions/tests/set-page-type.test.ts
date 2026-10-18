@@ -108,7 +108,7 @@ Deno.test("switching to math while A is being read keeps A from being written", 
   assertEquals(world.logs.at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "not_text" } });
 });
 
-Deno.test("without a reading service the switch to text stands and no A is read", async () => {
+Deno.test("without a reading service the switch to text stands, no A is read and none of its readings is used up", async () => {
   const world = new World();
   readPageOf(world, "math", false);
   const response = await ask(world, { page_id: PAGE_ID, page_type: "text" });
@@ -116,6 +116,8 @@ Deno.test("without a reading service the switch to text stands and no A is read"
   assertEquals(response.status, 200);
   assertEquals(world.page().pageType, "text");
   assertEquals(world.recognitions, []);
+  assertEquals(world.page().aRelaunches, 0);
+  assertEquals(world.logs.at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "no_service" } });
 });
 
 Deno.test("a switch to the type the page already has changes nothing", async () => {

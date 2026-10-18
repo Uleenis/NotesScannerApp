@@ -43,7 +43,7 @@ $$;
 revoke all on function public.set_page_math(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.set_page_math(uuid, uuid) to service_role;
 
-create function public.set_page_text(p_page_id uuid, p_user_id uuid)
+create function public.set_page_text(p_page_id uuid, p_user_id uuid, p_read_again boolean)
 returns table (outcome text, b1 text)
 language plpgsql
 security definer
@@ -84,7 +84,7 @@ begin
     return;
   end if;
 
-  if v_relaunches >= 3 or (v_relaunched_at is not null and v_relaunched_at > now() - interval '10 minutes') then
+  if not coalesce(p_read_again, false) or v_relaunches >= 3 or (v_relaunched_at is not null and v_relaunched_at > now() - interval '10 minutes') then
     update public.pages p set page_type = 'text' where p.id = p_page_id;
     return query select 'switched'::text, null::text;
     return;
@@ -98,5 +98,5 @@ begin
 end;
 $$;
 
-revoke all on function public.set_page_text(uuid, uuid) from public, anon, authenticated;
-grant execute on function public.set_page_text(uuid, uuid) to service_role;
+revoke all on function public.set_page_text(uuid, uuid, boolean) from public, anon, authenticated;
+grant execute on function public.set_page_text(uuid, uuid, boolean) to service_role;
