@@ -1,4 +1,5 @@
-import { acceptable, checkedSvg, depth, MAX_DEPTH, MAX_TEX_LENGTH, renderTex } from "@/pages/tex";
+import { createEngine } from "@/pages/mathjax-engine";
+import { acceptable, cachedTex, checkedSvg, depth, MAX_AREA_EX, MAX_COLUMNS, MAX_DEPTH, MAX_ELEMENTS, MAX_TEX_LENGTH, releaseTex, renderTex } from "@/pages/tex";
 
 const B = String.fromCharCode(92);
 
@@ -152,6 +153,10 @@ describe("the second bounds of a formula", () => {
     [`${B}begin{aligned}a&=b${B}${B}c&=d${B}end{aligned}`],
     [`${B}begin{equation*}x${B}end{equation*}`],
     [`${B}operatorname*{lim}_{x ${B}to 0} x`],
+    [`${B}begin{multline}a+b${B}${B}+c${B}end{multline}`],
+    [`${B}begin{flalign}a&=b${B}end{flalign}`],
+    [`${B}begin{eqnarray}a&=&b${B}end{eqnarray}`],
+    [`50${B}% + x`],
   ])("still draws %s, written with the common environments", async (tex) => {
     expect(acceptable(tex)).toBe(true);
     expect(await renderTex(tex, true)).not.toBeNull();
@@ -165,6 +170,60 @@ describe("the second bounds of a formula", () => {
     expect(depth(`{x${B}end{matrix}}{y}`)).toBe(1);
     expect(depth(`${B}left( {x ${B}right) } y`)).toBe(2);
     expect(depth(`${B}left( {x} ${B}right) {y}`)).toBe(2);
+  });
+
+  test.each([
+    [`${"{".repeat(10)}%${"}".repeat(10)}\n`.repeat(4) + "x" + "}".repeat(40)],
+    [`${B}left(%${B}right)\n`.repeat(30) + "x" + `${B}right)`.repeat(30)],
+    ["x % y"],
+    [`x ${B}${B}% y`],
+  ])("refuses a comment, which would hide what it closes from the count: %j", (tex) => {
+    expect(acceptable(tex)).toBe(false);
+  });
+
+  test.each([
+    [`${B}begin{array}{${"|".repeat(300)}c}` + `x${B}${B}`.repeat(33) + `${B}end{array}`],
+    [`${B}begin{array}{c||c}a&b${B}end{array}`],
+    [`${B}begin{array}{${"c".repeat(MAX_COLUMNS + 1)}}x${B}end{array}`],
+    [`${B}begin{array}{}x${B}end{array}`],
+    [`${B}hsize=1em x`],
+    [`${B}vbox{x}`],
+    [`${B}vtop{x}`],
+    [`${B}vcenter{x}`],
+    [`${B}parbox{1em}{x}`],
+  ])("refuses %j, whose drawing alone takes too long", (tex) => {
+    expect(acceptable(tex)).toBe(false);
+  });
+
+  test("still draws an array with a rule between each column, up to the bound", async () => {
+    expect(acceptable(`${B}begin{array}{|${"c|".repeat(MAX_COLUMNS)}}x${B}end{array}`)).toBe(true);
+    expect(await renderTex(`${B}begin{array}{|c|c|c|}a&b&c${B}end{array}`, true)).not.toBeNull();
+  });
+
+  test("leaves the next formula as it would be drawn alone, whatever the previous one set", async () => {
+    const engine = createEngine();
+    const matrix = `${B}begin{pmatrix}1&2${B}${B}3&4${B}end{pmatrix}`;
+    const alone = await engine.convert(matrix, true);
+    await engine.convert(`${B}hsize=-5em x`, true).catch(() => "");
+    expect(await engine.convert(matrix, true)).toBe(alone);
+  });
+
+  test("refuses a drawing too large in area or in pieces for the phone to hold", () => {
+    const frame = (width: string, height: string, inside = "<g/>") => `<svg width="${width}" height="${height}">${inside}</svg>`;
+    expect(checkedSvg(frame("299ex", "119ex"))).toBeNull();
+    expect(checkedSvg(frame("100ex", `${MAX_AREA_EX / 100 + 1}ex`))).toBeNull();
+    expect(checkedSvg(frame("100ex", `${MAX_AREA_EX / 100}ex`))).not.toBeNull();
+    expect(checkedSvg(frame("10ex", "2ex", "<g/>".repeat(MAX_ELEMENTS)))).toBeNull();
+    expect(checkedSvg(frame("10ex", "2ex", "<g/>".repeat(MAX_ELEMENTS - 2)))).not.toBeNull();
+  });
+
+  test("drops a drawing that nobody waits for any more, and keeps nothing of it", async () => {
+    const tex = `${B}frac{q}{r} + ${B}sqrt{s}`;
+    const asked = renderTex(tex, true);
+    releaseTex(tex, true);
+    expect(await asked).toBeUndefined();
+    expect(cachedTex(tex, true)).toBeUndefined();
+    expect(await renderTex(tex, true)).not.toBeNull();
   });
 
   test("lets the screen draw between two formulas", async () => {

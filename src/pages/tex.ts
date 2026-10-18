@@ -6,11 +6,29 @@ export const MAX_TEX_LENGTH = 2_000;
 export const MAX_SVG_LENGTH = 512 * 1024;
 export const MAX_WIDTH_EX = 300;
 export const MAX_HEIGHT_EX = 120;
+export const MAX_AREA_EX = 4_000;
+export const MAX_ELEMENTS = 3_000;
+export const MAX_COLUMNS = 20;
+export const MAX_FORMULAS_PER_PAGE = 100;
 export const MAX_DEPTH = 20;
 const CACHE_SIZE = 50;
 
 const BACKSLASH = String.fromCharCode(92);
-const REFUSED_COMMANDS = ["DeclareMathOperator", "mmlToken", "pmb", "newcolumntype", "label", "tag", "ref", "eqref"];
+const REFUSED_COMMANDS = [
+  "DeclareMathOperator",
+  "mmlToken",
+  "pmb",
+  "newcolumntype",
+  "label",
+  "tag",
+  "ref",
+  "eqref",
+  "hsize",
+  "vbox",
+  "vtop",
+  "vcenter",
+  "parbox",
+];
 const ENVIRONMENTS = new Set([
   "matrix",
   "pmatrix",
@@ -29,20 +47,28 @@ const ENVIRONMENTS = new Set([
   "equation",
   "equation*",
   "split",
+  "multline",
+  "multline*",
+  "flalign",
+  "flalign*",
+  "eqnarray",
+  "eqnarray*",
   "array",
 ]);
 const COMMAND = /\\([A-Za-z]+)/g;
+const COMMENT = /(?:^|[^\\])(?:\\\\)*%/;
 const BEGIN = /\\begin(?![A-Za-z])/g;
 const BEGIN_NAME = /\\begin\s*\{\s*([A-Za-z]+\*?)\s*\}/g;
 const ARRAY_TEMPLATE = /^\s*(?:\[[tcb]?\]\s*)?\{([^}]*)\}/;
-const PLAIN_TEMPLATE = /^[lcr|\s]*$/;
+const PLAIN_TEMPLATE = new RegExp(`^\\s*\\|?(?:\\s*[lcr]\\s*\\|?){1,${MAX_COLUMNS}}\\s*$`);
 const SIZE = /^-?\d+(?:\.\d+)?ex$/;
 const UNSAFE = /<a[\s>]|<image[\s>]|href|url\(/i;
 
 let engine: Engine | null = null;
 let queue: Promise<unknown> = Promise.resolve();
 const cache = new Map<string, DrawnTex | null>();
-const pending = new Map<string, Promise<DrawnTex | null>>();
+const pending = new Map<string, Promise<DrawnTex | null | undefined>>();
+const wanted = new Map<string, number>();
 
 function loadEngine(): Engine {
   const { createEngine } = require("./mathjax-engine") as typeof import("./mathjax-engine");
@@ -125,7 +151,7 @@ function environmentsAllowed(tex: string): boolean {
 }
 
 export function acceptable(tex: string): boolean {
-  if (tex.trim() === "" || tex.length > MAX_TEX_LENGTH) {
+  if (tex.trim() === "" || tex.length > MAX_TEX_LENGTH || COMMENT.test(tex)) {
     return false;
   }
   for (const found of tex.matchAll(COMMAND)) {
@@ -147,7 +173,10 @@ export function checkedSvg(svg: string): DrawnTex | null {
   const width = size(/^<svg[^>]*\swidth="([^"]+)"/.exec(svg)?.[1]);
   const height = size(/^<svg[^>]*\sheight="([^"]+)"/.exec(svg)?.[1]);
   const shift = /^<svg[^>]*\sstyle="vertical-align:\s*(-?\d+(?:\.\d+)?)ex/.exec(svg)?.[1];
-  if (width === null || height === null || width <= 0 || height <= 0 || width > MAX_WIDTH_EX || height > MAX_HEIGHT_EX) {
+  if (width === null || height === null || width <= 0 || height <= 0 || width > MAX_WIDTH_EX || height > MAX_HEIGHT_EX || width * height > MAX_AREA_EX) {
+    return null;
+  }
+  if ((svg.match(/</g) ?? []).length > MAX_ELEMENTS) {
     return null;
   }
   return { svg, width, height, shift: shift === undefined ? 0 : Number.parseFloat(shift) };
@@ -179,8 +208,11 @@ function yieldToScreen(): Promise<void> {
   });
 }
 
-async function draw(tex: string, display: boolean): Promise<DrawnTex | null> {
+async function draw(key: string, tex: string, display: boolean): Promise<DrawnTex | null | undefined> {
   await yieldToScreen();
+  if (!wanted.has(key)) {
+    return undefined;
+  }
   try {
     engine ??= loadEngine();
     return checkedSvg(await engine.convert(tex, display));
@@ -189,7 +221,7 @@ async function draw(tex: string, display: boolean): Promise<DrawnTex | null> {
   }
 }
 
-export function renderTex(tex: string, display: boolean): Promise<DrawnTex | null> {
+export function renderTex(tex: string, display: boolean): Promise<DrawnTex | null | undefined> {
   const key = keyOf(tex, display);
   const known = cache.get(key);
   if (known !== undefined) {
@@ -198,15 +230,32 @@ export function renderTex(tex: string, display: boolean): Promise<DrawnTex | nul
   if (!acceptable(tex)) {
     return Promise.resolve(remember(key, null));
   }
+  wanted.set(key, (wanted.get(key) ?? 0) + 1);
   const waiting = pending.get(key);
   if (waiting !== undefined) {
     return waiting;
   }
-  const result = queue.then(() => draw(tex, display)).then((value) => {
-    pending.delete(key);
-    return remember(key, value);
-  });
+  const result = queue
+    .then(() => draw(key, tex, display))
+    .then((value) => {
+      pending.delete(key);
+      wanted.delete(key);
+      return value === undefined ? undefined : remember(key, value);
+    });
   queue = result;
   pending.set(key, result);
   return result;
+}
+
+export function releaseTex(tex: string, display: boolean): void {
+  const key = keyOf(tex, display);
+  const count = wanted.get(key);
+  if (count === undefined) {
+    return;
+  }
+  if (count <= 1) {
+    wanted.delete(key);
+  } else {
+    wanted.set(key, count - 1);
+  }
 }

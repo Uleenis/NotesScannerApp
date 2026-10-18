@@ -9,6 +9,7 @@ import { strings } from "@/i18n";
 import { notebookService } from "@/notebooks/service";
 import type { SetTypeResult, StartResult } from "@/pages/pages";
 import { pageService } from "@/pages/service";
+import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
 import { deferred } from "./fake-auth-client";
 import { colors } from "@/theme";
 import { granted, installPermission } from "./fake-camera";
@@ -765,6 +766,15 @@ describe("a page of math", () => {
 
     expect(await screen.findByText(wide)).toBeTruthy();
     expect(screen.queryByLabelText(wide)).toBeNull();
+  });
+
+  test("draws at most a hundred formulas on a page, and shows the rest as read", async () => {
+    pages.change("page-1", { pageType: "math", text: ["Chapitre 1", ...Array<string>(MAX_FORMULAS_PER_PAGE + 1).fill("Soit $y$.")].join(String.fromCharCode(10)) });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    await waitFor(() => expect(screen.getAllByLabelText("$y$")).toHaveLength(MAX_FORMULAS_PER_PAGE));
+    expect(screen.getAllByText("$y$")).toHaveLength(1);
   });
 
   test("keeps the LaTeX of a page of text as it was read", async () => {

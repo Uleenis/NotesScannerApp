@@ -2,30 +2,45 @@ import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 
-import { cachedTex, renderTex, type DrawnTex } from "@/pages/tex";
+import { cachedTex, releaseTex, renderTex, type DrawnTex } from "@/pages/tex";
 import { colors, typography } from "@/theme";
 
 const EX = typography.documentBody.fontSize * 0.5;
 const MAX_INLINE_WIDTH_EX = 36;
 
-type FormulaProps = { tex: string; source: string; display: boolean };
+type FormulaProps = { tex: string; source: string; display: boolean; raw: boolean };
 
-function useDrawn(tex: string, display: boolean): DrawnTex | null | undefined {
+function useDrawn(tex: string, display: boolean, raw: boolean): DrawnTex | null | undefined {
   const [drawn, setDrawn] = useState<{ key: string; value: DrawnTex | null } | null>(null);
   const key = `${display ? "display" : "inline"}:${tex}`;
 
   useEffect(() => {
+    if (raw) {
+      return;
+    }
     let live = true;
-    void renderTex(tex, display).then((value) => {
-      if (live) {
-        setDrawn({ key, value });
-      }
-    });
+    const ask = (): void => {
+      void renderTex(tex, display).then((value) => {
+        if (!live) {
+          return;
+        }
+        if (value === undefined) {
+          ask();
+        } else {
+          setDrawn({ key, value });
+        }
+      });
+    };
+    ask();
     return () => {
       live = false;
+      releaseTex(tex, display);
     };
-  }, [tex, display, key]);
+  }, [tex, display, key, raw]);
 
+  if (raw) {
+    return null;
+  }
   return drawn !== null && drawn.key === key ? drawn.value : cachedTex(tex, display);
 }
 
@@ -37,8 +52,8 @@ function Drawing({ drawn, source }: { drawn: DrawnTex; source: string }) {
   );
 }
 
-export function Formula({ tex, source, display }: FormulaProps) {
-  const drawn = useDrawn(tex, display);
+export function Formula({ tex, source, display, raw }: FormulaProps) {
+  const drawn = useDrawn(tex, display, raw);
 
   if (display) {
     if (drawn === undefined) {

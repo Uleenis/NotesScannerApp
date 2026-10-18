@@ -53,7 +53,6 @@ export function createEngine(): Engine {
   mathjax.asyncLoad = loadRange;
   const adaptor = liteAdaptor();
   RegisterHTMLHandler(adaptor);
-  const output = new SVG({ fontCache: "none", linebreaks: { inline: false } });
   return {
     convert: async (tex, display) => {
       const input = new TeX({
@@ -62,6 +61,7 @@ export function createEngine(): Engine {
           throw error;
         },
       });
+      const output = new SVG({ fontCache: "none", linebreaks: { inline: false } });
       const document = mathjax.document("", { InputJax: input, OutputJax: output });
       const node = await document.convertPromise(tex, { display });
       const children = adaptor.childNodes(node);
