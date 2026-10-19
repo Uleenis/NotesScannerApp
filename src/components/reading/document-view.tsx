@@ -4,9 +4,12 @@ import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useStrings } from "@/i18n";
 import { dateParts } from "@/pages/dates";
 import { displayDocument } from "@/pages/display";
+import { mathDocument, type MathRow } from "@/pages/formulas";
 import type { NumberedPage, PageType } from "@/pages/pages";
 import { useSetPageType } from "@/pages/queries";
+import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
 import { colors, typography } from "@/theme";
+import { Formula } from "./formula";
 
 const BLOCK_SPACING = typography.documentBody.lineHeight * 0.4;
 
@@ -49,9 +52,33 @@ function MathSwitch({ page }: { page: NumberedPage }) {
   );
 }
 
+function MathBody({ rows }: { rows: MathRow[] }) {
+  let formulas = 0;
+  const overBudget = (): boolean => {
+    formulas += 1;
+    return formulas > MAX_FORMULAS_PER_PAGE;
+  };
+  return rows.map((row, index) => {
+    if (row.kind === "gap") {
+      return <View key={index} style={styles.gap} />;
+    }
+    if (row.kind === "display") {
+      return <Formula key={index} tex={row.tex} source={row.source} display raw={overBudget()} />;
+    }
+    return (
+      <Text key={index} selectable style={styles.line}>
+        {row.parts.map((part, at) =>
+          part.kind === "text" ? part.text : <Formula key={at} tex={part.tex} source={part.source} display={false} raw={overBudget()} />,
+        )}
+      </Text>
+    );
+  });
+}
+
 export function DocumentView({ page }: { page: NumberedPage }) {
   const t = useStrings();
-  const { title, blocks } = displayDocument(page.text ?? "");
+  const math = page.pageType === "math" ? mathDocument(page.text ?? "") : null;
+  const { title, blocks } = math === null ? displayDocument(page.text ?? "") : { title: math.title, blocks: [] };
   const parts = dateParts(page.capturedAt, new Date());
   const info = parts === null ? t.document.pageNumber(page.number) : t.document.info(page.number, t.dates.long(parts.day, parts.month, parts.year));
 
@@ -66,14 +93,18 @@ export function DocumentView({ page }: { page: NumberedPage }) {
       ) : (
         <MathSwitch page={page} />
       )}
-      {blocks.map((block, index) =>
-        block.kind === "gap" ? (
-          <View key={index} style={styles.gap} />
-        ) : (
-          <Text key={index} selectable style={styles.line}>
-            {block.text}
-          </Text>
-        ),
+      {math !== null ? (
+        <MathBody rows={math.rows} />
+      ) : (
+        blocks.map((block, index) =>
+          block.kind === "gap" ? (
+            <View key={index} style={styles.gap} />
+          ) : (
+            <Text key={index} selectable style={styles.line}>
+              {block.text}
+            </Text>
+          ),
+        )
       )}
     </ScrollView>
   );

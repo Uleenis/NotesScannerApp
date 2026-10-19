@@ -9,6 +9,7 @@ import { strings } from "@/i18n";
 import { notebookService } from "@/notebooks/service";
 import type { SetTypeResult, StartResult } from "@/pages/pages";
 import { pageService } from "@/pages/service";
+import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
 import { deferred } from "./fake-auth-client";
 import { colors } from "@/theme";
 import { granted, installPermission } from "./fake-camera";
@@ -719,5 +720,90 @@ describe("the switch of a page of math", () => {
     pages.change("page-1", { pageType: "unsupported_script" });
     await openPage();
     expect(await screen.findByText(en.document.unsupportedScript)).toBeTruthy();
+  });
+});
+
+describe("a page of math", () => {
+  const B = String.fromCharCode(92);
+  const MATH_TEXT = ["Chapitre 1", "", `Soit $f(x) = ${B}frac{1}{x}$ sur $${B}mathbb{R}^*$.`, "$$", `${B}int_1^2 f(x)${B},dx = ${B}ln 2`, "$$", `Faux : $${B}frac{1}{$ et lien $${B}href{https://example.test}{x}$`].join("\n");
+
+  test("draws its formulas, inline and on their own, and keeps the words around them in the document font [17]", async () => {
+    pages.change("page-1", { pageType: "math", text: MATH_TEXT });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    expect(await screen.findByLabelText(`$f(x) = ${B}frac{1}{x}$`)).toBeTruthy();
+    expect(await screen.findByLabelText(`$${B}mathbb{R}^*$`)).toBeTruthy();
+    expect(await screen.findByLabelText(`$$\n${B}int_1^2 f(x)${B},dx = ${B}ln 2\n$$`)).toBeTruthy();
+    const words = screen.getByText(/^Soit /);
+    expect(StyleSheet.flatten(words.props.style).fontFamily).toBe("SourceSerif4-Regular");
+  });
+
+  test("shows a formula the engine refuses as it was read, never an error, and a link command as inert text", async () => {
+    pages.change("page-1", { pageType: "math", text: MATH_TEXT });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    expect(await screen.findByText(`$${B}frac{1}{$`)).toBeTruthy();
+    expect(await screen.findByText(`$${B}href{https://example.test}{x}$`)).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  test("draws a formula that opens the page, and names the page by its number", async () => {
+    pages.change("page-1", { pageType: "math", text: ["$$", "x = 2", "$$", "fin"].join(String.fromCharCode(10)) });
+    await openPage();
+
+    expect(await screen.findByLabelText(["$$", "x = 2", "$$"].join(String.fromCharCode(10)))).toBeTruthy();
+    expect(screen.getByText(fr.document.pageNumber(4))).toBeTruthy();
+    expect(screen.queryByText("$$")).toBeNull();
+  });
+
+  test("shows an inline formula too wide for its line as it was read", async () => {
+    const wide = `$${"x + ".repeat(30)}x$`;
+    pages.change("page-1", { pageType: "math", text: ["Chapitre 1", `Soit ${wide} fin`].join(String.fromCharCode(10)) });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    expect(await screen.findByText(wide)).toBeTruthy();
+    expect(screen.queryByLabelText(wide)).toBeNull();
+  });
+
+  test("draws at most a hundred formulas on a page, and shows the rest as read", async () => {
+    pages.change("page-1", { pageType: "math", text: ["Chapitre 1", ...Array<string>(MAX_FORMULAS_PER_PAGE + 1).fill("Soit $y$.")].join(String.fromCharCode(10)) });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    await waitFor(() => expect(screen.getAllByLabelText("$y$")).toHaveLength(MAX_FORMULAS_PER_PAGE));
+    expect(screen.getAllByText("$y$")).toHaveLength(1);
+  });
+
+  test("keeps the LaTeX of a page of text as it was read", async () => {
+    pages.change("page-1", { pageType: "text", text: MATH_TEXT });
+    await openPage();
+    await screen.findByText("Chapitre 1");
+
+    expect(screen.queryByLabelText(`$f(x) = ${B}frac{1}{x}$`)).toBeNull();
+    expect(screen.getByText(`Soit $f(x) = ${B}frac{1}{x}$ sur $${B}mathbb{R}^*$.`)).toBeTruthy();
+  });
+
+  test("loads nothing from the network to draw them", async () => {
+    const fetchSpy = jest.spyOn(globalThis, "fetch");
+    const opened = jest.fn();
+    const scope = globalThis as { XMLHttpRequest?: unknown };
+    const original = scope.XMLHttpRequest;
+    scope.XMLHttpRequest = class {
+      open = opened;
+      send = opened;
+    };
+    try {
+      pages.change("page-1", { pageType: "math", text: MATH_TEXT });
+      await openPage();
+      await screen.findByLabelText(`$${B}mathbb{R}^*$`);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(opened).not.toHaveBeenCalled();
+    } finally {
+      scope.XMLHttpRequest = original;
+      fetchSpy.mockRestore();
+    }
   });
 });
