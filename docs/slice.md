@@ -5,22 +5,22 @@ Slice 3 — Library.
 Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 3.md`, one document, validated by the owner on 17/10/2026, with its four decisions as proposed.
-- **Method:** `../../01 Steps/Méthode de travail.md`, revised on 16/10/2026. One session builds the four branches one after the other, each with its tests, reviews, PR and merge.
+- **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
 - **Next branch:** `t3/schema`.
 - **Decisions from now on:** `../Tranche 3/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
-- **Guarded file:** `supabase/config.toml` declares the new functions and their `verify_jwt` (`false` for the sweep, called by `pg_cron` with its secret, like `relaunch-page`). The owner approved it with the slice document; prepare it as a patch in `../Tranche 3/`, the PR that carries it is the owner's to merge, and the session goes on with the other branches meanwhile.
+- **Guarded file:** `supabase/config.toml` declares the new functions and their `verify_jwt` (`false` for the sweep, called by `pg_cron` with its secret, like `relaunch-page`). The owner approved it with the slice document. The branch that needs it prepares the change as a patch in `../Tranche 3/`; its PR is then the owner's to merge: its session says so, marks the branch "waiting for the owner" below, and stops. The next session may build the next branch meanwhile, from `main`, if that branch does not need the waiting one.
 - **Local secret of the sweep:** passed like `relaunch-page`'s; the owner adds it to `supabase/functions/.env` and the local Vault following the steps the session writes in "Pour Tim". Until then the tests run with a test secret.
 - **Gemini:** no real reading is needed; the tests replace Gemini.
 - **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 4, 7, 9, 5, 6, 8. When slice 3 is done, its last commit points this file to slice 4 if `../../02 Design/Tranche 4.md` says it is validated by the owner, with its branches in the table below. A slice whose document is missing or not validated: stop and ask.
 
 ## Branches
 
-| # | Branch | Criteria | Sensitive | Merged by | State |
-|---|---|---|---|---|---|
-| 1 | `t3/schema` | 1, 5, 7 | yes (access rights) | Claude | to do |
-| 2 | `t3/delete-move` | 2, 3, 4, 6, 9 | yes (access rights, files) | Claude, or the owner if it carries `config.toml` | to do |
-| 3 | `t3/sweep` | 8 | yes (secret) | Claude, or the owner if it carries `config.toml` | to do |
-| 4 | `t3/screens` | 10, 11, 12 | no | Claude | to do |
+| # | Branch | Criteria | Level | Session | Merged by | State |
+|---|---|---|---|---|---|---|
+| 1 | `t3/schema` | 1, 5, 7 | sensitive (access rights) | Sonnet, High | Claude | to do |
+| 2 | `t3/delete-move` | 2, 3, 4, 6, 9 | sensitive (access rights, files, deletion) | Sonnet, High | Claude, or the owner if it carries `config.toml` | to do |
+| 3 | `t3/sweep` | 8 | critical (secret) | Opus, High | Claude, or the owner if it carries `config.toml` | to do |
+| 4 | `t3/screens` | 10, 11, 12 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan (naming any branch still waiting for the owner), the status of `AGENTS.md` and `../Vérifications 1.md` (slice 3 is the third) |
 
 ## Slice 2
 
