@@ -5,7 +5,7 @@ Slice 3 — Library.
 Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 3.md`, one document, validated by the owner on 17/10/2026, with its four decisions as proposed.
-- **Method:** `../../01 Steps/Méthode de travail.md`, revised on 16/10/2026. One session builds the four branches one after the other, each with its tests, reviews, PR and merge.
+- **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
 - **Next branch:** `t3/schema`.
 - **Decisions from now on:** `../Tranche 3/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded file:** `supabase/config.toml` declares the new functions and their `verify_jwt` (`false` for the sweep, called by `pg_cron` with its secret, like `relaunch-page`). The owner approved it with the slice document; prepare it as a patch in `../Tranche 3/`, the PR that carries it is the owner's to merge, and the session goes on with the other branches meanwhile.
@@ -15,12 +15,12 @@ Paths below are from the repository root.
 
 ## Branches
 
-| # | Branch | Criteria | Sensitive | Merged by | State |
-|---|---|---|---|---|---|
-| 1 | `t3/schema` | 1, 5, 7 | yes (access rights) | Claude | to do |
-| 2 | `t3/delete-move` | 2, 3, 4, 6, 9 | yes (access rights, files) | Claude, or the owner if it carries `config.toml` | to do |
-| 3 | `t3/sweep` | 8 | yes (secret) | Claude, or the owner if it carries `config.toml` | to do |
-| 4 | `t3/screens` | 10, 11, 12 | no | Claude | to do |
+| # | Branch | Criteria | Level | Session | Merged by | State |
+|---|---|---|---|---|---|---|
+| 1 | `t3/schema` | 1, 5, 7 | sensitive (access rights) | Sonnet | Claude | to do |
+| 2 | `t3/delete-move` | 2, 3, 4, 6, 9 | sensitive (access rights, files, deletion) | Sonnet | Claude, or the owner if it carries `config.toml` | to do |
+| 3 | `t3/sweep` | 8 | critical (secret) | Opus | Claude, or the owner if it carries `config.toml` | to do |
+| 4 | `t3/screens` | 10, 11, 12 | ordinary | Sonnet | Claude | to do |
 
 ## Slice 2
 
