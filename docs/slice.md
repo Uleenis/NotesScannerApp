@@ -20,7 +20,7 @@ Paths below are from the repository root.
 | 1 | `t3/schema` | 1, 5, 7 | sensitive (access rights) | Sonnet, High | Claude | to do |
 | 2 | `t3/delete-move` | 2, 3, 4, 6, 9 | sensitive (access rights, files, deletion) | Sonnet, High | Claude, or the owner if it carries `config.toml` | to do |
 | 3 | `t3/sweep` | 8 | critical (secret) | Opus, High | Claude, or the owner if it carries `config.toml` | to do |
-| 4 | `t3/screens` | 10, 11, 12 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan, the status of `AGENTS.md` and `../Vérifications 1.md` (slice 3 is the third) |
+| 4 | `t3/screens` | 10, 11, 12 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan (naming any branch still waiting for the owner), the status of `AGENTS.md` and `../Vérifications 1.md` (slice 3 is the third) |
 
 ## Slice 2
 
