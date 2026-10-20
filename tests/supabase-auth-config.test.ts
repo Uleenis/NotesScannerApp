@@ -71,13 +71,21 @@ test("the delete-account function checks the token of the caller", () => {
   expect(section("functions.delete-account").verify_jwt).toBe("true");
 });
 
-test.each(["prepare-page", "read-page", "transfer-account"])(
+test.each(["prepare-page", "read-page", "transfer-account", "set-page-type", "delete-page", "delete-notebook", "delete-chapter", "move-page"])(
   "the %s function checks the token of the caller",
   (name) => {
     expect(section(`functions.${name}`).verify_jwt).toBe("true");
   },
 );
 
-test("relaunch-page alone skips the token check, since the scheduled task proves itself with its own secret", () => {
-  expect(section("functions.relaunch-page").verify_jwt).toBe("false");
+test.each(["relaunch-page", "sweep-alto"])(
+  "%s skips the token check, since its scheduled task proves itself with its own secret",
+  (name) => {
+    expect(section(`functions.${name}`).verify_jwt).toBe("false");
+  },
+);
+
+test("no other function skips the token check", () => {
+  const names = [...config.matchAll(/^\[functions\.([a-z-]+)\]\r?$/gm)].map((match) => match[1]);
+  expect(names.filter((name) => section(`functions.${name}`).verify_jwt !== "true").sort()).toEqual(["relaunch-page", "sweep-alto"]);
 });
