@@ -37,7 +37,7 @@ build-backend = "uv_build"
 environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 constraint-dependencies = [
     "aiohappyeyeballs==2.7.1",
-    "aiohttp==3.14.3",
+    "aiohttp==3.14.4",
     "aiosignal==1.4.0",
     "atpublic==7.0.0",
     "attrs==26.1.0",
@@ -103,7 +103,7 @@ constraint-dependencies = [
     "tqdm==4.70.0",
     "typing-extensions==4.16.0",
     "urllib3==2.8.0",
-    "yarl==1.24.5",
+    "yarl==1.25.1",
 ]
 
 [tool.uv.sources]
