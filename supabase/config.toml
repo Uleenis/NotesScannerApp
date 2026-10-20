@@ -435,3 +435,21 @@ verify_jwt = true
 
 [functions.transfer-account]
 verify_jwt = true
+
+[functions.set-page-type]
+verify_jwt = true
+
+[functions.delete-page]
+verify_jwt = true
+
+[functions.delete-notebook]
+verify_jwt = true
+
+[functions.delete-chapter]
+verify_jwt = true
+
+[functions.move-page]
+verify_jwt = true
+
+[functions.sweep-alto]
+verify_jwt = false
