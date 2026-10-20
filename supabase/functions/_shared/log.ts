@@ -24,6 +24,7 @@ export type LogEvent =
   | "notebook_deleted"
   | "page_moved"
   | "files_left"
+  | "alto_swept"
   | "reading_service_misconfigured"
   | "unexpected_error";
 
@@ -38,6 +39,7 @@ export type LogFields = {
   outputTokens?: number;
   thoughtsTokens?: number;
   tokens?: number;
+  files?: number;
   errorName?: string;
 };
 
@@ -49,7 +51,7 @@ const MAX_WORD_LENGTH = 64;
 const PLAIN_WORD = /^[A-Za-z0-9_.:-]+$/;
 
 const WORD_FIELDS = ["pageId", "code", "kind", "errorName"] as const;
-const NUMBER_FIELDS = ["status", "attempt", "durationMs", "inputTokens", "outputTokens", "thoughtsTokens", "tokens"] as const;
+const NUMBER_FIELDS = ["status", "attempt", "durationMs", "inputTokens", "outputTokens", "thoughtsTokens", "tokens", "files"] as const;
 
 export function createLogger(sink: (line: string) => void): Logger {
   return {

@@ -72,11 +72,30 @@ export async function admit(request: Request, auth: Auth, log: Logger): Promise<
   return { ...entry, pageId };
 }
 
+async function holdsSecret(request: Request, header: string, secret: string): Promise<boolean> {
+  const given = request.headers.get(header);
+  return Boolean(secret && given && (await sameSecret(given, secret)));
+}
+
 export async function admitScheduler(request: Request, secret: string, log: Logger): Promise<SchedulerEntry | Response> {
   if (request.method !== "POST") return refuse(log, { status: 405, code: "method_not_allowed" });
-  const given = request.headers.get(RELAUNCH_SECRET_HEADER);
-  if (!secret || !given || !(await sameSecret(given, secret))) return refuse(log, { status: 401, code: "unauthenticated" });
+  if (!(await holdsSecret(request, RELAUNCH_SECRET_HEADER, secret))) return refuse(log, { status: 401, code: "unauthenticated" });
   const pageId = await pageIdFrom(request);
   if (!pageId) return refuse(log, { status: 400, code: "invalid_request" });
   return { pageId };
+}
+
+const SWEEP_SECRET_HEADER = "x-sweep-secret";
+
+export async function admitSweep(request: Request, secret: string, log: Logger): Promise<Response | null> {
+  if (request.method !== "POST") return refuse(log, { status: 405, code: "method_not_allowed" });
+  if (!(await holdsSecret(request, SWEEP_SECRET_HEADER, secret))) return refuse(log, { status: 401, code: "unauthenticated" });
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+  const empty = typeof body === "object" && body !== null && !Array.isArray(body) && Object.keys(body).length === 0;
+  return empty ? null : refuse(log, { status: 400, code: "invalid_request" });
 }
