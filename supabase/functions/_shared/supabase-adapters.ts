@@ -10,6 +10,9 @@ import type {
   ChargeReason,
   ChargeResult,
   ClaimExpectation,
+  LibraryOutcome,
+  LibraryStore,
+  NotebookPage,
   PageReader,
   PageRow,
   PageStatus,
@@ -333,6 +336,81 @@ export function createServerStore(keys: Keys, fetchImpl?: typeof fetch): ServerS
       const { data, error } = await client.storage.from(BUCKET).createSignedUploadUrl(path);
       if (error || !data) throw new StoreError("createUploadUrl");
       return { signedUrl: data.signedUrl, token: data.token };
+    },
+  };
+}
+
+const LIBRARY_OUTCOMES: readonly string[] = ["deleted", "moved", "unchanged", "page_not_found", "chapter_not_found", "notebook_not_found", "page_processing"];
+const NOTEBOOK_PAGES_SIZE = 1000;
+
+function outcomeOf(data: unknown, operation: string): LibraryOutcome {
+  const outcome = first(data)?.outcome;
+  if (typeof outcome !== "string" || !LIBRARY_OUTCOMES.includes(outcome)) throw new StoreError(operation);
+  return outcome as LibraryOutcome;
+}
+
+export function createLibraryStore(keys: Keys, fetchImpl?: typeof fetch): LibraryStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    pageStatus: async (userId, pageId) => {
+      const { data, error } = await client.from("pages").select("status").eq("id", pageId).eq("user_id", userId).maybeSingle();
+      if (error) throw new StoreError("pageStatus");
+      const found = row(data);
+      if (!found) return null;
+      if (!PAGE_STATUSES.includes(String(found.status))) throw new StoreError("pageStatus");
+      return found.status as PageStatus;
+    },
+    notebookPages: async (userId, notebookId) => {
+      const notebook = await client.from("notebooks").select("id").eq("id", notebookId).eq("user_id", userId).maybeSingle();
+      if (notebook.error) throw new StoreError("notebookPages");
+      if (!row(notebook.data)) return null;
+      const pages: NotebookPage[] = [];
+      for (let offset = 0;; offset += NOTEBOOK_PAGES_SIZE) {
+        const { data, error } = await client
+          .from("pages")
+          .select("id, status")
+          .eq("notebook_id", notebookId)
+          .eq("user_id", userId)
+          .order("id")
+          .range(offset, offset + NOTEBOOK_PAGES_SIZE - 1);
+        if (error || !Array.isArray(data)) throw new StoreError("notebookPages");
+        for (const entry of data) {
+          const found = row(entry);
+          if (!found || typeof found.id !== "string" || !PAGE_STATUSES.includes(String(found.status))) throw new StoreError("notebookPages");
+          pages.push({ id: found.id, status: found.status as PageStatus });
+        }
+        if (data.length < NOTEBOOK_PAGES_SIZE) break;
+      }
+      return pages;
+    },
+    removePageFiles: async (bucket, userId, pageId) => {
+      const folder = `${userId}/${pageId}`;
+      const files = await listFiles(client, bucket, folder);
+      for (let start = 0; start < files.length; start += REMOVE_BATCH_SIZE) {
+        const { error } = await client.storage.from(bucket).remove(files.slice(start, start + REMOVE_BATCH_SIZE));
+        if (error) throw new StoreError("removePageFiles");
+      }
+      if ((await listFiles(client, bucket, folder)).length > 0) throw new StoreError("filesRemain");
+    },
+    deletePage: async (userId, pageId) => {
+      const { data, error } = await client.rpc("delete_page", { p_page_id: pageId, p_user_id: userId });
+      if (error) throw new StoreError("deletePage");
+      return outcomeOf(data, "deletePage");
+    },
+    deleteChapter: async (userId, chapterId) => {
+      const { data, error } = await client.rpc("delete_chapter", { p_chapter_id: chapterId, p_user_id: userId });
+      if (error) throw new StoreError("deleteChapter");
+      return outcomeOf(data, "deleteChapter");
+    },
+    deleteNotebook: async (userId, notebookId) => {
+      const { data, error } = await client.rpc("delete_notebook", { p_notebook_id: notebookId, p_user_id: userId });
+      if (error) throw new StoreError("deleteNotebook");
+      return outcomeOf(data, "deleteNotebook");
+    },
+    movePage: async (userId, pageId, notebookId, chapterId) => {
+      const { data, error } = await client.rpc("move_page", { p_page_id: pageId, p_user_id: userId, p_notebook_id: notebookId, p_chapter_id: chapterId });
+      if (error) throw new StoreError("movePage");
+      return outcomeOf(data, "movePage");
     },
   };
 }

@@ -19,6 +19,11 @@ export type LogEvent =
   | "a_done"
   | "page_type_set"
   | "alto_left"
+  | "page_deleted"
+  | "chapter_deleted"
+  | "notebook_deleted"
+  | "page_moved"
+  | "files_left"
   | "reading_service_misconfigured"
   | "unexpected_error";
 
