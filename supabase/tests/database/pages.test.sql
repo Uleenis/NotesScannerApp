@@ -1,6 +1,6 @@
 begin;
 
-select plan(36);
+select plan(34);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -67,19 +67,9 @@ select lives_ok(
   'a user can move a page and record its upload'
 );
 
-select lives_ok(
-  $$update public.pages set chapter_id = null where position = 2$$,
-  'a user can take a page out of its chapter'
-);
-
-select lives_ok(
-  $$update public.pages set chapter_id = '33333333-3333-3333-3333-333333333333' where position = 2$$,
-  'a user can put a page into a chapter of its notebook'
-);
-
 select throws_ok(
-  $$update public.pages set chapter_id = '66666666-6666-6666-6666-666666666666' where position = 2$$,
-  '23503', null, 'a page cannot be moved into a chapter of another notebook'
+  $$update public.pages set chapter_id = null where position = 2$$,
+  '42501', null, 'a user cannot change the chapter of a page: a move goes through the server'
 );
 
 select throws_ok(
@@ -220,6 +210,8 @@ select is(
   0::bigint,
   'that update changed nothing'
 );
+
+update public.pages set chapter_id = '33333333-3333-3333-3333-333333333333' where position = 2 and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 delete from public.chapters where id = '33333333-3333-3333-3333-333333333333';
 

@@ -98,7 +98,6 @@ select set_eq(
       ('pages', 'position', 'insert'),
       ('pages', 'source', 'insert'),
       ('pages', 'captured_at', 'insert'),
-      ('pages', 'chapter_id', 'update'),
       ('pages', 'position', 'update'),
       ('pages', 'uploaded_at', 'update'),
       ('profiles', 'interface_language', 'update')
