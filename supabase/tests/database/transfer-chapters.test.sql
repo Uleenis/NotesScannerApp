@@ -1,6 +1,6 @@
 begin;
 
-select plan(6);
+select plan(9);
 
 create function pg_temp.make_user(uid uuid, anon boolean default false) returns void
 language sql as $$
@@ -13,17 +13,22 @@ select pg_temp.make_user('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 
 insert into public.notebooks (id, user_id, name) values
   ('a1000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'History'),
+  ('a1000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Solo'),
   ('b1000000-0000-0000-0000-000000000001', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', E'History  ');
 
 insert into public.chapters (id, user_id, notebook_id, name) values
   ('a2000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1000000-0000-0000-0000-000000000001', 'Intro'),
   ('a2000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1000000-0000-0000-0000-000000000001', 'Only mine'),
+  ('a2000000-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1000000-0000-0000-0000-000000000001', 'intro'),
+  ('a2000000-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1000000-0000-0000-0000-000000000002', 'Solo chapter'),
   ('b2000000-0000-0000-0000-000000000001', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'b1000000-0000-0000-0000-000000000001', E'Intro ');
 
 insert into public.pages (id, user_id, notebook_id, chapter_id) values
   ('a3000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000001'),
   ('a3000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000002'),
   ('a3000000-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1000000-0000-0000-0000-000000000001', null),
+  ('a3000000-0000-0000-0000-000000000004', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000003'),
+  ('a3000000-0000-0000-0000-000000000005', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a1000000-0000-0000-0000-000000000002', 'a2000000-0000-0000-0000-000000000004'),
   ('b3000000-0000-0000-0000-000000000001', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'b1000000-0000-0000-0000-000000000001', 'b2000000-0000-0000-0000-000000000001');
 
 set local role service_role;
@@ -35,7 +40,7 @@ select lives_ok(
 
 select is(
   (select count(*) from public.chapters where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and notebook_id = 'b1000000-0000-0000-0000-000000000001'),
-  2::bigint,
+  3::bigint,
   'chapters of the same name are merged and the others are kept'
 );
 
@@ -61,6 +66,24 @@ select is(
   (select count(*) from public.chapters where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
   0::bigint,
   'the giving account keeps no chapter'
+);
+
+select is(
+  (select row(user_id, chapter_id)::text from public.pages where id = 'a3000000-0000-0000-0000-000000000004'),
+  '(bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb,a2000000-0000-0000-0000-000000000003)',
+  'a chapter whose name differs only by case is not merged and keeps its page'
+);
+
+select is(
+  (select row(user_id, notebook_id)::text from public.chapters where id = 'a2000000-0000-0000-0000-000000000004'),
+  '(bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb,a1000000-0000-0000-0000-000000000002)',
+  'a chapter of a notebook that is not merged moves with its notebook'
+);
+
+select is(
+  (select count(*) from public.chapters where id = 'a2000000-0000-0000-0000-000000000001'),
+  0::bigint,
+  'the chapter that was merged is gone'
 );
 
 select * from finish();

@@ -1,6 +1,6 @@
 begin;
 
-select plan(52);
+select plan(53);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -44,6 +44,7 @@ insert into public.chapters (id, user_id, notebook_id, name) values
   ('31313131-3131-3131-3131-313131313131', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'In first'),
   ('32323232-3232-3232-3232-323232323232', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-1212-1212-121212121212', 'In second'),
   ('33333333-3333-3333-3333-333333333333', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-1212-1212-121212121212', 'Also in second'),
+  ('34343434-3434-3434-3434-343434343434', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '13131313-1313-1313-1313-131313131313', 'In third'),
   ('44444444-4444-4444-4444-444444444444', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '22222222-2222-2222-2222-222222222222', 'Of the other');
 
 select pg_temp.fill_page('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', '31313131-3131-3131-3131-313131313131', 'a1000000-0000-0000-0000-000000000001', 'one');
@@ -51,7 +52,7 @@ select pg_temp.fill_page('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-
 select pg_temp.fill_page('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', null, 'a1000000-0000-0000-0000-000000000003', 'three', 'processing');
 select pg_temp.fill_page('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-1212-1212-121212121212', '32323232-3232-3232-3232-323232323232', 'a2000000-0000-0000-0000-000000000001', 'four');
 select pg_temp.fill_page('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-1212-1212-121212121212', null, 'a2000000-0000-0000-0000-000000000002', 'five', 'processing');
-select pg_temp.fill_page('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '13131313-1313-1313-1313-131313131313', null, 'a3000000-0000-0000-0000-000000000001', 'six');
+select pg_temp.fill_page('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '13131313-1313-1313-1313-131313131313', '34343434-3434-3434-3434-343434343434', 'a3000000-0000-0000-0000-000000000001', 'six');
 select pg_temp.fill_page('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '13131313-1313-1313-1313-131313131313', null, 'a3000000-0000-0000-0000-000000000002', 'seven');
 select pg_temp.fill_page('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '22222222-2222-2222-2222-222222222222', '44444444-4444-4444-4444-444444444444', 'b1000000-0000-0000-0000-000000000001', 'other');
 
@@ -300,7 +301,7 @@ select is(
 
 select is(
   (select count(*) from public.chapters),
-  4::bigint,
+  5::bigint,
   'refused chapter deletions leave every chapter'
 );
 
@@ -354,7 +355,7 @@ select is(
 
 select is(
   (select count(*) from public.notebooks) + (select count(*) from public.chapters) + (select count(*) from public.pages),
-  14::bigint,
+  15::bigint,
   'a refused notebook deletion leaves everything in place'
 );
 
@@ -368,6 +369,12 @@ select is(
   pg_temp.rows_of_page('a3000000-0000-0000-0000-000000000001') + pg_temp.rows_of_page('a3000000-0000-0000-0000-000000000002'),
   0::bigint,
   'a deleted notebook takes its pages and everything they hold'
+);
+
+select is(
+  (select count(*) from public.chapters where notebook_id = '13131313-1313-1313-1313-131313131313'),
+  0::bigint,
+  'a deleted notebook takes its chapters'
 );
 
 select is(

@@ -1,6 +1,6 @@
 begin;
 
-select plan(23);
+select plan(28);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -109,6 +109,37 @@ select throws_ok(
   '23505',
   null,
   'renaming to a name already taken is refused'
+);
+
+select throws_ok(
+  $$update public.notebooks set name = '' where name = 'Math'$$,
+  '23514',
+  null,
+  'renaming a notebook to an empty name is refused'
+);
+
+select throws_ok(
+  $$update public.notebooks set name = E' 　' where name = 'Math'$$,
+  '23514',
+  null,
+  'renaming a notebook to invisible spaces is refused'
+);
+
+select throws_ok(
+  $$update public.notebooks set name = repeat('a', 201) where name = 'Math'$$,
+  '23514',
+  null,
+  'renaming a notebook to 201 characters is refused'
+);
+
+select lives_ok(
+  $$update public.notebooks set name = 'Mathematics' where name = 'Math'$$,
+  'a user can rename a notebook'
+);
+
+select lives_ok(
+  $$update public.notebooks set name = 'Math' where name = 'Mathematics'$$,
+  'a notebook can take its old name back'
 );
 
 select throws_ok(

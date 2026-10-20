@@ -25,6 +25,10 @@ declare
   v_notebook uuid;
   v_chapter uuid;
 begin
+  if p_user_id is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 0));
+  end if;
+
   if p_user_id is null or not exists (select 1 from public.pages p where p.id = p_page_id and p.user_id = p_user_id) then
     return query select 'page_not_found'::text;
     return;
@@ -74,6 +78,10 @@ as $$
 declare
   v_status text;
 begin
+  if p_user_id is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 0));
+  end if;
+
   select p.status into v_status from public.pages p
   where p.id = p_page_id and p_user_id is not null and p.user_id = p_user_id
   for update;
@@ -101,6 +109,10 @@ as $$
 declare
   v_notebook uuid;
 begin
+  if p_user_id is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 0));
+  end if;
+
   select c.notebook_id into v_notebook from public.chapters c
   where c.id = p_chapter_id and p_user_id is not null and c.user_id = p_user_id;
   if not found then
@@ -115,7 +127,7 @@ begin
   end if;
 
   perform 1 from public.chapters c
-  where c.id = p_chapter_id and c.user_id = p_user_id
+  where c.id = p_chapter_id and c.user_id = p_user_id and c.notebook_id = v_notebook
   for update;
   if not found then
     return query select 'chapter_not_found'::text;
@@ -135,6 +147,10 @@ security definer
 set search_path = ''
 as $$
 begin
+  if p_user_id is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 0));
+  end if;
+
   perform 1 from public.notebooks n
   where n.id = p_notebook_id and p_user_id is not null and n.user_id = p_user_id
   for update;
@@ -203,7 +219,9 @@ begin
     raise exception 'target_anonymous';
   end if;
 
-  perform 1 from public.pages p where p.user_id = p_from for update;
+  perform 1 from public.notebooks n where n.user_id = p_from order by n.id for update;
+  perform 1 from public.chapters c where c.user_id = p_from order by c.id for update;
+  perform 1 from public.pages p where p.user_id = p_from order by p.id for update;
   if exists (select 1 from public.pages p where p.user_id = p_from and p.status = 'processing') then
     raise exception 'page_processing';
   end if;
