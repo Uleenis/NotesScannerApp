@@ -175,6 +175,18 @@ export type ReadPageDeps = ReadingDeps & {
   forCaller: (token: string) => CallerStore;
 };
 
+export type SweepStore = {
+  orphans: (limit: number) => Promise<string[]>;
+  remove: (paths: readonly string[]) => Promise<number>;
+};
+
+export type SweepAltoDeps = {
+  secret: string;
+  sweeps: SweepStore;
+  clock: { now: () => number };
+  log: Logger;
+};
+
 export type RelaunchPageDeps = ReadingDeps & {
   secret: string;
   reader: PageReader;

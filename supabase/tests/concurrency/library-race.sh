@@ -97,10 +97,13 @@ for round in 1 2 3 4 5 6 7 8; do
   held=""
   if [ $((round % 2)) -eq 0 ]; then
     held="$(sql -c "
-      update public.pages set status = 'processing'
-      where id = (select id from public.pages where user_id = '${FROM_ID}' order by id limit 1)
-      returning id || '|' || notebook_id;
-    " | head -n 1)"
+      with held as (
+        update public.pages set status = 'processing'
+        where id = (select id from public.pages where user_id = '${FROM_ID}' order by id limit 1)
+        returning id || '|' || notebook_id as page
+      )
+      select page from held;
+    ")"
   fi
   docker exec "$DB_CONTAINER" pgbench -U postgres -n -f /tmp/library.sql@20 -f /tmp/library-transfer.sql@1 -c 24 -j 8 -t 3 postgres > /dev/null || true
   if [ -n "$held" ]; then

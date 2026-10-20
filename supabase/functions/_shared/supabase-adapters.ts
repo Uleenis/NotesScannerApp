@@ -22,6 +22,7 @@ import type {
   QueueReason,
   ServerStore,
   SwitchOutcome,
+  SweepStore,
   TransferStore,
 } from "./ports.ts";
 
@@ -447,6 +448,32 @@ export function createPageTypeStore(keys: Keys, fetchImpl?: typeof fetch): PageT
     removeAlto: async (path) => {
       const { error } = await client.storage.from("alto").remove([path]);
       if (error) throw new StoreError("removeAlto");
+    },
+  };
+}
+
+const ALTO_PATH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+
+export function createSweepStore(keys: Keys, fetchImpl?: typeof fetch): SweepStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    orphans: async (limit) => {
+      const { data, error } = await client.rpc("alto_orphans", { p_limit: limit });
+      if (error || !Array.isArray(data)) throw new StoreError("altoOrphans");
+      return data.map((entry) => {
+        const name = row(entry)?.name;
+        if (typeof name !== "string" || !ALTO_PATH.test(name)) throw new StoreError("altoOrphans");
+        return name;
+      });
+    },
+    remove: async (paths) => {
+      let removed = 0;
+      for (let start = 0; start < paths.length; start += REMOVE_BATCH_SIZE) {
+        const { data, error } = await client.storage.from("alto").remove(paths.slice(start, start + REMOVE_BATCH_SIZE));
+        if (error || !Array.isArray(data)) throw new StoreError("removeAlto");
+        removed += data.length;
+      }
+      return removed;
     },
   };
 }
