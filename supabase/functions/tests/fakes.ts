@@ -11,6 +11,8 @@ import type {
   Caller,
   CallerStore,
   DeleteAccountDeps,
+  LibraryDeps,
+  LibraryStore,
   ChargeReason,
   ChargeResult,
   MoveResult,
@@ -134,6 +136,7 @@ export class World {
   loseCopies = new Set<Bucket>();
   onCopy: (() => void) | null = null;
   beforeDeleteUser: (() => void) | null = null;
+  beforeLibraryCall: (() => void) | null = null;
   photos = new Map<string, FakePhoto>();
   alto = new Map<string, Uint8Array>();
   models = new Map<string, Uint8Array>();
@@ -551,6 +554,94 @@ export class World {
         return { ok: true, pages: mine.length, notebooksMerged: merged.size };
       },
     };
+  }
+
+  private erasePage(pageId: string): void {
+    this.pages.delete(pageId);
+    this.pageTexts.delete(pageId);
+    this.readings = this.readings.filter((reading) => reading.pageId !== pageId);
+    this.pageImages = this.pageImages.filter((image) => image.pageId !== pageId);
+    this.altoReadings = this.altoReadings.filter((reading) => reading.pageId !== pageId);
+    this.pageTokens = this.pageTokens.filter((token) => token.pageId !== pageId);
+    for (const charge of this.charges) if (charge.pageId === pageId) charge.pageId = "";
+  }
+
+  library(): LibraryStore {
+    const owned = (userId: string, pageId: string): FakePage | null => {
+      const page = this.pages.get(pageId);
+      return page && page.userId === userId ? page : null;
+    };
+    return {
+      pageStatus: async (userId, pageId) => {
+        await this.tick("pageStatus");
+        return owned(userId, pageId)?.status ?? null;
+      },
+      notebookPages: async (userId, notebookId) => {
+        await this.tick("notebookPages");
+        const notebook = this.notebooks.get(notebookId);
+        if (!notebook || notebook.userId !== userId) return null;
+        return [...this.pages.values()]
+          .filter((page) => page.userId === userId && page.notebookId === notebookId)
+          .map((page) => ({ id: page.id, status: page.status }));
+      },
+      removePageFiles: async (bucket, userId, pageId) => {
+        await this.tick(`removePageFiles:${bucket}`);
+        for (const path of [...this.files(bucket).keys()]) {
+          if (path.startsWith(`${userId}/${pageId}/`)) this.files(bucket).delete(path);
+        }
+      },
+      deletePage: async (userId, pageId) => {
+        await this.tick("deletePage");
+        this.beforeLibraryCall?.();
+        const page = owned(userId, pageId);
+        if (!page) return "page_not_found";
+        if (page.status === "processing") return "page_processing";
+        this.erasePage(pageId);
+        return "deleted";
+      },
+      deleteChapter: async (userId, chapterId) => {
+        await this.tick("deleteChapter");
+        this.beforeLibraryCall?.();
+        const chapter = this.chapters.get(chapterId);
+        if (!chapter || chapter.userId !== userId) return "chapter_not_found";
+        for (const page of this.pages.values()) if (page.chapterId === chapterId) page.chapterId = null;
+        this.chapters.delete(chapterId);
+        return "deleted";
+      },
+      deleteNotebook: async (userId, notebookId) => {
+        await this.tick("deleteNotebook");
+        this.beforeLibraryCall?.();
+        const notebook = this.notebooks.get(notebookId);
+        if (!notebook || notebook.userId !== userId) return { outcome: "notebook_not_found", pageIds: [] };
+        const inside = [...this.pages.values()].filter((page) => page.notebookId === notebookId);
+        if (inside.some((page) => page.status === "processing")) return { outcome: "page_processing", pageIds: [] };
+        for (const page of inside) this.erasePage(page.id);
+        for (const [id, chapter] of [...this.chapters]) if (chapter.notebookId === notebookId) this.chapters.delete(id);
+        this.notebooks.delete(notebookId);
+        return { outcome: "deleted", pageIds: inside.map((page) => page.id).sort() };
+      },
+      movePage: async (userId, pageId, notebookId, chapterId) => {
+        await this.tick("movePage");
+        this.beforeLibraryCall?.();
+        const page = owned(userId, pageId);
+        if (!page) return "page_not_found";
+        const notebook = this.notebooks.get(notebookId);
+        if (!notebook || notebook.userId !== userId) return "notebook_not_found";
+        if (chapterId !== null) {
+          const chapter = this.chapters.get(chapterId);
+          if (!chapter || chapter.userId !== userId || chapter.notebookId !== notebookId) return "chapter_not_found";
+        }
+        if (page.status === "processing") return "page_processing";
+        if (page.notebookId === notebookId && page.chapterId === chapterId) return "unchanged";
+        page.notebookId = notebookId;
+        page.chapterId = chapterId;
+        return "moved";
+      },
+    };
+  }
+
+  libraryDeps(): LibraryDeps {
+    return { auth: this.authPort(), library: this.library(), log: this.logger() };
   }
 
   gemini() {

@@ -4,7 +4,11 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { GeminiReading } from "../../_shared/gemini.ts";
 import { GeminiFailure } from "../../_shared/gemini.ts";
 import { createLogger } from "../../_shared/log.ts";
-import { createAuth, createCallerStore, createServerStore, createServiceReader, readKeys } from "../../_shared/supabase-adapters.ts";
+import { createAuth, createCallerStore, createLibraryStore, createServerStore, createServiceReader, readKeys } from "../../_shared/supabase-adapters.ts";
+import { handleDeleteChapter } from "../../delete-chapter/handler.ts";
+import { handleDeleteNotebook } from "../../delete-notebook/handler.ts";
+import { handleDeletePage } from "../../delete-page/handler.ts";
+import { handleMovePage } from "../../move-page/handler.ts";
 import { handlePreparePage } from "../../prepare-page/handler.ts";
 import { handleReadPage } from "../../read-page/handler.ts";
 import { handleRelaunchPage } from "../../relaunch-page/handler.ts";
@@ -457,6 +461,56 @@ Deno.test({
         assertEquals(await body(response), { error: "photo_missing" });
         assertEquals(geminiCalls, 0);
         assertEquals((await pageRow(pageId)).status, "failed");
+      });
+
+      await t.step("moving and deleting go through the real adapters, files before rows, for the owner alone", async () => {
+        const alice = await account();
+        const bob = await account();
+        const first = await newPage(alice);
+        const second = await newPage(alice, first.notebookId);
+        for (const pageId of [first.pageId, second.pageId]) {
+          await prepareAndUpload(alice, pageId);
+          const altoPath = `${alice.id}/${pageId}/a-0123456789abcdef0123456789abcdef.xml`;
+          const { error } = await admin.storage.from("alto").upload(altoPath, new Uint8Array([60, 97, 62]), { contentType: "application/xml" });
+          if (error) throw new Error("alto upload failed");
+        }
+        const { data: chapter, error: chapterError } = await alice.client.from("chapters").insert({ notebook_id: first.notebookId, name: "Intro" }).select("id").single();
+        if (chapterError) throw new Error("chapter insert failed");
+        const chapterId = chapter.id as string;
+        const library = { auth: readDeps.auth, library: createLibraryStore(keys), log: readDeps.log };
+        const send = (handler: (request: Request, deps: typeof library) => Promise<Response>, token: string, payload: unknown) =>
+          handler(new Request("http://functions.test/fn", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(payload) }), library);
+        const listed = async (bucket: string, folder: string) => (await admin.storage.from(bucket).list(folder)).data?.length ?? 0;
+
+        const foreign = await send(handleMovePage, bob.token, { page_id: first.pageId, notebook_id: first.notebookId, chapter_id: chapterId });
+        assertEquals(foreign.status, 404);
+        assertEquals((await send(handleDeletePage, bob.token, { page_id: first.pageId })).status, 404);
+        assertEquals((await send(handleDeleteNotebook, bob.token, { notebook_id: first.notebookId })).status, 404);
+        assertEquals((await send(handleDeleteChapter, bob.token, { chapter_id: chapterId })).status, 404);
+        assertEquals(await listed("photos", `${alice.id}/${first.pageId}`), 1);
+
+        const moved = await send(handleMovePage, alice.token, { page_id: first.pageId, notebook_id: first.notebookId, chapter_id: chapterId });
+        assertEquals(await body(moved), { moved: true });
+        assertEquals((await pageRow(first.pageId)).chapter_id, chapterId);
+        const wrongChapter = await send(handleMovePage, alice.token, { page_id: second.pageId, notebook_id: first.notebookId, chapter_id: crypto.randomUUID() });
+        assertEquals(wrongChapter.status, 404);
+
+        assertEquals((await send(handleDeleteChapter, alice.token, { chapter_id: chapterId })).status, 200);
+        assertEquals((await pageRow(first.pageId)).chapter_id, null);
+        assertEquals(await listed("photos", `${alice.id}/${first.pageId}`), 1);
+
+        assertEquals(await body(await send(handleDeletePage, alice.token, { page_id: first.pageId })), { deleted: true });
+        assertEquals(await listed("photos", `${alice.id}/${first.pageId}`), 0);
+        assertEquals(await listed("alto", `${alice.id}/${first.pageId}`), 0);
+        assertEquals((await admin.from("pages").select("id").eq("id", first.pageId)).data, []);
+        assertEquals((await admin.from("page_charges").select("*").eq("user_id", alice.id)).error, null);
+
+        assertEquals(await body(await send(handleDeleteNotebook, alice.token, { notebook_id: first.notebookId })), { deleted: true });
+        assertEquals(await listed("photos", `${alice.id}/${second.pageId}`), 0);
+        assertEquals(await listed("alto", `${alice.id}/${second.pageId}`), 0);
+        assertEquals((await admin.from("notebooks").select("id").eq("id", first.notebookId)).data, []);
+        assertEquals((await admin.from("pages").select("id").eq("id", second.pageId)).data, []);
+        assertEquals((await send(handleDeleteNotebook, alice.token, { notebook_id: first.notebookId })).status, 404);
       });
 
       await t.step("the logs hold neither the text nor the upload token", () => {

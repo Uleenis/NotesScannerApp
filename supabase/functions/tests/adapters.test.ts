@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createAccountStore, createAuth, createCallerStore, createPageTypeStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -571,4 +571,102 @@ Deno.test("the ALTO file of the page is removed from the alto bucket by its path
   assertEquals(calls[0].method, "DELETE");
   assertEquals(calls[0].url.pathname, "/storage/v1/object/alto");
   assertEquals(calls[0].body, { prefixes: [path] });
+});
+
+const NOTEBOOK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+Deno.test("the four library functions call their SQL function with the ids and the owner given, as the service [2][3][4][5]", async () => {
+  const calls: [string, () => Promise<unknown>, unknown][] = [];
+  const { fetch, calls: sent } = stub(() => [{ outcome: "deleted", page_ids: [] }]);
+  const store = createLibraryStore(KEYS, fetch);
+  calls.push(["delete_page", () => store.deletePage(ALICE, PAGE_ID), { p_page_id: PAGE_ID, p_user_id: ALICE }]);
+  calls.push(["delete_chapter", () => store.deleteChapter(ALICE, PAGE_ID), { p_chapter_id: PAGE_ID, p_user_id: ALICE }]);
+  calls.push(["delete_notebook", () => store.deleteNotebook(BOB, NOTEBOOK_ID).then((result) => result.outcome), { p_notebook_id: NOTEBOOK_ID, p_user_id: BOB }]);
+  calls.push(["move_page", () => store.movePage(ALICE, PAGE_ID, NOTEBOOK_ID, null), { p_page_id: PAGE_ID, p_user_id: ALICE, p_notebook_id: NOTEBOOK_ID, p_chapter_id: null }]);
+  for (const [name, run, body] of calls) {
+    assertEquals(await run(), "deleted", name);
+    const call = sent[sent.length - 1];
+    assertEquals(call.url.pathname, `/rest/v1/rpc/${name}`);
+    assertEquals(call.body, body);
+    assertEquals(call.headers.get("apikey"), "secret-key");
+  }
+});
+
+Deno.test("every outcome of the library functions is read back as it came [5][6]", async () => {
+  for (const outcome of ["deleted", "moved", "unchanged", "page_not_found", "chapter_not_found", "notebook_not_found", "page_processing"] as const) {
+    const { fetch } = stub(() => [{ outcome }]);
+    assertEquals(await createLibraryStore(KEYS, fetch).movePage(ALICE, PAGE_ID, NOTEBOOK_ID, null), outcome);
+  }
+});
+
+Deno.test("an unknown outcome, an empty answer or a failed call of a library function is an error, never a pass", async () => {
+  for (const answer of [[{ outcome: "something_new" }], [], { outcome: 3 }, [{}]]) {
+    const { fetch } = stub(() => answer);
+    assertEquals(await storeError(() => createLibraryStore(KEYS, fetch).deletePage(ALICE, PAGE_ID)), true, JSON.stringify(answer));
+  }
+  const broken = createLibraryStore(KEYS, answer(500, { message: "boom" }));
+  assertEquals(await storeError(() => broken.deleteNotebook(ALICE, NOTEBOOK_ID)), true);
+  assertEquals(await storeError(() => broken.deleteChapter(ALICE, NOTEBOOK_ID)), true);
+  assertEquals(await storeError(() => broken.movePage(ALICE, PAGE_ID, NOTEBOOK_ID, null)), true);
+});
+
+Deno.test("the deletion of a notebook reads back the ids of the pages it took, and nothing else is a pass [2]", async () => {
+  const ids = [PAGE_ID, NOTEBOOK_ID];
+  const { fetch } = stub(() => [{ outcome: "deleted", page_ids: ids }]);
+  assertEquals(await createLibraryStore(KEYS, fetch).deleteNotebook(ALICE, NOTEBOOK_ID), { outcome: "deleted", pageIds: ids });
+  for (const page_ids of [undefined, null, "x", [3], ["not-a-uuid"]]) {
+    const { fetch: bad } = stub(() => [{ outcome: "deleted", page_ids }]);
+    assertEquals(await storeError(() => createLibraryStore(KEYS, bad).deleteNotebook(ALICE, NOTEBOOK_ID)), true, JSON.stringify(page_ids));
+  }
+});
+
+Deno.test("the status of a page is read by its id and its owner, and a page that is not there is null [6]", async () => {
+  const { fetch, calls } = stub(() => ({ status: "processing" }));
+  assertEquals(await createLibraryStore(KEYS, fetch).pageStatus(ALICE, PAGE_ID), "processing");
+  assertEquals(calls[0].url.pathname, "/rest/v1/pages");
+  assertEquals(calls[0].url.searchParams.get("id"), `eq.${PAGE_ID}`);
+  assertEquals(calls[0].url.searchParams.get("user_id"), `eq.${ALICE}`);
+  assertEquals(await createLibraryStore(KEYS, stub(() => null).fetch).pageStatus(ALICE, PAGE_ID), null);
+  assertEquals(await storeError(() => createLibraryStore(KEYS, stub(() => ({ status: "weird" })).fetch).pageStatus(ALICE, PAGE_ID)), true);
+});
+
+Deno.test("the pages of a notebook are listed by notebook and owner, 1000 at a time, and a notebook that is not there is null [2][6]", async () => {
+  const ids = Array.from({ length: 1003 }, (_, index) => ({ id: `${String(index).padStart(8, "0")}-0000-4000-8000-000000000000`, status: "read" }));
+  const { fetch, calls } = stub((call) => {
+    if (call.url.pathname === "/rest/v1/notebooks") return { id: NOTEBOOK_ID };
+    const offset = Number(call.url.searchParams.get("offset") ?? "0");
+    return ids.slice(offset, offset + 1000);
+  });
+  const pages = await createLibraryStore(KEYS, fetch).notebookPages(ALICE, NOTEBOOK_ID);
+  assertEquals(pages?.length, 1003);
+  const listings = calls.filter((call) => call.url.pathname === "/rest/v1/pages");
+  assertEquals(listings.length, 2);
+  for (const call of listings) {
+    assertEquals(call.url.searchParams.get("notebook_id"), `eq.${NOTEBOOK_ID}`);
+    assertEquals(call.url.searchParams.get("user_id"), `eq.${ALICE}`);
+  }
+  const none = stub(() => null);
+  assertEquals(await createLibraryStore(KEYS, none.fetch).notebookPages(ALICE, NOTEBOOK_ID), null);
+  assertEquals(none.calls.filter((call) => call.url.pathname === "/rest/v1/pages"), []);
+});
+
+Deno.test("erasing the files of a page lists its folder alone and removes what is under it, in the bucket given [4][9]", async () => {
+  for (const bucket of ["photos", "alto"] as const) {
+    const other = `${ALICE}/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab/original.jpg`;
+    const storage = storageWith([`${ALICE}/${PAGE_ID}/original.jpg`, `${ALICE}/${PAGE_ID}/a-1.xml`, other, `${BOB}/${PAGE_ID}/original.jpg`], {}, bucket);
+    await createLibraryStore(KEYS, storage.fetch).removePageFiles(bucket, ALICE, PAGE_ID);
+    assertEquals([...storage.files].sort(), [other, `${BOB}/${PAGE_ID}/original.jpg`].sort());
+    assertEquals(storage.lists.every((list) => list.prefix === `${ALICE}/${PAGE_ID}`), true);
+    assertEquals(storage.headers[0].get("apikey"), "secret-key");
+  }
+});
+
+Deno.test("a page with no file removes nothing, and a file still there afterwards or a failed listing is an error [4]", async () => {
+  const empty = storageWith([`${ALICE}/other/original.jpg`]);
+  await createLibraryStore(KEYS, empty.fetch).removePageFiles("photos", ALICE, PAGE_ID);
+  assertEquals(empty.removals, []);
+  const stuck = storageWith([`${ALICE}/${PAGE_ID}/original.jpg`], { keepFiles: true });
+  assertEquals(await storeError(() => createLibraryStore(KEYS, stuck.fetch).removePageFiles("photos", ALICE, PAGE_ID)), true);
+  const unlisted = storageWith([`${ALICE}/${PAGE_ID}/original.jpg`], { failList: true });
+  assertEquals(await storeError(() => createLibraryStore(KEYS, unlisted.fetch).removePageFiles("photos", ALICE, PAGE_ID)), true);
 });

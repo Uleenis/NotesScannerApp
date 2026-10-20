@@ -143,6 +143,33 @@ export type SetPageTypeDeps = {
   log: Logger;
 };
 
+export type LibraryOutcome =
+  | "deleted"
+  | "moved"
+  | "unchanged"
+  | "page_not_found"
+  | "chapter_not_found"
+  | "notebook_not_found"
+  | "page_processing";
+
+export type NotebookPage = { id: string; status: PageStatus };
+
+export type LibraryStore = {
+  pageStatus: (userId: string, pageId: string) => Promise<PageStatus | null>;
+  notebookPages: (userId: string, notebookId: string) => Promise<NotebookPage[] | null>;
+  removePageFiles: (bucket: "photos" | "alto", userId: string, pageId: string) => Promise<void>;
+  deletePage: (userId: string, pageId: string) => Promise<LibraryOutcome>;
+  deleteChapter: (userId: string, chapterId: string) => Promise<LibraryOutcome>;
+  deleteNotebook: (userId: string, notebookId: string) => Promise<{ outcome: LibraryOutcome; pageIds: string[] }>;
+  movePage: (userId: string, pageId: string, notebookId: string, chapterId: string | null) => Promise<LibraryOutcome>;
+};
+
+export type LibraryDeps = {
+  auth: Auth;
+  library: LibraryStore;
+  log: Logger;
+};
+
 export type ReadPageDeps = ReadingDeps & {
   auth: Auth;
   forCaller: (token: string) => CallerStore;

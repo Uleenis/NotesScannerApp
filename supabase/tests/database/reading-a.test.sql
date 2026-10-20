@@ -1,6 +1,6 @@
 begin;
 
-select plan(39);
+select plan(41);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -157,6 +157,17 @@ select is(
   pg_temp.record('a3000000-0000-0000-0000-000000000004', null),
   '(f,page_not_found)',
   'a missing owner is refused'
+);
+
+insert into public.pages (id, user_id, notebook_id, status, page_type) values
+  ('a3000000-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'text');
+
+select is((select outcome from public.delete_page('a3000000-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')), 'deleted', 'a page is deleted while its A is still running');
+
+select is(
+  pg_temp.record('a3000000-0000-0000-0000-000000000006', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+  '(f,page_not_found)',
+  'the A that ends after the deletion of its page is refused, and the service erases its ALTO file'
 );
 
 reset role;
