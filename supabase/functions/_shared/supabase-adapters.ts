@@ -1,5 +1,6 @@
 import { createClient, isAuthRetryableFetchError } from "npm:@supabase/supabase-js@2";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { UUID } from "./http.ts";
 import type {
   AccountStore,
   Allowance,
@@ -386,6 +387,7 @@ export function createLibraryStore(keys: Keys, fetchImpl?: typeof fetch): Librar
     removePageFiles: async (bucket, userId, pageId) => {
       const folder = `${userId}/${pageId}`;
       const files = await listFiles(client, bucket, folder);
+      if (files.length === 0) return;
       for (let start = 0; start < files.length; start += REMOVE_BATCH_SIZE) {
         const { error } = await client.storage.from(bucket).remove(files.slice(start, start + REMOVE_BATCH_SIZE));
         if (error) throw new StoreError("removePageFiles");
@@ -405,7 +407,10 @@ export function createLibraryStore(keys: Keys, fetchImpl?: typeof fetch): Librar
     deleteNotebook: async (userId, notebookId) => {
       const { data, error } = await client.rpc("delete_notebook", { p_notebook_id: notebookId, p_user_id: userId });
       if (error) throw new StoreError("deleteNotebook");
-      return outcomeOf(data, "deleteNotebook");
+      const outcome = outcomeOf(data, "deleteNotebook");
+      const ids = first(data)?.page_ids;
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !UUID.test(id))) throw new StoreError("deleteNotebook");
+      return { outcome, pageIds: ids as string[] };
     },
     movePage: async (userId, pageId, notebookId, chapterId) => {
       const { data, error } = await client.rpc("move_page", { p_page_id: pageId, p_user_id: userId, p_notebook_id: notebookId, p_chapter_id: chapterId });

@@ -12,7 +12,7 @@ const REFUSALS: Record<Exclude<LibraryOutcome, "deleted" | "moved" | "unchanged"
   page_processing: { status: 409, code: "page_processing" },
 };
 
-const FOLDER_BATCH_SIZE = 8;
+const FOLDER_BATCH_SIZE = 16;
 
 export async function idsFrom(request: Request, fields: readonly Field[]): Promise<Record<string, string | null> | null> {
   let body: unknown;

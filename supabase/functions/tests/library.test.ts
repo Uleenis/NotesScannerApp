@@ -170,12 +170,12 @@ Deno.test("delete-page refuses a page being read before it erases anything [6]",
   assertEquals(world.calls.filter((name) => name.startsWith("removePageFiles") || name === "deletePage"), []);
 });
 
-Deno.test("delete-page erases the files before the rows, then the ALTO files once more [4][9]", async () => {
+Deno.test("delete-page erases the files before the rows, then the photo and the ALTO files once more [4][9]", async () => {
   const world = library();
   await deletePage(world, TOKEN_ALICE, { page_id: PAGE_ID });
   assertEquals(
     world.calls.filter((name) => name.startsWith("removePageFiles") || name === "deletePage"),
-    ["removePageFiles:photos", "removePageFiles:alto", "deletePage", "removePageFiles:alto"],
+    ["removePageFiles:photos", "removePageFiles:alto", "deletePage", "removePageFiles:photos", "removePageFiles:alto"],
   );
 });
 
@@ -187,6 +187,15 @@ Deno.test("delete-page erases an ALTO file that a reading A uploaded while the p
   const response = await deletePage(world, TOKEN_ALICE, { page_id: PAGE_ID });
   assertEquals(response.status, 200);
   assertEquals(world.filesOf("alto", ALICE).filter((path) => path.includes(PAGE_ID)), []);
+});
+
+Deno.test("delete-page erases a photo that landed while the page was being deleted [4]", async () => {
+  const world = library();
+  world.beforeLibraryCall = () => {
+    world.photos.set(`${ALICE}/${PAGE_ID}/late.jpg`, { bytes: new Uint8Array([1]), mimeType: null, size: 1 });
+  };
+  assertEquals((await deletePage(world, TOKEN_ALICE, { page_id: PAGE_ID })).status, 200);
+  assertEquals(world.filesOf("photos", ALICE).filter((path) => path.includes(PAGE_ID)), []);
 });
 
 Deno.test("delete-page answers 409 when the page started a reading between the check and the deletion, and a second try works once it is over [6]", async () => {
@@ -323,14 +332,40 @@ Deno.test("delete-notebook answers 409 when a page started a reading between the
   assertEquals(world.pages.has(LOOSE_PAGE), true);
 });
 
-Deno.test("delete-notebook erases the files before the rows, then the ALTO files once more [2][9]", async () => {
+Deno.test("delete-notebook erases the files before the rows, then the photos and the ALTO files once more [2][9]", async () => {
   const world = library();
   await deleteNotebook(world, TOKEN_ALICE, { notebook_id: NOTEBOOK });
   const names = world.calls.filter((name) => name.startsWith("removePageFiles") || name === "deleteNotebook");
   const rows = names.indexOf("deleteNotebook");
   assertEquals(names.slice(0, rows).filter((name) => name === "removePageFiles:photos").length, 2);
   assertEquals(names.slice(0, rows).filter((name) => name === "removePageFiles:alto").length, 2);
-  assertEquals(names.slice(rows + 1), ["removePageFiles:alto", "removePageFiles:alto"]);
+  assertEquals(names.slice(rows + 1).sort(), ["removePageFiles:alto", "removePageFiles:alto", "removePageFiles:photos", "removePageFiles:photos"]);
+});
+
+Deno.test("delete-notebook erases the files of a page that came into the notebook after the list was read [2]", async () => {
+  const world = library();
+  const late = "a4a4a4a4-a4a4-4a4a-8a4a-a4a4a4a4a4a4";
+  world.beforeLibraryCall = () => {
+    world.readyPage(ALICE, late);
+    world.page(late).status = "read";
+    world.place(late, NOTEBOOK);
+    world.addReadingA(ALICE, late);
+  };
+  const response = await deleteNotebook(world, TOKEN_ALICE, { notebook_id: NOTEBOOK });
+  assertEquals(response.status, 200);
+  assertEquals(world.pages.has(late), false);
+  assertEquals(world.filesOf("photos", ALICE).filter((path) => path.includes(late)), []);
+  assertEquals(world.filesOf("alto", ALICE).filter((path) => path.includes(late)), []);
+  assertEquals(world.photos.has(`${ALICE}/${KEPT_PAGE}/original.jpg`), true);
+});
+
+Deno.test("delete-notebook erases a photo that landed while the notebook was being deleted [2]", async () => {
+  const world = library();
+  world.beforeLibraryCall = () => {
+    world.photos.set(`${ALICE}/${LOOSE_PAGE}/late.jpg`, { bytes: new Uint8Array([1]), mimeType: null, size: 1 });
+  };
+  assertEquals((await deleteNotebook(world, TOKEN_ALICE, { notebook_id: NOTEBOOK })).status, 200);
+  assertEquals(world.filesOf("photos", ALICE).filter((path) => path.includes(LOOSE_PAGE)), []);
 });
 
 Deno.test("delete-notebook erases an ALTO file that a reading A uploaded while the notebook was being deleted [9]", async () => {

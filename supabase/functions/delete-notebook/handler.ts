@@ -16,12 +16,13 @@ export async function handleDeleteNotebook(request: Request, deps: LibraryDeps):
     if (pages.some((page) => page.status === "processing")) return refuseOutcome(deps.log, "page_processing");
 
     await removeFolders(deps.library, ["photos", "alto"], userId, pages);
-    const outcome = await deps.library.deleteNotebook(userId, notebookId);
+    const { outcome, pageIds } = await deps.library.deleteNotebook(userId, notebookId);
     if (refusalOutcome(outcome)) return refuseOutcome(deps.log, outcome);
 
     deps.log.event("notebook_deleted");
     try {
-      await removeFolders(deps.library, ["alto"], userId, pages);
+      const taken = [...new Set([...pages.map((page) => page.id), ...pageIds])];
+      await removeFolders(deps.library, ["photos", "alto"], userId, taken.map((id) => ({ id })));
     } catch {
       deps.log.event("files_left");
     }

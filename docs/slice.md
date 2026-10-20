@@ -6,7 +6,7 @@ Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 3.md`, one document, validated by the owner on 17/10/2026, with its four decisions as proposed.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** `t3/delete-move`.
+- **Next branch:** `t3/sweep`.
 - **Decisions from now on:** `../Tranche 3/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded file:** `supabase/config.toml` declares the new functions and their `verify_jwt` (`false` for the sweep, called by `pg_cron` with its secret, like `relaunch-page`). The owner approved it with the slice document. The branch that needs it prepares the change as a patch in `../Tranche 3/`; its PR is then the owner's to merge: its session says so, marks the branch "waiting for the owner" below, and stops. The next session may build the next branch meanwhile, from `main`, if that branch does not need the waiting one.
 - **Local secret of the sweep:** passed like `relaunch-page`'s; the owner adds it to `supabase/functions/.env` and the local Vault following the steps the session writes in "Pour Tim". Until then the tests run with a test secret.
@@ -17,8 +17,8 @@ Paths below are from the repository root.
 
 | # | Branch | Criteria | Level | Session | Merged by | State |
 |---|---|---|---|---|---|---|
-| 1 | `t3/schema` | 1, 5, 7 | sensitive (access rights) | Sonnet, High | Claude | done: PR open, merged by `node scripts/merge-pr.mjs` once CI is green (the CI `reading` job needs the aiohttp fix first, see the notes) |
-| 2 | `t3/delete-move` | 2, 3, 4, 6, 9 | sensitive (access rights, files, deletion) | Sonnet, High | Claude, or the owner if it carries `config.toml` | to do |
+| 1 | `t3/schema` | 1, 5, 7 | sensitive (access rights) | Sonnet, High | Claude | done: merged (PR 46) |
+| 2 | `t3/delete-move` | 2, 3, 4, 6, 9 | sensitive (access rights, files, deletion) | Sonnet, High | Claude (no `config.toml` change: the default `verify_jwt` is true) | done: PR open, merged by `node scripts/merge-pr.mjs` once CI is green |
 | 3 | `t3/sweep` | 8 | critical (secret) | Opus, High | Claude, or the owner if it carries `config.toml` | to do |
 | 4 | `t3/screens` | 10, 11, 12 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan (naming any branch still waiting for the owner), the status of `AGENTS.md` and `../Vérifications 1.md` (slice 3 is the third) |
 
@@ -44,3 +44,10 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - The client no longer updates `pages.chapter_id`: a move is `move_page` only.
 - `library-race.sh` is not yet in `db:test:concurrency`: the patch for `package.json` is in `../Tranche 3/` and waits for the owner.
 - The CI job `reading` fails on `main` since a new advisory on `aiohttp` 3.14.3 (fixed in 3.14.4): a separate branch bumps it before this PR can merge.
+
+## Notes carried from slice 3, branch 2
+
+- `t3/delete-move` adds `delete-page`, `delete-notebook`, `delete-chapter` and `move-page` (no `config.toml` section: the default `verify_jwt` is true and each handler verifies the token). The optional patch with the five explicit sections (those four and `set-page-type`) is `../Tranche 3/t3-delete-move config.toml.patch`; it can ride with the `config.toml` patch of `t3/sweep`.
+- Migration `20261021120000_t3_delete_notebook_pages.sql`: `delete_notebook` now answers `(outcome, page_ids)`. Production migrations stay the owner's (this one and `20261020120000_t3_schema.sql`).
+- A photo uploaded to a signed URL after its page is deleted stays orphaned (`../Tranche 3/Décisions.md`); the sweep of `t3/sweep` is limited to `alto`.
+- Not measured: the time limit of an Edge Function against a notebook of several hundred pages.

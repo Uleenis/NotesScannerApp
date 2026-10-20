@@ -160,7 +160,7 @@ export type LibraryStore = {
   removePageFiles: (bucket: "photos" | "alto", userId: string, pageId: string) => Promise<void>;
   deletePage: (userId: string, pageId: string) => Promise<LibraryOutcome>;
   deleteChapter: (userId: string, chapterId: string) => Promise<LibraryOutcome>;
-  deleteNotebook: (userId: string, notebookId: string) => Promise<LibraryOutcome>;
+  deleteNotebook: (userId: string, notebookId: string) => Promise<{ outcome: LibraryOutcome; pageIds: string[] }>;
   movePage: (userId: string, pageId: string, notebookId: string, chapterId: string | null) => Promise<LibraryOutcome>;
 };
 

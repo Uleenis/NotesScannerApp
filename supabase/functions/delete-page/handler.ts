@@ -21,7 +21,7 @@ export async function handleDeletePage(request: Request, deps: LibraryDeps): Pro
 
     deps.log.event("page_deleted", { pageId });
     try {
-      await removeFolders(deps.library, ["alto"], userId, [{ id: pageId }]);
+      await removeFolders(deps.library, ["photos", "alto"], userId, [{ id: pageId }]);
     } catch {
       deps.log.event("files_left", { pageId });
     }

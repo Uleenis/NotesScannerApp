@@ -348,9 +348,9 @@ select is(
 );
 
 select is(
-  (select outcome from public.delete_notebook('12121212-1212-1212-1212-121212121212', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')),
-  'page_processing',
-  'a notebook with a page being read is not deleted'
+  (select row(outcome, page_ids)::text from public.delete_notebook('12121212-1212-1212-1212-121212121212', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')),
+  '(page_processing,{})',
+  'a notebook with a page being read is not deleted and answers no page'
 );
 
 select is(
@@ -360,9 +360,9 @@ select is(
 );
 
 select is(
-  (select outcome from public.delete_notebook('13131313-1313-1313-1313-131313131313', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')),
-  'deleted',
-  'a notebook is deleted'
+  (select row(outcome, page_ids)::text from public.delete_notebook('13131313-1313-1313-1313-131313131313', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')),
+  '(deleted,"{a3000000-0000-0000-0000-000000000001,a3000000-0000-0000-0000-000000000002}")',
+  'a notebook is deleted and answers the pages it took'
 );
 
 select is(

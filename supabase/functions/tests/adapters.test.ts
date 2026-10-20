@@ -577,11 +577,11 @@ const NOTEBOOK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 Deno.test("the four library functions call their SQL function with the ids and the owner given, as the service [2][3][4][5]", async () => {
   const calls: [string, () => Promise<unknown>, unknown][] = [];
-  const { fetch, calls: sent } = stub(() => [{ outcome: "deleted" }]);
+  const { fetch, calls: sent } = stub(() => [{ outcome: "deleted", page_ids: [] }]);
   const store = createLibraryStore(KEYS, fetch);
   calls.push(["delete_page", () => store.deletePage(ALICE, PAGE_ID), { p_page_id: PAGE_ID, p_user_id: ALICE }]);
   calls.push(["delete_chapter", () => store.deleteChapter(ALICE, PAGE_ID), { p_chapter_id: PAGE_ID, p_user_id: ALICE }]);
-  calls.push(["delete_notebook", () => store.deleteNotebook(BOB, NOTEBOOK_ID), { p_notebook_id: NOTEBOOK_ID, p_user_id: BOB }]);
+  calls.push(["delete_notebook", () => store.deleteNotebook(BOB, NOTEBOOK_ID).then((result) => result.outcome), { p_notebook_id: NOTEBOOK_ID, p_user_id: BOB }]);
   calls.push(["move_page", () => store.movePage(ALICE, PAGE_ID, NOTEBOOK_ID, null), { p_page_id: PAGE_ID, p_user_id: ALICE, p_notebook_id: NOTEBOOK_ID, p_chapter_id: null }]);
   for (const [name, run, body] of calls) {
     assertEquals(await run(), "deleted", name);
@@ -608,6 +608,16 @@ Deno.test("an unknown outcome, an empty answer or a failed call of a library fun
   assertEquals(await storeError(() => broken.deleteNotebook(ALICE, NOTEBOOK_ID)), true);
   assertEquals(await storeError(() => broken.deleteChapter(ALICE, NOTEBOOK_ID)), true);
   assertEquals(await storeError(() => broken.movePage(ALICE, PAGE_ID, NOTEBOOK_ID, null)), true);
+});
+
+Deno.test("the deletion of a notebook reads back the ids of the pages it took, and nothing else is a pass [2]", async () => {
+  const ids = [PAGE_ID, NOTEBOOK_ID];
+  const { fetch } = stub(() => [{ outcome: "deleted", page_ids: ids }]);
+  assertEquals(await createLibraryStore(KEYS, fetch).deleteNotebook(ALICE, NOTEBOOK_ID), { outcome: "deleted", pageIds: ids });
+  for (const page_ids of [undefined, null, "x", [3], ["not-a-uuid"]]) {
+    const { fetch: bad } = stub(() => [{ outcome: "deleted", page_ids }]);
+    assertEquals(await storeError(() => createLibraryStore(KEYS, bad).deleteNotebook(ALICE, NOTEBOOK_ID)), true, JSON.stringify(page_ids));
+  }
 });
 
 Deno.test("the status of a page is read by its id and its owner, and a page that is not there is null [6]", async () => {

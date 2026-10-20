@@ -612,13 +612,13 @@ export class World {
         await this.tick("deleteNotebook");
         this.beforeLibraryCall?.();
         const notebook = this.notebooks.get(notebookId);
-        if (!notebook || notebook.userId !== userId) return "notebook_not_found";
+        if (!notebook || notebook.userId !== userId) return { outcome: "notebook_not_found", pageIds: [] };
         const inside = [...this.pages.values()].filter((page) => page.notebookId === notebookId);
-        if (inside.some((page) => page.status === "processing")) return "page_processing";
+        if (inside.some((page) => page.status === "processing")) return { outcome: "page_processing", pageIds: [] };
         for (const page of inside) this.erasePage(page.id);
         for (const [id, chapter] of [...this.chapters]) if (chapter.notebookId === notebookId) this.chapters.delete(id);
         this.notebooks.delete(notebookId);
-        return "deleted";
+        return { outcome: "deleted", pageIds: inside.map((page) => page.id).sort() };
       },
       movePage: async (userId, pageId, notebookId, chapterId) => {
         await this.tick("movePage");
