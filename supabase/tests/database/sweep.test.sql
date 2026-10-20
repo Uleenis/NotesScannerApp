@@ -1,6 +1,6 @@
 begin;
 
-select plan(27);
+select plan(30);
 
 create function pg_temp.login(uid uuid) returns void
 language sql as $$
@@ -169,7 +169,21 @@ select throws_ok(
 );
 
 select vault.create_secret(repeat('sweep-', 7), 'sweep_secret');
-select vault.create_secret('http://kong.test:8000/functions/v1/sweep-alto', 'sweep_url');
+select vault.create_secret('http://example.com/functions/v1/sweep-alto', 'sweep_url');
+
+select throws_ok($$ select private.sweep_alto() $$, 'P0001', 'sweep address not allowed', 'the secret is never sent in clear to an address outside the local stack');
+
+select vault.update_secret((select id from vault.decrypted_secrets where name = 'sweep_url'), 'https://ref.supabase.co/functions/v1/relaunch-page');
+
+select throws_ok($$ select private.sweep_alto() $$, 'P0001', 'sweep address not allowed', 'the secret is never sent to another function');
+
+select vault.update_secret((select id from vault.decrypted_secrets where name = 'sweep_url'), 'https://ref.supabase.co/functions/v1/sweep-alto');
+
+select lives_ok($$ select private.sweep_alto() $$, 'the address of a hosted project is allowed');
+
+delete from net.http_request_queue where id not in (select id from queue_before);
+
+select vault.update_secret((select id from vault.decrypted_secrets where name = 'sweep_url'), 'http://kong:8000/functions/v1/sweep-alto');
 
 select private.sweep_alto();
 
@@ -181,7 +195,7 @@ select is(
 
 select is(
   (select q.url from net.http_request_queue q where q.id not in (select id from queue_before)),
-  'http://kong.test:8000/functions/v1/sweep-alto',
+  'http://kong:8000/functions/v1/sweep-alto',
   'the request goes to the address kept in the vault'
 );
 

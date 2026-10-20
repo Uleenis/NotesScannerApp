@@ -39,6 +39,9 @@ begin
   if v_secret is null or v_url is null then
     raise exception 'sweep settings missing';
   end if;
+  if v_url !~ '^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://(localhost|127\.0\.0\.1|host\.docker\.internal|[A-Za-z0-9_-]+)(:[0-9]+)?)/functions/v1/sweep-alto$' then
+    raise exception 'sweep address not allowed';
+  end if;
 
   return net.http_post(
     url := v_url,

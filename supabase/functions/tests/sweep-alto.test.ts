@@ -138,6 +138,25 @@ Deno.test("sweep-alto answers 500 when the storage fails, and logs no path", asy
   }
 });
 
+Deno.test("sweep-alto that fails after a first batch still logs the files it erased", async () => {
+  const lines: string[] = [];
+  const bucket = new Bucket(Array.from({ length: 700 }, (_, index) => altoPath(ALICE, index)));
+  let calls = 0;
+  const orphans = bucket.orphans.bind(bucket);
+  bucket.orphans = (limit) => (++calls === 2 ? Promise.reject(new StoreError("altoOrphans")) : orphans(limit));
+  const response = await handleSweepAlto(sweep(SWEEP_SECRET), deps(bucket, lines));
+  assertEquals(response.status, 500);
+  const done = lines.map((line) => JSON.parse(line)).find((record) => record.event === "alto_swept");
+  assertEquals(done?.files, 500);
+  assertEquals(done?.code, "interrupted");
+});
+
+Deno.test("sweep-alto logs no sweep when it refuses the call", async () => {
+  const lines: string[] = [];
+  await handleSweepAlto(sweep(null), deps(new Bucket([altoPath(ALICE, 1)]), lines));
+  assert(lines.every((line) => JSON.parse(line).event !== "alto_swept"));
+});
+
 Deno.test("sweep-alto logs how many files it erased and how long it took, never a path or an account", async () => {
   const lines: string[] = [];
   const bucket = new Bucket([altoPath(ALICE, 1), altoPath(BOB, 2)]);
