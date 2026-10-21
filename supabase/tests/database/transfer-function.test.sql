@@ -1,6 +1,6 @@
 begin;
 
-select plan(39);
+select plan(41);
 
 create function pg_temp.make_user(uid uuid, anon boolean default false) returns void
 language sql as $$
@@ -75,17 +75,23 @@ select p.user_id, p.id, 'original', p.user_id::text || '/' || p.id::text || '/or
 from public.pages p where p.id::text like 'a3000000%';
 
 insert into public.readings (user_id, page_id, label, raw_text, model, model_version, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms) values
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', 'B1', 'text', 'model', 'version', 'V0', 0, 1, 1, 1);
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', 'B1', 'text more', 'model', 'version', 'V0', 0, 1, 1, 1);
 
 insert into public.page_texts (user_id, page_id, text, pipeline_version) values
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', 'text', '1');
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', 'text more', '1');
 
 select public.record_reading_a(
   'a3000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'text', 'medium', 'version', 1,
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/a3000000-0000-0000-0000-000000000001/a.xml', 'en',
-  '[{"token_index": 0, "line_index": 0, "text": "text", "reading_a": "text", "reading_b1": "text", "anchor_kind": "word", "anchor": [0, 0, 10, 10]},
-    {"token_index": 1, "line_index": 0, "text": "more", "reading_a": null, "reading_b1": "more", "anchor_kind": null, "anchor": null}]'::jsonb
+  '[{"token_index": 0, "line_index": 0, "text": "text", "reading_a": "text", "reading_b1": "text", "anchor_kind": "word", "anchor": [0, 0, 10, 10], "b1_start": 0, "b1_end": 4},
+    {"token_index": 1, "line_index": 0, "text": "more", "reading_a": null, "reading_b1": "more", "anchor_kind": null, "anchor": null, "b1_start": 5, "b1_end": 9}]'::jsonb
 );
+
+insert into public.corrections (user_id, page_id, token_index, corrected_text, chosen_from) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', 1, 'most', 'keyboard');
+
+insert into public.page_alerts (user_id, page_id, kind) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', 'missing_line');
 
 insert into public.page_charges (user_id, page_id, charged_at) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', now()),
@@ -153,7 +159,7 @@ select is(has_function_privilege('service_role', 'public.transfer_account_rows(u
 
 select ok(pg_temp.user_tables() >= 7, 'the check for leftover rows looks at every table that has a user_id');
 
-select is(pg_temp.leftovers('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 18::bigint, 'the giving account holds 2 notebooks, 1 chapter, 3 pages, 3 images, 2 readings, 1 text, 4 charges and 2 positions before the transfer');
+select is(pg_temp.leftovers('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 20::bigint, 'the giving account holds 2 notebooks, 1 chapter, 3 pages, 3 images, 2 readings, 1 text, 4 charges, 2 positions, 1 correction and 1 alert before the transfer');
 
 create temp table bystander_before as select pg_temp.rows_of('cccccccc-cccc-cccc-cccc-cccccccccccc') as n;
 
@@ -232,6 +238,19 @@ select is(
   (select array_agg(text order by token_index) from public.page_tokens where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001'),
   array['text', 'more'],
   'the positions moved with their page'
+);
+
+select is(
+  (select count(*) from public.corrections where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001')
+    + (select count(*) from public.page_alerts where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001'),
+  2::bigint,
+  'the correction and the alert moved with their page'
+);
+
+select is(
+  (select text from public.page_texts where page_id = 'a3000000-0000-0000-0000-000000000001'),
+  'text most',
+  'the shown text kept the correction'
 );
 
 select is(

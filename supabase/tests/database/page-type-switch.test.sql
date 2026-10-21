@@ -1,6 +1,6 @@
 begin;
 
-select plan(37);
+select plan(39);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -61,6 +61,13 @@ insert into public.page_tokens (user_id, page_id, token_index, line_index, text,
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 0, 0, 'Bonjour', 'Bonjonr', 'Bonjour'),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 1, 0, 'Paul', null, 'Paul');
 
+insert into public.page_texts (user_id, page_id, text, pipeline_version) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', E'Bonsoir Paul\nfin', 'b1-raw');
+
+insert into public.page_alerts (user_id, page_id, kind) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 'missing_line'),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 'math_incomplete');
+
 select is(
   (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname in ('set_page_math', 'set_page_text') and p.prosecdef),
   2::bigint,
@@ -105,6 +112,8 @@ select is((select count(*) from public.readings where page_id = 'a4000000-0000-0
 select is((select count(*) from public.page_tokens where page_id = 'a4000000-0000-0000-0000-000000000001'), 0::bigint, 'the switch to math erases the positions');
 select is((select row(page_type, language)::text from public.pages where id = 'a4000000-0000-0000-0000-000000000001'), '(math,)', 'the page becomes math and loses its language');
 select is((select count(*) from public.readings where page_id = 'a4000000-0000-0000-0000-000000000001' and label = 'B1'), 1::bigint, 'B1 stays');
+select is((select text from public.page_texts where page_id = 'a4000000-0000-0000-0000-000000000001'), E'Bonjour Paul\nfin', 'the switch to math gives the text of B1 back, as the corrections went with the positions');
+select is((select array_agg(kind) from public.page_alerts where page_id = 'a4000000-0000-0000-0000-000000000001'), array['math_incomplete'], 'the switch to math erases the alert of a missing line, which came from A, and keeps the others');
 
 select pg_temp.as_server();
 
