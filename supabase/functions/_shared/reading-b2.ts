@@ -2,6 +2,8 @@ import { attemptReading, readingInput } from "./gemini-pass.ts";
 import { errorName } from "./log.ts";
 import type { ReadingDeps } from "./ports.ts";
 
+export const MAX_ARBITRATED_TEXT = 200_000;
+
 export type SecondPass = {
   keep: (userId: string) => Promise<string | null>;
   cancel: () => void;
@@ -24,7 +26,7 @@ export function startSecondPass(deps: ReadingDeps, pageId: string, image: Uint8A
           }
           await deps.server.insertReading(userId, pageId, readingInput("B2", done));
           deps.log.event("b2_done", { pageId, durationMs: done.durationMs });
-          return done.reading.text;
+          return done.reading.text.length > MAX_ARBITRATED_TEXT ? null : done.reading.text;
         } catch (error) {
           deps.log.event("unexpected_error", { errorName: errorName(error) });
           return null;

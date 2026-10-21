@@ -1,5 +1,6 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import { A_BUDGET_MS } from "../_shared/reading-a.ts";
+import { MAX_ARBITRATED_TEXT } from "../_shared/reading-b2.ts";
 import { ARBITRATE_TIMEOUT_MS } from "../_shared/reading-service.ts";
 import { handleReadPage } from "../read-page/handler.ts";
 import { handleRelaunchPage } from "../relaunch-page/handler.ts";
@@ -177,6 +178,17 @@ Deno.test("/arbitrate receives B2 when it exists, B1 and A as before [1]", async
     answer: fakeAnswer(PAGE_ID),
     durationMs: 0,
   }]);
+});
+
+Deno.test("a B2 above what /arbitrate accepts is written but not sent [2]", async () => {
+  const fresh = withService();
+  fresh.readyPage();
+  fresh.pushSecond({ ...B2, text: "x".repeat(MAX_ARBITRATED_TEXT + 1) });
+  await call(fresh);
+  await fresh.settle();
+  assertEquals(stored(fresh, "B2").length, 1);
+  assertEquals(fresh.arbitrations.length, 1);
+  assertEquals(fresh.arbitrations[0].b2, null);
 });
 
 Deno.test("/arbitrate waits for a B2 that comes after A and takes it [1]", async () => {
