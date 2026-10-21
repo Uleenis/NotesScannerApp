@@ -6,7 +6,7 @@ Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** first merge PR 58 (`t4/schema`) once its five checks run green (re-run them after the owner settles the GitHub billing), with `node scripts/merge-pr.mjs 58`; then `t4/second-pass`.
+- **Next branch:** `t4/rules` (branch 3), after the merge of `t4/second-pass` (PR 58, `t4/schema`, is merged).
 - **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
@@ -17,8 +17,8 @@ Paths below are from the repository root.
 
 | # | Branch | Criteria | Level | Session | Merged by | State |
 |---|---|---|---|---|---|---|
-| 1 | `t4/schema` | 4, 5 | sensitive (access rights) | Sonnet, High | Claude | built, PR 58 open and not merged: GitHub Actions refuses to start (billing), see "Pour Tim" |
-| 2 | `t4/second-pass` | 1, 2 | sensitive (model call) | Sonnet, High | Claude | to do |
+| 1 | `t4/schema` | 4, 5 | sensitive (access rights) | Sonnet, High | Claude | done, PR 58 merged |
+| 2 | `t4/second-pass` | 1, 2 | sensitive (model call) | Sonnet, High | Claude | done (PR below) |
 | 3 | `t4/rules` | 3 | ordinary | Sonnet, High | Claude | to do |
 | 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | to do |
 | 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | to do |
@@ -78,3 +78,10 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - `set_page_math` erases the corrections with the positions: `t4/correction` should ask for a confirmation before the switch when the page has corrections ("Pour Tim" of slice 4). The `math_incomplete` alert is not cleared on math to text: `t4/math-check` decides.
 - `corrections-race.sh` is not in `db:test:concurrency` until the owner applies `../Tranche 4/t4-schema package.json.patch`; run it by hand after a `db reset`.
 - A function that runs many times on a page must force custom plans (`set plan_cache_mode = 'force_custom_plan'`, as `recompute_page_text` does): PostgreSQL switches to a generic plan at the sixth call and the page-sized queries went from 2.5 ms to 145 ms.
+
+## Notes carried from slice 4, branch 2
+
+- `t4/second-pass` adds B2 (`_shared/reading-b2.ts`, `_shared/gemini-pass.ts`): a second Gemini call started with B1 after the claim, never charged, written to `readings` (`label = B2`) in the background once B1 is stored and the page is `text` or `math`; `/arbitrate` takes an optional `b2` (the service keeps it in `Arbitration.b2`, nothing reads it yet). `t4/rules` must read `arbitration.b2`: align it with `b2_content_map`, write `reading_b2`, `b1_start` and `b1_end` in the token objects sent to `record_reading_a`.
+- `set-page-type` (math to text) still calls `/arbitrate` without `b2`: `t4/rules` should have `set_page_text` (or the handler) read the stored B2 (`../Tranche 4/Décisions.md`).
+- The fakes of the Deno tests: `world.pushSecond(...)` queues B2 outcomes (`"hold"` and `releaseSecond` hold one), `world.expireWaits` ends the wait for B2 at once, `world.waits` records it; the calls are `gemini_b2` and `insertReadingB2`.
+- The `app` check failed on `main` after PR 58 (21/10/2026) and on PR 59: the first test of `capture-screen.test.tsx` exceeded the 5 s default on the CI runner, and a slow run cascaded to 129 failures in `page-screen.test.tsx`. Both suites now set `jest.setTimeout(30_000)` (`jest.config` is guarded, so the timeout lives in the two test files).

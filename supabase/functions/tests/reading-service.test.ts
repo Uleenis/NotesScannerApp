@@ -66,7 +66,7 @@ Deno.test("/recognize gets the photo as it is, its page id and the secret, and n
 Deno.test("/arbitrate gets the page, its owner, B1, the answer of /recognize as it came and the duration", async () => {
   const { fetch, seen } = recorder(() => reply(200, JSON.stringify({ page_id: PAGE_ID, outcome: "recorded", tokens: 7 })));
   const answer = answerOf();
-  const result = await service(fetch).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, answer, durationMs: 26_000 }, new AbortController().signal);
+  const result = await service(fetch).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, b2: null, answer, durationMs: 26_000 }, new AbortController().signal);
   assertEquals(result, { ok: true, tokens: 7 });
   assertEquals(seen.length, 1);
   assertEquals(seen[0].method, "POST");
@@ -77,6 +77,16 @@ Deno.test("/arbitrate gets the page, its owner, B1, the answer of /recognize as 
   const body = String(seen[0].body);
   assert(body.includes(answer));
   assertEquals(JSON.parse(body), { page_id: PAGE_ID, user_id: ALICE, b1: B1, duration_ms: 26_000, a: JSON.parse(answer) });
+});
+
+Deno.test("/arbitrate also gets B2 when there is one, and no field for it when there is not", async () => {
+  const { fetch, seen } = recorder(() => reply(200, JSON.stringify({ page_id: PAGE_ID, outcome: "recorded", tokens: 7 })));
+  const answer = answerOf();
+  await service(fetch).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, b2: "second reading", answer, durationMs: 5 }, new AbortController().signal);
+  await service(fetch).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, b2: null, answer, durationMs: 5 }, new AbortController().signal);
+  assertEquals(Object.keys(JSON.parse(String(seen[0].body))).sort(), ["a", "b1", "b2", "duration_ms", "page_id", "user_id"]);
+  assertEquals(JSON.parse(String(seen[0].body)).b2, "second reading");
+  assertEquals(Object.keys(JSON.parse(String(seen[1].body))).sort(), ["a", "b1", "duration_ms", "page_id", "user_id"]);
 });
 
 Deno.test("an answer of /recognize for another page, or that is not a JSON object, is a bad response", async () => {
@@ -107,7 +117,7 @@ Deno.test("a refusal of the service keeps its status and a known code only", asy
   }
   const refused = recorder(() => reply(409, JSON.stringify({ error: "already_read" })));
   assertEquals(
-    await service(refused.fetch).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, answer: answerOf(), durationMs: 1 }, new AbortController().signal),
+    await service(refused.fetch).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, b2: null, answer: answerOf(), durationMs: 1 }, new AbortController().signal),
     { ok: false, failure: { kind: "http_error", status: 409, code: "already_read" } },
   );
 });
@@ -125,7 +135,7 @@ Deno.test("a network failure, a timeout and a cancellation are told apart", asyn
     failure: { kind: "timeout" },
   });
   assertEquals(
-    await service(hanging, { arbitrateTimeoutMs: 10 }).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, answer: answerOf(), durationMs: 1 }, new AbortController().signal),
+    await service(hanging, { arbitrateTimeoutMs: 10 }).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, b2: null, answer: answerOf(), durationMs: 1 }, new AbortController().signal),
     { ok: false, failure: { kind: "timeout" } },
   );
 
@@ -240,7 +250,7 @@ Deno.test("the time left to A shortens a call, never lengthens it", async () => 
   const started = Date.now();
   assertEquals(await service(hanging).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal, 10), { ok: false, failure: { kind: "timeout" } });
   assertEquals(
-    await service(hanging).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, answer: answerOf(), durationMs: 1 }, new AbortController().signal, 10),
+    await service(hanging).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, b2: null, answer: answerOf(), durationMs: 1 }, new AbortController().signal, 10),
     { ok: false, failure: { kind: "timeout" } },
   );
   assert(Date.now() - started < 5_000);

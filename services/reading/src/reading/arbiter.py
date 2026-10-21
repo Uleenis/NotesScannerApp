@@ -24,6 +24,7 @@ class Arbitration:
     b1: str
     reading: Reading
     duration_ms: int
+    b2: str | None = None
 
 
 @dataclass(frozen=True)

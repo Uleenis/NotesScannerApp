@@ -66,7 +66,7 @@ Deno.test("a page of text sends A and B1 to /arbitrate once B1 is written", asyn
   world.release();
   await world.settle();
   assertEquals(world.page().pageType, "text");
-  assertEquals(world.arbitrations, [{ pageId: PAGE_ID, userId: ALICE, b1: DEFAULT_READING.text, answer: fakeAnswer(PAGE_ID), durationMs: world.recognizeDurationMs }]);
+  assertEquals(world.arbitrations, [{ pageId: PAGE_ID, userId: ALICE, b1: DEFAULT_READING.text, b2: DEFAULT_READING.text, answer: fakeAnswer(PAGE_ID), durationMs: world.recognizeDurationMs }]);
   assertEquals(world.pageTexts.get(PAGE_ID)?.text, DEFAULT_READING.text);
 });
 
@@ -157,7 +157,7 @@ Deno.test("a recognition that timed out is not tried again: the service gave up 
   await world.settle();
   assertEquals(world.recognitions.length, 1);
   assertEquals(world.arbitrations, []);
-  assertEquals(world.logs.at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "recognize_failed" } });
+  assertEquals(world.logs.filter((record) => record.event.startsWith("a_")).at(-1), { event: "a_abandoned", fields: { pageId: PAGE_ID, code: "recognize_failed" } });
 });
 
 Deno.test("A keeps within its budget from the send: each call gets the time left", async () => {
@@ -287,8 +287,9 @@ Deno.test("without a configured service the page is read by B1 alone, as in slic
   world.serviceConfigured = false;
   const response = await call(world);
   assertEquals(await readJson(response), { status: "read" });
-  assertEquals(world.backgroundTasks, []);
+  await world.settle();
   assertEquals(world.recognitions, []);
+  assertEquals(world.arbitrations, []);
   assertEquals(world.page().pageType, "text");
   assertEquals(events(world).some((event) => event.startsWith("a_")), false);
 });

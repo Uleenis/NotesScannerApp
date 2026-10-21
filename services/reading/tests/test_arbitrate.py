@@ -107,6 +107,15 @@ def test_a_and_b1_of_a_page_are_arbitrated() -> None:
     )
 
 
+def test_b2_is_handed_over_when_it_came_and_left_empty_when_it_did_not() -> None:
+    arbiter = FakeArbiter()
+    client = client_of(arbiter)
+    assert post(client, body(b2="lantern meadow summit"))[0] == 200
+    assert post(client, body(b2=None))[0] == 200
+    assert post(client, body())[0] == 200
+    assert [received.b2 for received in arbiter.received] == ["lantern meadow summit", None, None]
+
+
 @pytest.mark.parametrize("reason", ["page_not_found", "not_text", "already_read"])
 def test_a_refused_write_answers_its_reason(reason: str) -> None:
     status, answered = post(client_of(FakeArbiter(Outcome(reason, 0))), body())
@@ -167,7 +176,9 @@ def changed_a(change: str) -> dict[str, Any]:
 
 
 INVALID = [
-    pytest.param(body(b2=PROBE), id="b2 beside b1"),
+    pytest.param(body(b2=[PROBE]), id="b2 not text"),
+    pytest.param(body(b2=PROBE * 20_000), id="b2 above the bound"),
+    pytest.param(body(b3=PROBE), id="a third reading"),
     pytest.param(body(page_texts=PROBE), id="any other field"),
     pytest.param({k: v for k, v in body().items() if k != "b1"}, id="no b1"),
     pytest.param({k: v for k, v in body().items() if k != "user_id"}, id="no owner"),

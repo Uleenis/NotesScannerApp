@@ -1,20 +1,19 @@
-import { GEMINI_MODEL, GeminiFailure, THINKING_BUDGET } from "./gemini.ts";
-import type { GeminiReading } from "./gemini.ts";
+import { attemptReading, readingInput } from "./gemini-pass.ts";
+import type { Attempt } from "./gemini-pass.ts";
 import { failed, json, refuse } from "./http.ts";
 import { errorName } from "./log.ts";
 import { pageTypeOf } from "./page-type.ts";
 import type { PageType } from "./page-type.ts";
 import { looksLikeJpeg, MAX_PHOTO_BYTES, PHOTO_MIME_TYPE, photoPath } from "./photo.ts";
 import type { ClaimExpectation, PageReader, PageRow, ReadingDeps } from "./ports.ts";
-import { PROMPT_VERSION } from "./prompt.ts";
 import { startReadingA } from "./reading-a.ts";
 import type { ReadingA } from "./reading-a.ts";
+import { startSecondPass } from "./reading-b2.ts";
+import type { SecondPass } from "./reading-b2.ts";
 import { MANUAL_RELAUNCH_INTERVAL_MS, refusalForCharge, refusalForReading } from "./refusals.ts";
 import type { Refusal } from "./refusals.ts";
 
 export const PIPELINE_VERSION = "b1-raw";
-
-const ATTEMPTS = 2;
 
 const MAX_RELAUNCHES = 3;
 
@@ -23,26 +22,6 @@ const PHOTO_NOT_JPEG: Refusal = { status: 422, code: "photo_not_jpeg" };
 const PHOTO_TOO_LARGE: Refusal = { status: 422, code: "photo_too_large" };
 
 export type Reader = { kind: "owner"; userId: string; pages: PageReader } | { kind: "scheduler"; pages: PageReader };
-
-type Attempt = { reading: GeminiReading; durationMs: number } | null;
-
-async function attemptReading(deps: ReadingDeps, pageId: string, image: Uint8Array): Promise<Attempt> {
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    const started = deps.clock.now();
-    try {
-      const reading = await deps.gemini(image);
-      return { reading, durationMs: deps.clock.now() - started };
-    } catch (error) {
-      deps.log.event("gemini_attempt_failed", {
-        pageId,
-        attempt,
-        kind: error instanceof GeminiFailure ? error.kind : "unknown",
-        status: error instanceof GeminiFailure ? error.status : undefined,
-      });
-    }
-  }
-  return null;
-}
 
 async function queueForRetry(deps: ReadingDeps, userId: string, page: PageRow): Promise<Response> {
   const failedRelaunches = page.retryCount + (page.queueReason === "read_error" ? 1 : 0);
@@ -58,25 +37,14 @@ async function queueForRetry(deps: ReadingDeps, userId: string, page: PageRow): 
 
 async function storeReading(deps: ReadingDeps, userId: string, pageId: string, done: NonNullable<Attempt>, pageType: PageType): Promise<void> {
   const { reading, durationMs } = done;
-  const outputTokens = reading.outputTokens + reading.thoughtsTokens;
-  await deps.server.insertReading(userId, pageId, {
-    label: "B1",
-    rawText: reading.text,
-    model: GEMINI_MODEL,
-    modelVersion: reading.modelVersion ?? GEMINI_MODEL,
-    promptVersion: PROMPT_VERSION,
-    thinkingBudget: THINKING_BUDGET,
-    inputTokens: reading.inputTokens,
-    outputTokens,
-    durationMs,
-  });
+  await deps.server.insertReading(userId, pageId, readingInput("B1", done));
   await deps.server.upsertPageText(userId, pageId, reading.text, PIPELINE_VERSION);
   await deps.server.markRead(userId, pageId, new Date(deps.clock.now()).toISOString(), pageType);
   deps.log.event("read_done", {
     pageId,
     durationMs,
     inputTokens: reading.inputTokens,
-    outputTokens,
+    outputTokens: reading.outputTokens + reading.thoughtsTokens,
     thoughtsTokens: reading.thoughtsTokens,
   });
 }
@@ -144,7 +112,23 @@ export async function readPage(deps: ReadingDeps, reader: Reader, pageId: string
 }
 
 async function readB1(deps: ReadingDeps, userId: string, page: PageRow, image: Uint8Array, readingA: ReadingA | null): Promise<Response> {
-  const done = await attemptReading(deps, page.id, image);
+  const first = attemptReading(deps, page.id, image, "B1");
+  const second = startSecondPass(deps, page.id, image);
+  try {
+    return await storeFirst(deps, userId, page, await first, readingA, second);
+  } finally {
+    second.cancel();
+  }
+}
+
+async function storeFirst(
+  deps: ReadingDeps,
+  userId: string,
+  page: PageRow,
+  done: Attempt,
+  readingA: ReadingA | null,
+  second: SecondPass,
+): Promise<Response> {
   if (!done) return await queueForRetry(deps, userId, page);
   const pageType = pageTypeOf(done.reading.text);
   try {
@@ -153,7 +137,11 @@ async function readB1(deps: ReadingDeps, userId: string, page: PageRow, image: U
     deps.log.event("unexpected_error", { errorName: errorName(error) });
     return await queueForRetry(deps, userId, page);
   }
-  if (pageType === "text") readingA?.finish(done.reading.text);
-  else readingA?.cancel(pageType);
+  if (pageType === "unsupported_script") second.cancel();
+  else {
+    const b2 = second.keep(userId);
+    if (pageType === "text") readingA?.finish(done.reading.text, b2);
+  }
+  if (pageType !== "text") readingA?.cancel(pageType);
   return json(200, { status: "read" });
 }
