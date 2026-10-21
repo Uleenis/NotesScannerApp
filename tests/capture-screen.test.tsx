@@ -42,7 +42,7 @@ jest.mock("@/lib/query-client", () => {
   return { ...actual, createQueryClient: () => new QueryClient({ defaultOptions: { queries: { retry: false } } }) };
 });
 jest.mock("@/notebooks/service", () => ({
-  notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn() },
+  notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn(), chapters: jest.fn(async () => []) },
 }));
 jest.mock("@/capture/service", () => ({
   captureService: { allowance: jest.fn(), latestNotebookId: jest.fn(), send: jest.fn(), preparePhoto: jest.fn(), discardPhoto: jest.fn() },

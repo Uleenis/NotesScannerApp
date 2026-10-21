@@ -32,8 +32,12 @@ export default function NotebookScreen() {
     ) : null;
   }
 
+  if (chapters.data === undefined) {
+    return chapters.isError ? <LoadError message={t.library.loadFailed} onRetry={() => chapters.refetch()} /> : null;
+  }
+
   const pageCount = notebook.data.pageCount;
-  const notebookChapters = (chapters.data ?? []).filter((chapter) => chapter.notebookId === id);
+  const notebookChapters = chapters.data.filter((chapter) => chapter.notebookId === id);
   const hasChapters = notebookChapters.length > 0;
   const outsideChapters = (pages.data ?? [])
     .filter((page) => page.notebookId === id && page.chapterId === null)

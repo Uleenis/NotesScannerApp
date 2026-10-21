@@ -160,6 +160,22 @@ describe("the screen of a notebook with chapters", () => {
   });
 });
 
+describe("when the chapters cannot be loaded", () => {
+  test("the notebook screen says so and offers to try again, instead of hiding the pages in chapters", async () => {
+    jest.mocked(notebookService.chapters).mockRejectedValueOnce(new Error("offline"));
+    await openApp(`/notebook/${histoire.id}`);
+
+    await fireEvent.press(await screen.findByText(fr.common.retry));
+    expect(await screen.findByText(moyenAge.name)).toBeTruthy();
+  });
+
+  test("the rename sheet of something that is gone still has a way out", async () => {
+    const pathname = await openApp("/rename?kind=chapter&id=missing");
+    await fireEvent.press(await screen.findByText(fr.common.cancel));
+    await waitFor(() => expect(pathname()).not.toBe("/rename"));
+  });
+});
+
 describe("creating a chapter", () => {
   test("is offered by the menu of the notebook, creates the chapter and opens it [11]", async () => {
     const pathname = await openApp(`/notebook/${histoire.id}`);

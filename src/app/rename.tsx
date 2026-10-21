@@ -72,6 +72,7 @@ function RenameForm({ kind, id, current }: { kind: Kind; id: string; current: st
 
 export default function RenameScreen() {
   const { kind, id } = useLocalSearchParams<{ kind: string; id: string }>();
+  const t = useStrings();
   const notebook = useNotebook(kind === "notebook" ? id : null);
   const chapters = useChapters();
 
@@ -80,7 +81,7 @@ export default function RenameScreen() {
   }
   const current = kind === "notebook" ? notebook.data?.name : chapters.data?.find((chapter) => chapter.id === id)?.name;
   if (current === undefined) {
-    return null;
+    return <Stack.Screen options={{ ...newNotebookOptions, title: "", headerLeft: () => <HeaderTextButton label={t.common.cancel} onPress={() => router.back()} /> }} />;
   }
   return <RenameForm key={id} kind={kind} id={id} current={current} />;
 }
