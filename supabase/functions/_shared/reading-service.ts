@@ -33,7 +33,7 @@ export type ServiceFailure = { kind: ServiceFailureKind; status?: number; code?:
 
 export type Recognized = { ok: true; answer: string } | { ok: false; failure: ServiceFailure };
 
-export type Arbitration = { pageId: string; userId: string; b1: string; answer: string; durationMs: number };
+export type Arbitration = { pageId: string; userId: string; b1: string; b2: string | null; answer: string; durationMs: number };
 
 export type Arbitrated = { ok: true; tokens: number | null } | { ok: false; failure: ServiceFailure };
 
@@ -201,6 +201,7 @@ export function createReadingService(options: ServiceOptions): ReadingService {
         `{"page_id":${JSON.stringify(arbitration.pageId)}`,
         `"user_id":${JSON.stringify(arbitration.userId)}`,
         `"b1":${JSON.stringify(arbitration.b1)}`,
+        ...(arbitration.b2 === null ? [] : [`"b2":${JSON.stringify(arbitration.b2)}`]),
         `"duration_ms":${JSON.stringify(arbitration.durationMs)}`,
         `"a":${arbitration.answer}}`,
       ].join(",");

@@ -49,7 +49,7 @@ Deno.test("relaunch-page reads a page that is queued for read_error and answers 
   assertEquals(response.status, 200);
   assertEquals(await readJson(response), { status: "read" });
   assertEquals(world.page().status, "read");
-  assertEquals(world.readings.length, 1);
+  assertEquals(world.readings.filter((reading) => reading.label === "B1").length, 1);
 });
 
 Deno.test("relaunch-page refuses a request without the secret and touches nothing", async () => {
@@ -162,7 +162,7 @@ Deno.test("relaunch-page writes in the name of the owner found on the page, what
   const world = dueWorld();
   const response = await call(world, RELAUNCH_SECRET, { page_id: PAGE_ID, user_id: BOB, userId: BOB });
   assertEquals(response.status, 200);
-  assertEquals(world.readings.map((r) => r.userId), [ALICE]);
+  assertEquals(world.readings.map((r) => r.userId), [ALICE, ALICE]);
   assertEquals(world.pageTexts.get(PAGE_ID)?.userId, ALICE);
   assertEquals(world.pageImages.map((i) => i.userId), [ALICE]);
   assertEquals(world.claimArguments[0][0], ALICE);
@@ -281,7 +281,7 @@ Deno.test("two relaunches that arrive together read the page once", async () => 
   const [a, b] = await Promise.all([call(world), call(world)]);
   assertEquals([a.status, b.status].sort(), [200, 409]);
   assertEquals(world.geminiImages.length, 1);
-  assertEquals(world.readings.length, 1);
+  assertEquals(world.readings.filter((reading) => reading.label === "B1").length, 1);
   assertEquals(world.charges.length, 1);
   assertEquals(world.page().status, "read");
 });

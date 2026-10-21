@@ -49,6 +49,7 @@ class ArbitrationIn(Strict):
     page_id: Identifier
     user_id: Identifier
     b1: Annotated[str, Field(max_length=MAX_B1)]
+    b2: Annotated[str, Field(max_length=MAX_B1)] | None = None
     a: ReadingIn
     duration_ms: Annotated[int, Field(ge=0, le=MAX_DURATION_MS)]
 
@@ -89,5 +90,10 @@ def arbitration_of(body: bytes) -> Arbitration:
     if alto_of(reading) != sent.a.alto:
         raise invalid_request()
     return Arbitration(
-        page_id=sent.page_id, user_id=sent.user_id, b1=sent.b1, reading=reading, duration_ms=sent.duration_ms
+        page_id=sent.page_id,
+        user_id=sent.user_id,
+        b1=sent.b1,
+        reading=reading,
+        duration_ms=sent.duration_ms,
+        b2=sent.b2,
     )

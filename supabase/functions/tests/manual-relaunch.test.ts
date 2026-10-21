@@ -37,7 +37,7 @@ Deno.test("the owner of a failed page can relaunch it, and a good reading puts i
   assertEquals(response.status, 200);
   assertEquals(await readJson(response), { status: "read" });
   assertEquals(world.page().status, "read");
-  assertEquals(world.readings.length, 1);
+  assertEquals(world.readings.filter((reading) => reading.label === "B1").length, 1);
 });
 
 Deno.test("a relaunch of a failed page is one reading, and its failure puts the page back in failed with retry_count 3", async () => {
@@ -166,7 +166,7 @@ Deno.test("two relaunches of a failed page that arrive together read it once", a
   const [a, b] = await Promise.all([call(world), call(world)]);
   assertEquals([a.status, b.status].sort(), [200, 409]);
   assertEquals(world.geminiImages.length, 1);
-  assertEquals(world.readings.length, 1);
+  assertEquals(world.readings.filter((reading) => reading.label === "B1").length, 1);
 });
 
 Deno.test("a failed page with a photo that is gone is refused as before and stays failed", async () => {

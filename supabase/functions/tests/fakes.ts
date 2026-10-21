@@ -24,6 +24,7 @@ import type {
   PreparePageDeps,
   QueueReason,
   ReadingInput,
+  ReadingPass,
   ReadPageDeps,
   RelaunchPageDeps,
   ServerStore,
@@ -152,7 +153,12 @@ export class World {
   allowances = new Map<string, Allowance>();
   forcedCharge: ChargeReason | null = null;
   geminiOutcomes: (GeminiReading | Error)[] = [];
+  secondOutcomes: (GeminiReading | Error | "hold")[] = [];
   geminiImages: Uint8Array[] = [];
+  secondImages: Uint8Array[] = [];
+  heldSecond: ((outcome: GeminiReading | Error) => void)[] = [];
+  waits: number[] = [];
+  expireWaits = false;
   failOn = new Set<string>();
   calls: string[] = [];
   deletedPhotos = 0;
@@ -231,6 +237,10 @@ export class World {
 
   push(...outcomes: (GeminiReading | Error)[]): void {
     this.geminiOutcomes.push(...outcomes);
+  }
+
+  pushSecond(...outcomes: (GeminiReading | Error | "hold")[]): void {
+    this.secondOutcomes.push(...outcomes);
   }
 
   failGemini(kind: GeminiFailureKind = "http_error"): GeminiFailure {
@@ -346,7 +356,7 @@ export class World {
         return true;
       },
       insertReading: async (userId, pageId, reading) => {
-        await this.tick("insertReading");
+        await this.tick(reading.label === "B2" ? "insertReadingB2" : "insertReading");
         const page = this.pages.get(pageId);
         if (!page || page.userId !== userId) throw new Error("write for another owner");
         this.readings.push({ ...reading, userId, pageId });
@@ -645,7 +655,8 @@ export class World {
   }
 
   gemini() {
-    return async (image: Uint8Array): Promise<GeminiReading> => {
+    return async (image: Uint8Array, pass: ReadingPass = "B1"): Promise<GeminiReading> => {
+      if (pass === "B2") return await this.secondGemini(image);
       this.calls.push("gemini");
       this.geminiImages.push(image);
       await Promise.resolve();
@@ -653,6 +664,30 @@ export class World {
       const outcome = this.geminiOutcomes.shift() ?? DEFAULT_READING;
       if (outcome instanceof Error) throw outcome;
       return outcome;
+    };
+  }
+
+  private async secondGemini(image: Uint8Array): Promise<GeminiReading> {
+    this.calls.push("gemini_b2");
+    this.secondImages.push(image);
+    const queued = this.secondOutcomes.shift() ?? DEFAULT_READING;
+    const outcome = queued === "hold" ? await new Promise<GeminiReading | Error>((resolve) => this.heldSecond.push(resolve)) : queued;
+    await Promise.resolve();
+    if (outcome instanceof Error) throw outcome;
+    return outcome;
+  }
+
+  releaseSecond(outcome: GeminiReading | Error = DEFAULT_READING): void {
+    const resolve = this.heldSecond.shift();
+    if (!resolve) throw new Error("no reading B2 is held");
+    resolve(outcome);
+  }
+
+  wait() {
+    return (ms: number, signal: AbortSignal): Promise<void> => {
+      this.waits.push(ms);
+      if (this.expireWaits) return Promise.resolve();
+      return new Promise((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
     };
   }
 
@@ -712,6 +747,7 @@ export class World {
       server: this.server(),
       gemini: this.gemini(),
       service: this.serviceConfigured ? this.readingService() : null,
+      wait: this.wait(),
       background: this.background(),
       clock: { now: () => this.clock },
       log: this.logger(),
@@ -725,6 +761,7 @@ export class World {
       server: this.server(),
       gemini: this.gemini(),
       service: this.serviceConfigured ? this.readingService() : null,
+      wait: this.wait(),
       background: this.background(),
       clock: { now: () => this.clock },
       log: this.logger(),

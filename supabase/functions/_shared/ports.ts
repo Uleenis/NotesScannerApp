@@ -37,8 +37,10 @@ export type ChargeResult = { allowed: boolean; reason: ChargeReason };
 
 export type PhotoInfo = { size: number; mimeType: string | null };
 
+export type ReadingPass = "B1" | "B2";
+
 export type ReadingInput = {
-  label: "B1";
+  label: ReadingPass;
   rawText: string;
   model: string;
   modelVersion: string;
@@ -118,8 +120,9 @@ export type PreparePageDeps = {
 
 export type ReadingDeps = {
   server: ServerStore;
-  gemini: (image: Uint8Array) => Promise<GeminiReading>;
+  gemini: (image: Uint8Array, pass?: ReadingPass) => Promise<GeminiReading>;
   service: ReadingService | null;
+  wait?: (ms: number, signal: AbortSignal) => Promise<void>;
   background: (task: Promise<void>) => void;
   clock: { now: () => number };
   log: Logger;

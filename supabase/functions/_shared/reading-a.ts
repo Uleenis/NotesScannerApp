@@ -1,6 +1,6 @@
 import { errorName } from "./log.ts";
 import type { Logger } from "./log.ts";
-import { retryable } from "./reading-service.ts";
+import { ARBITRATE_TIMEOUT_MS, retryable } from "./reading-service.ts";
 import type { ReadingService, ServiceFailure } from "./reading-service.ts";
 
 const ATTEMPTS = 2;
@@ -11,17 +11,20 @@ type Clock = { now: () => number };
 
 export type ReadingADeps = {
   service: ReadingService;
+  wait?: (ms: number, signal: AbortSignal) => Promise<void>;
   background: (task: Promise<void>) => void;
   clock: Clock;
   log: Logger;
 };
 
-type Decision = { kind: "text"; b1: string } | { kind: "cancel"; code: string };
+type SecondText = Promise<string | null>;
+
+type Decision = { kind: "text"; b1: string; b2: SecondText | null } | { kind: "cancel"; code: string };
 
 type Recognition = { answer: string; durationMs: number } | null;
 
 export type ReadingA = {
-  finish: (b1: string) => void;
+  finish: (b1: string, b2?: SecondText) => void;
   cancel: (code: string) => void;
 };
 
@@ -46,11 +49,38 @@ async function recognize(deps: ReadingADeps, pageId: string, image: Uint8Array, 
   return null;
 }
 
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
+}
+
+async function secondReading(deps: ReadingADeps, pageId: string, b2: SecondText | null, deadline: number): Promise<string | null> {
+  if (!b2) return null;
+  const stop = new AbortController();
+  try {
+    const waiting = (deps.wait ?? sleep)(Math.max(0, deadline - ARBITRATE_TIMEOUT_MS - deps.clock.now()), stop.signal).then(() => undefined);
+    const found = await Promise.race([b2, waiting]);
+    if (found === undefined) {
+      deps.log.event("b2_late", { pageId });
+      return null;
+    }
+    return found;
+  } finally {
+    stop.abort();
+  }
+}
+
 async function arbitrate(
   deps: ReadingADeps,
   userId: string,
   pageId: string,
   b1: string,
+  b2: string | null,
   recognition: NonNullable<Recognition>,
   sentAt: number,
 ): Promise<void> {
@@ -62,7 +92,7 @@ async function arbitrate(
       deps.log.event("a_abandoned", { pageId, code: "out_of_time" });
       return;
     }
-    const result = await deps.service.arbitrate({ pageId, userId, b1, answer: recognition.answer, durationMs: recognition.durationMs }, signal, left);
+    const result = await deps.service.arbitrate({ pageId, userId, b1, b2, answer: recognition.answer, durationMs: recognition.durationMs }, signal, left);
     if (result.ok) {
       deps.log.event("a_done", { pageId, durationMs: deps.clock.now() - sentAt, tokens: result.tokens ?? undefined });
       return;
@@ -111,7 +141,8 @@ export function startReadingA(deps: ReadingADeps, userId: string, pageId: string
         deps.log.event("a_abandoned", { pageId, code: "recognize_failed" });
         return;
       }
-      await arbitrate(deps, userId, pageId, decision.b1, recognized, sentAt);
+      const b2 = await secondReading(deps, pageId, decision.b2, sentAt + A_BUDGET_MS);
+      await arbitrate(deps, userId, pageId, decision.b1, b2, recognized, sentAt);
     } catch (error) {
       controller.abort();
       deps.log.event("unexpected_error", { errorName: errorName(error) });
@@ -119,7 +150,7 @@ export function startReadingA(deps: ReadingADeps, userId: string, pageId: string
   })());
 
   return {
-    finish: (b1) => decide({ kind: "text", b1 }),
+    finish: (b1, b2) => decide({ kind: "text", b1, b2: b2 ?? null }),
     cancel: (code) => decide({ kind: "cancel", code }),
   };
 }

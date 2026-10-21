@@ -231,7 +231,7 @@ Deno.test("read-page checks the owner, then the photo, then charges, then claims
   const world = new World();
   world.readyPage();
   await call(world, TOKEN_ALICE);
-  const order = ["getPage", "photoInfo", "download", "charge", "recordOriginalImage", "claim", "gemini", "insertReading", "upsertPageText", "markRead"];
+  const order = ["getPage", "photoInfo", "download", "charge", "recordOriginalImage", "claim", "gemini", "gemini_b2", "insertReading", "upsertPageText", "markRead", "insertReadingB2"];
   assertEquals(world.calls, order);
 });
 
@@ -277,7 +277,7 @@ Deno.test("read-page charges once and reads once when two calls arrive together 
   assertEquals(await readJson(loser), { error: "page_processing" });
   assertEquals(world.charges.length, 1);
   assertEquals(world.geminiImages.length, 1);
-  assertEquals(world.readings.length, 1);
+  assertEquals(world.readings.filter((reading) => reading.label === "B1").length, 1);
   assertEquals(world.page().status, "read");
 });
 

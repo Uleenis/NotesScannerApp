@@ -18,7 +18,7 @@ Deno.test("a first failure then a success makes two attempts and the page is rea
   assertEquals(await readJson(response), { status: "read" });
   assertEquals(world.geminiImages.length, 2);
   assertEquals(world.page().status, "read");
-  assertEquals(world.readings.length, 1);
+  assertEquals(world.readings.filter((reading) => reading.label === "B1").length, 1);
   assertEquals(world.charges.length, 1);
 });
 
@@ -92,7 +92,7 @@ Deno.test("the reading is stored with its model, prompt version, thinking budget
   world.geminiDurationMs = 5_900;
   world.push({ text: "Une page\nde test", modelVersion: "gemini-3.6-flash-001", inputTokens: 1_234, outputTokens: 200, thoughtsTokens: 16 });
   await call(world);
-  assertEquals(world.readings, [{
+  assertEquals(world.readings.filter((reading) => reading.label === "B1"), [{
     userId: ALICE,
     pageId: PAGE_ID,
     label: "B1",
