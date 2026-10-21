@@ -1,11 +1,11 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from reading.alignment import align_blocks, cells, letter_pairs
 from reading.recognition import Box, ReadLine
 from reading.refusal import too_complex
-from reading.tokens import Token, line_tokens, tokens_of
+from reading.tokens import Token, line_tokens, raw_spans, tokens_of
 
 THRESHOLD = Decimal("0.129")
 MAX_CELLS = 1_000_000
@@ -31,6 +31,16 @@ class Position:
     anchor: Box | None
     a_index: int | None
     confidence: float | None
+    reading_b2: str | None = None
+    b2_index: int | None = None
+    b1_start: int | None = None
+    b1_end: int | None = None
+
+
+@dataclass(frozen=True)
+class Alert:
+    kind: str
+    details: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -157,3 +167,10 @@ def positions_of(
             )
         )
     return positions
+
+
+def with_places(positions: Sequence[Position], text: str) -> list[Position]:
+    spans = raw_spans(text)
+    if spans is None or len(spans) != len(positions):
+        return list(positions)
+    return [replace(p, b1_start=start, b1_end=end) for p, (start, end) in zip(positions, spans, strict=True)]

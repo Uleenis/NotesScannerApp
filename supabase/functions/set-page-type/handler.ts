@@ -3,6 +3,7 @@ import { errorName } from "../_shared/log.ts";
 import { looksLikeJpeg, MAX_PHOTO_BYTES, photoPath } from "../_shared/photo.ts";
 import type { SetPageTypeDeps, SwitchOutcome } from "../_shared/ports.ts";
 import { startReadingA } from "../_shared/reading-a.ts";
+import { MAX_ARBITRATED_TEXT } from "../_shared/reading-b2.ts";
 import type { Refusal } from "../_shared/refusals.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -48,15 +49,15 @@ async function toMath(deps: SetPageTypeDeps, userId: string, pageId: string): Pr
 }
 
 async function toText(deps: SetPageTypeDeps, token: string, userId: string, pageId: string): Promise<Response> {
-  const { outcome, b1 } = await deps.pageTypes.setText(userId, pageId, deps.service !== null);
+  const { outcome, b1, b2 } = await deps.pageTypes.setText(userId, pageId, deps.service !== null);
   if (outcome !== "switched" && outcome !== "unchanged") return refuse(deps.log, REFUSALS[outcome], pageId);
   deps.log.event("page_type_set", { pageId, code: outcome === "switched" ? "text" : "text_unchanged" });
   if (outcome === "switched" && b1 === null) deps.log.event("a_abandoned", { pageId, code: deps.service ? "relaunch_limit" : "no_service" });
-  if (outcome === "switched" && b1 !== null) await readAgain(deps, token, userId, pageId, b1);
+  if (outcome === "switched" && b1 !== null) await readAgain(deps, token, userId, pageId, b1, b2);
   return json(200, { page_type: "text" });
 }
 
-async function readAgain(deps: SetPageTypeDeps, token: string, userId: string, pageId: string, b1: string): Promise<void> {
+async function readAgain(deps: SetPageTypeDeps, token: string, userId: string, pageId: string, b1: string, b2: string | null): Promise<void> {
   if (!deps.service) return;
   let image: Uint8Array | null;
   try {
@@ -69,7 +70,7 @@ async function readAgain(deps: SetPageTypeDeps, token: string, userId: string, p
     deps.log.event("a_abandoned", { pageId, code: "photo_missing" });
     return;
   }
-  startReadingA({ service: deps.service, background: deps.background, clock: deps.clock, log: deps.log }, userId, pageId, image).finish(b1);
+  startReadingA({ service: deps.service, background: deps.background, clock: deps.clock, log: deps.log }, userId, pageId, image).finish(b1, b2 === null || b2.length > MAX_ARBITRATED_TEXT ? undefined : Promise.resolve(b2));
 }
 
 export async function handleSetPageType(request: Request, deps: SetPageTypeDeps): Promise<Response> {

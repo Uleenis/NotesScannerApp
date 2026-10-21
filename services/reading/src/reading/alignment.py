@@ -99,3 +99,39 @@ def align_blocks(ref: Sequence[str], hyp: Sequence[str], budgets: Mapping[int, i
             c = previous
     steps.reverse()
     return steps
+
+
+def align_global(ref: Sequence[str], hyp: Sequence[str]) -> list[tuple[int | None, int | None]]:
+    n, m = len(ref), len(hyp)
+    cost = [[0.0] * (m + 1) for _ in range(n + 1)]
+    move = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(1, n + 1):
+        cost[i][0] = float(i)
+        move[i][0] = 1
+    for j in range(1, m + 1):
+        cost[0][j] = float(j)
+        move[0][j] = 2
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            paired = cost[i - 1][j - 1] + sub_cost(ref[i - 1], hyp[j - 1])
+            left_out = cost[i - 1][j] + 1.0
+            extra = cost[i][j - 1] + 1.0
+            best = min(paired, left_out, extra)
+            cost[i][j] = best
+            move[i][j] = 0 if best == paired else (1 if best == left_out else 2)
+    pairs: list[tuple[int | None, int | None]] = []
+    i, j = n, m
+    while i > 0 or j > 0:
+        step = move[i][j] if (i > 0 and j > 0) else (1 if j == 0 else 2)
+        if step == 0:
+            pairs.append((i - 1, j - 1))
+            i -= 1
+            j -= 1
+        elif step == 1:
+            pairs.append((i - 1, None))
+            i -= 1
+        else:
+            pairs.append((None, j - 1))
+            j -= 1
+    pairs.reverse()
+    return pairs

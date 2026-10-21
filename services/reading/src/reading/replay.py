@@ -10,6 +10,7 @@ from reading.arbitration import Position, a_text, positions_of
 from reading.recognition import Box, ReadLine, Word
 from reading.refusal import RefusalError
 from reading.rules import Phonemes, Rules
+from reading.second import second_of, with_second
 from reading.tokens import line_tokens
 
 NO_BOX: Box = (0, 0, 1, 1)
@@ -33,6 +34,7 @@ class WordIn(Strict):
 class EntitiesIn(Strict):
     b1: list[bool]
     a: list[bool]
+    b2: list[bool] | None = None
 
 
 class PageIn(Strict):
@@ -42,6 +44,7 @@ class PageIn(Strict):
     language: str | None
     level: Literal["course", "journal", "grammar"]
     entities: EntitiesIn
+    b2: str | None = None
 
 
 class ReplayIn(Strict):
@@ -55,15 +58,13 @@ class Replayed:
 
 
 class PinnedEntities:
-    def __init__(self, b1: str, b1_flags: Sequence[bool], a: str, a_flags: Sequence[bool]) -> None:
-        self._b1, self._b1_flags = b1, list(b1_flags)
-        self._a, self._a_flags = a, list(a_flags)
+    def __init__(self, pinned: Sequence[tuple[str, Sequence[bool]]]) -> None:
+        self._pinned = [(text, list(flags)) for text, flags in pinned]
 
     def flags(self, text: str) -> list[bool]:
-        if text == self._b1:
-            return self._b1_flags
-        if text == self._a:
-            return self._a_flags
+        for pinned, flags in self._pinned:
+            if text == pinned:
+                return flags
         raise ReplayError("no entities for this text")
 
 
@@ -85,12 +86,30 @@ def replay(document: object, phonemes: Phonemes) -> list[Replayed]:
     for page in pages:
         lines = lines_of(page)
         a = a_text(lines)
-        if len(page.entities.b1) != len(line_tokens(page.b1)) or len(page.entities.a) != len(line_tokens(a)):
+        texts = [(page.b1, page.entities.b1), (a, page.entities.a)]
+        if page.b2 is not None and page.entities.b2 is not None:
+            texts.append((page.b2, page.entities.b2))
+        elif page.b2 is not None or page.entities.b2 is not None:
+            raise ReplayError("a second reading and its entities come together")
+        if any(len(flags) != len(line_tokens(text)) for text, flags in texts):
             raise ReplayError("entities do not cover the words")
-        if page.b1 == a and page.entities.b1 != page.entities.a:
+        if any(
+            first[0] == second[0] and first[1] != second[1]
+            for index, first in enumerate(texts)
+            for second in texts[index + 1 :]
+        ):
             raise ReplayError("one text with two sets of entities")
-        rules = Rules(phonemes, PinnedEntities(page.b1, page.entities.b1, a, page.entities.a))
-        positions = rules.decide(positions_of(page.b1, lines), page.b1, a, page.language, page.level)
+        rules = Rules(phonemes, PinnedEntities(texts))
+        second = None if page.b2 is None else second_of(page.b1, page.b2)
+        positions = rules.decide(
+            with_second(positions_of(page.b1, lines), second),
+            page.b1,
+            a,
+            page.language,
+            page.level,
+            b2=None if second is None else second.text,
+            missing=frozenset() if second is None else frozenset(second.absent_from_b2),
+        )
         out.append(Replayed(page.page, positions))
     return out
 
@@ -104,6 +123,7 @@ def position_row(position: Position) -> dict[str, object]:
         "channel": position.channel,
         "reading_a": position.reading_a,
         "reading_b1": position.reading_b1,
+        "reading_b2": position.reading_b2,
     }
 
 

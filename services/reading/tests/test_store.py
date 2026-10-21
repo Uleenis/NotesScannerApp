@@ -1,12 +1,13 @@
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from decimal import Decimal
 
 import httpx2
 import pytest
 
 from reading.arbiter import Arbiter, Arbitration
-from reading.arbitration import Model, Position
+from reading.arbitration import Alert, Model, Position
 from reading.language import Lingua
 from reading.recognition import Reading, ReadLine, Word
 from reading.store import ReadingA, StoreError, SupabaseStore
@@ -150,8 +151,11 @@ def test_reading_a_is_written_by_the_server_function_in_one_call() -> None:
                 "channel": None,
                 "reading_a": "Le",
                 "reading_b1": "Le",
+                "reading_b2": None,
                 "anchor_kind": "word",
                 "anchor": [12, 10, 60, 60],
+                "b1_start": None,
+                "b1_end": None,
             },
             {
                 "token_index": 1,
@@ -161,11 +165,40 @@ def test_reading_a_is_written_by_the_server_function_in_one_call() -> None:
                 "channel": None,
                 "reading_a": None,
                 "reading_b1": "dort",
+                "reading_b2": None,
                 "anchor_kind": None,
                 "anchor": None,
+                "b1_start": None,
+                "b1_end": None,
             },
         ],
     }
+
+
+def test_the_reading_of_b2_and_the_place_in_b1_go_with_each_position() -> None:
+    store, recorder = store_of(answer(200, [{"recorded": True, "reason": "recorded"}]))
+    write = replace(
+        WRITE,
+        tokens=[replace(WRITE.tokens[0], reading_b2="La", b2_index=0, b1_start=0, b1_end=2)],
+    )
+    store.record(write)
+    [token] = json.loads(recorder.requests[0].content)["p_tokens"]
+    assert (token["reading_b2"], token["b1_start"], token["b1_end"]) == ("La", 0, 2)
+    assert "b2_index" not in token
+
+
+def test_the_alerts_of_a_page_go_with_its_reading_when_there_are_any() -> None:
+    store, recorder = store_of(answer(200, [{"recorded": True, "reason": "recorded"}]))
+    alert = Alert("missing_line", {"absent_from_b2": [0], "absent_from_b1": []})
+    store.record(replace(WRITE, alerts=[alert]))
+    sent = json.loads(recorder.requests[0].content)
+    assert sent["p_alerts"] == [{"kind": "missing_line", "details": {"absent_from_b2": [0], "absent_from_b1": []}}]
+
+
+def test_a_page_with_no_alert_sends_no_field_for_them() -> None:
+    store, recorder = store_of(answer(200, [{"recorded": True, "reason": "recorded"}]))
+    store.record(WRITE)
+    assert "p_alerts" not in json.loads(recorder.requests[0].content)
 
 
 @pytest.mark.parametrize("reason", ["page_not_found", "not_text", "already_read"])

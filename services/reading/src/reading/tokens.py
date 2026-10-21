@@ -40,3 +40,35 @@ def token_spans(text: str) -> list[tuple[int, int]]:
         for found in WORD.finditer(form_of(text))
         if found.group(0) == "[?]" or JOINERS.sub("", found.group(0))
     ]
+
+
+def composed_cuts(text: str) -> dict[int, int] | None:
+    cuts = {0: 0}
+    pieces = []
+    length = 0
+    start = 0
+    for index in range(1, len(text) + 1):
+        if index == len(text) or unicodedata.combining(text[index]) == 0:
+            piece = unicodedata.normalize("NFC", text[start:index])
+            pieces.append(piece)
+            length += len(piece)
+            cuts[length] = index
+            start = index
+    if "".join(pieces) != unicodedata.normalize("NFC", text):
+        return None
+    return cuts
+
+
+def raw_spans(text: str) -> list[tuple[int, int]] | None:
+    spans = token_spans(text)
+    if unicodedata.normalize("NFC", text) == text:
+        return spans
+    cuts = composed_cuts(text)
+    if cuts is None:
+        return None
+    places = []
+    for start, end in spans:
+        if start not in cuts or end not in cuts:
+            return None
+        places.append((cuts[start], cuts[end]))
+    return places
