@@ -1,26 +1,33 @@
 # Current slice
 
-Slice 3 — Library.
+Slice 4 — Vérification.
 
 Paths below are from the repository root.
 
-- **Spec and plan:** `../../02 Design/Tranche 3.md`, one document, validated by the owner on 17/10/2026, with its four decisions as proposed.
+- **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** `t3/screens`.
-- **Decisions from now on:** `../Tranche 3/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
-- **Guarded file:** `supabase/config.toml` declares the new functions and their `verify_jwt` (`false` for the sweep, called by `pg_cron` with its secret, like `relaunch-page`). The owner approved it with the slice document. The branch that needs it prepares the change as a patch in `../Tranche 3/`; its PR is then the owner's to merge: its session says so, marks the branch "waiting for the owner" below, and stops. The next session may build the next branch meanwhile, from `main`, if that branch does not need the waiting one.
-- **Local secret of the sweep:** passed like `relaunch-page`'s; the owner adds it to `supabase/functions/.env` and the local Vault following the steps the session writes in "Pour Tim". Until then the tests run with a test secret.
-- **Gemini:** no real reading is needed; the tests replace Gemini.
-- **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 4, 7, 9, 5, 6, 8. When slice 3 is done, its last commit points this file to slice 4 if `../../02 Design/Tranche 4.md` says it is validated by the owner, with its branches in the table below. A slice whose document is missing or not validated: stop and ask.
+- **Next branch:** `t4/schema`.
+- **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section. Create the folder with the first branch.
+- **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
+- **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
+- **Slice 3 is done** (PRs 46, 49 to 53 and the PR of `t3/screens`): its Bilan is `../Tranche 3/Bilan.md`, its decisions `../Tranche 3/Décisions.md`, and the phone checks of slices 2 and 3 are in `../Vérifications 1.md`, for the owner's return.
+- **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 7, 9, 5, 6, 8. Cloud Run comes at the end of slice 4 (see the notes carried from slice 2). A slice whose document is missing or not validated: stop and ask.
 
 ## Branches
 
 | # | Branch | Criteria | Level | Session | Merged by | State |
 |---|---|---|---|---|---|---|
-| 1 | `t3/schema` | 1, 5, 7 | sensitive (access rights) | Sonnet, High | Claude | done: merged (PR 46) |
-| 2 | `t3/delete-move` | 2, 3, 4, 6, 9 | sensitive (access rights, files, deletion) | Sonnet, High | Claude (no `config.toml` change: the default `verify_jwt` is true) | done: PR open, merged by `node scripts/merge-pr.mjs` once CI is green |
-| 3 | `t3/sweep` | 8 | critical (secret) | Opus, High | Claude (the PR carries no guarded file) | done: PR 51, merged by `node scripts/merge-pr.mjs` once CI is green; the `config.toml` patch waits for the owner |
-| 4 | `t3/screens` | 10, 11, 12 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan (naming any branch still waiting for the owner), the status of `AGENTS.md` and `../Vérifications 1.md` (slice 3 is the third) |
+| 1 | `t4/schema` | 4, 5 | sensitive (access rights) | Sonnet, High | Claude | to do |
+| 2 | `t4/second-pass` | 1, 2 | sensitive (model call) | Sonnet, High | Claude | to do |
+| 3 | `t4/rules` | 3 | ordinary | Sonnet, High | Claude | to do |
+| 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | to do |
+| 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | to do |
+| 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | to do |
+| 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan, the status of `AGENTS.md`, and the Cloud Run end of slice if the plan asks for it |
+
+## Slice 3
+
+Done: 4 branches, PRs 46, 50, 51, the PR of `t3/screens`, and outside the plan 49 (race test), 52 (`config.toml`, merged by the owner) and 53 (purge of the cron history). What it does and what is left for the owner are in `../Tranche 3/Bilan.md`. Nothing waits for the owner on a guarded file. The migrations of the slice (`20261020120000_t3_schema.sql`, `20261021120000_t3_delete_notebook_pages.sql`, `20261022120000_t3_sweep.sql`, `20261023120000_t3_purge_cron_history.sql`) and the sweep secret go to production later, the owner's.
 
 ## Slice 2
 
@@ -42,8 +49,7 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 
 - `t3/schema` adds `move_page`, `delete_page`, `delete_chapter` and `delete_notebook` (server only; the owner is a parameter; outcomes `moved`, `unchanged`, `deleted`, `page_not_found`, `chapter_not_found`, `notebook_not_found`, `page_processing`). They touch no file. `t3/delete-move` must check owner and state itself (not `processing`) **before** erasing any file, then erase the files of `photos` and `alto` by listing the folder `{user_id}/{page_id}/` (not only `page_images` and `readings.alto_path`), then call the function, which rechecks under lock; a photo uploaded or a page created between the listing and the call can leave an orphan file in `photos`, which the sweep never touches: look at it in that branch.
 - The client no longer updates `pages.chapter_id`: a move is `move_page` only.
-- `library-race.sh` is not yet in `db:test:concurrency`: the patch for `package.json` is in `../Tranche 3/` and waits for the owner.
-- The CI job `reading` fails on `main` since a new advisory on `aiohttp` 3.14.3 (fixed in 3.14.4): a separate branch bumps it before this PR can merge.
+- `library-race.sh` is in `db:test:concurrency` (PR 49).
 
 ## Notes carried from slice 3, branch 2
 
@@ -57,5 +63,10 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - `t3/sweep` adds `sweep-alto` (called by the `pg_cron` task `sweep-alto` at 02:30 UTC with `X-Sweep-Secret`), `public.alto_orphans` (server only) and `private.sweep_alto` (migration `20261022120000_t3_sweep.sql`). PR 51 carries no guarded file and is merged by Claude. Until the owner applies `../Tranche 3/t3-sweep config.toml.patch` (on a branch of his own from `main`, merged by him), `sweep-alto` keeps the default `verify_jwt = true` and the gateway refuses the nightly call: nothing is erased, nothing breaks. The patch declares `sweep-alto` with `verify_jwt = false` and the five library functions with `true`, and updates `tests/supabase-auth-config.test.ts`; it replaces `t3-delete-move config.toml.patch`. Do not deploy `sweep-alto` before it.
 - Local secret of the sweep: `SWEEP_SECRET` among the local function secrets, `sweep_secret` and `sweep_url` (`http://host.docker.internal:54321/functions/v1/sweep-alto`) in the local Vault, set by the owner, again after each `db reset`. The steps are in `../Tranche 3/Décisions.md`.
 - A scheduled call only queues a request: check `net._http_response` or the function logs, not `cron.job_run_details`, to know whether `sweep-alto` or `relaunch-page` succeeded. `cron.job_run_details` is purged each night by the branch `t3/purge-cron` (outside the plan, approved by the owner on 20/10/2026, ordinary, merged by Claude): runs that ended more than 30 days ago.
-- The Bilan of the slice names the `config.toml` patch of the sweep as waiting for the owner if it is still not applied.
+- The `config.toml` patch of the sweep was applied by the owner (PR 52, 20/10/2026): the gateway now lets the nightly call through once the secret and the migration are in production.
 - `library-race.sh` failed once in CI with exit 141: `psql` piped into `head -n 1` under `pipefail` could die of SIGPIPE. It now selects its one row through a CTE, without a pipe.
+
+## Notes carried from slice 3, branch 4
+
+- `t3/screens` adds the chapter screen (`/chapter/[id]`), the sheets `new-chapter`, `rename` and `page/[id]/move`, and the menus (`ActionSheetIOS`, `Alert`) of the notebook, the chapter and the page. `pages` carry `chapterId`; `chapters` are a query of their own (`["chapters", userId]`, refreshed with the pages).
+- Set aside after review: a stale chapter in the capture route (deleted elsewhere while the camera is open) fails the send until the user leaves the screen; the back link of a page leads to its notebook, not its chapter; the move sheet shows no progress while it waits. The `pages(count)` embed of `listChapters` answers on the local stack; no page was read through it with real rows.
