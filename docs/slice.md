@@ -6,7 +6,7 @@ Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** `t4/second-pass`.
+- **Next branch:** first merge PR 58 (`t4/schema`) once its five checks run green (re-run them after the owner settles the GitHub billing), with `node scripts/merge-pr.mjs 58`; then `t4/second-pass`.
 - **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
@@ -17,7 +17,7 @@ Paths below are from the repository root.
 
 | # | Branch | Criteria | Level | Session | Merged by | State |
 |---|---|---|---|---|---|---|
-| 1 | `t4/schema` | 4, 5 | sensitive (access rights) | Sonnet, High | Claude | done (PR 58) |
+| 1 | `t4/schema` | 4, 5 | sensitive (access rights) | Sonnet, High | Claude | built, PR 58 open and not merged: GitHub Actions refuses to start (billing), see "Pour Tim" |
 | 2 | `t4/second-pass` | 1, 2 | sensitive (model call) | Sonnet, High | Claude | to do |
 | 3 | `t4/rules` | 3 | ordinary | Sonnet, High | Claude | to do |
 | 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | to do |
