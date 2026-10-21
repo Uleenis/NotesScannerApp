@@ -1,4 +1,5 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
+import { MAX_ARBITRATED_TEXT } from "../_shared/reading-b2.ts";
 import { handleSetPageType } from "../set-page-type/handler.ts";
 import {
   ALICE,
@@ -87,6 +88,15 @@ Deno.test("to text of a page that has no B2 arbitrates without one", async () =>
   await world.settle();
   assertEquals(response.status, 200);
   assertEquals(world.arbitrations.map((a) => a.b2), [null]);
+});
+
+Deno.test("a stored B2 too big for the service is kept out of the arbitration, which still runs", async () => {
+  const world = withService();
+  readPageOf(world, "math", false);
+  world.addB2(ALICE, PAGE_ID, "x".repeat(MAX_ARBITRATED_TEXT + 1));
+  await ask(world, { page_id: PAGE_ID, page_type: "text" });
+  await world.settle();
+  assertEquals(world.arbitrations.map((a) => [a.b1, a.b2]), [[B1, null]]);
 });
 
 Deno.test("the logs of a switch carry no text of B2", async () => {

@@ -3,6 +3,7 @@ import { errorName } from "../_shared/log.ts";
 import { looksLikeJpeg, MAX_PHOTO_BYTES, photoPath } from "../_shared/photo.ts";
 import type { SetPageTypeDeps, SwitchOutcome } from "../_shared/ports.ts";
 import { startReadingA } from "../_shared/reading-a.ts";
+import { MAX_ARBITRATED_TEXT } from "../_shared/reading-b2.ts";
 import type { Refusal } from "../_shared/refusals.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -69,7 +70,7 @@ async function readAgain(deps: SetPageTypeDeps, token: string, userId: string, p
     deps.log.event("a_abandoned", { pageId, code: "photo_missing" });
     return;
   }
-  startReadingA({ service: deps.service, background: deps.background, clock: deps.clock, log: deps.log }, userId, pageId, image).finish(b1, b2 === null ? undefined : Promise.resolve(b2));
+  startReadingA({ service: deps.service, background: deps.background, clock: deps.clock, log: deps.log }, userId, pageId, image).finish(b1, b2 === null || b2.length > MAX_ARBITRATED_TEXT ? undefined : Promise.resolve(b2));
 }
 
 export async function handleSetPageType(request: Request, deps: SetPageTypeDeps): Promise<Response> {

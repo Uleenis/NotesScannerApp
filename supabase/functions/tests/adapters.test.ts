@@ -567,11 +567,25 @@ Deno.test("a page with no stored B2 comes back with none", async () => {
   assertEquals(await createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID, true), { outcome: "switched", b1: "Bonjour", b2: null });
 });
 
-Deno.test("a stored B2 of another shape is an error, never a pass", async () => {
+Deno.test("a stored B2 of another shape is left out and the switch stands", async () => {
   for (const stored of [[{ raw_text: 3 }], [{ raw_text: "a" }, { raw_text: "b" }], { raw_text: "a" }]) {
     const { fetch } = switchedText(stored);
-    assertEquals(await storeError(() => createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID, true)), true, JSON.stringify(stored));
+    assertEquals(await createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID, true), { outcome: "switched", b1: "Bonjour", b2: null }, JSON.stringify(stored));
   }
+});
+
+Deno.test("a stored B2 that cannot be read is left out and the switch stands", async () => {
+  const answered = switchedText([]).fetch;
+  const broken = ((input: string | URL | Request, init?: RequestInit) => {
+    if (new URL(String(input)).pathname === "/rest/v1/readings") return Promise.reject(new TypeError("network down"));
+    return answered(input, init);
+  }) as typeof fetch;
+  assertEquals(await createPageTypeStore(KEYS, broken).setText(BOB, PAGE_ID, true), { outcome: "switched", b1: "Bonjour", b2: null });
+  const refused = ((input: string | URL | Request, init?: RequestInit) => {
+    if (new URL(String(input)).pathname === "/rest/v1/readings") return Promise.resolve(new Response("{}", { status: 500 }));
+    return answered(input, init);
+  }) as typeof fetch;
+  assertEquals(await createPageTypeStore(KEYS, refused).setText(BOB, PAGE_ID, true), { outcome: "switched", b1: "Bonjour", b2: null });
 });
 
 Deno.test("a refusal of a switch is read back as such", async () => {

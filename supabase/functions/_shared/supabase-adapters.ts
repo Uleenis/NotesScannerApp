@@ -430,6 +430,17 @@ function switched(data: unknown, operation: string, field: "alto_path" | "b1"): 
   return { outcome: outcome as SwitchOutcome, value };
 }
 
+async function storedSecond(client: SupabaseClient, userId: string, pageId: string): Promise<string | null> {
+  try {
+    const stored = await client.from("readings").select("raw_text").eq("page_id", pageId).eq("user_id", userId).eq("label", "B2");
+    if (stored.error || !Array.isArray(stored.data) || stored.data.length !== 1) return null;
+    const text = row(stored.data[0])?.raw_text;
+    return typeof text === "string" ? text : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createPageTypeStore(keys: Keys, fetchImpl?: typeof fetch): PageTypeStore {
   const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
   return {
@@ -444,11 +455,7 @@ export function createPageTypeStore(keys: Keys, fetchImpl?: typeof fetch): PageT
       if (error) throw new StoreError("setText");
       const { outcome, value } = switched(data, "setText", "b1");
       if (value === null) return { outcome, b1: null, b2: null };
-      const stored = await client.from("readings").select("raw_text").eq("page_id", pageId).eq("user_id", userId).eq("label", "B2");
-      if (stored.error || !Array.isArray(stored.data) || stored.data.length > 1) throw new StoreError("setText");
-      const text = stored.data.length === 1 ? row(stored.data[0])?.raw_text : null;
-      if (typeof text !== "string" && text !== null) throw new StoreError("setText");
-      return { outcome, b1: value, b2: text };
+      return { outcome, b1: value, b2: await storedSecond(client, userId, pageId) };
     },
     removeAlto: async (path) => {
       const { error } = await client.storage.from("alto").remove([path]);
