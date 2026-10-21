@@ -55,13 +55,26 @@ select pg_sleep(0.02);
 commit;
 EOS
 
+docker exec -i "$DB_CONTAINER" sh -c "cat > /tmp/corrections-same.sql" <<EOS
+\set word random(1, 1000000000)
+begin;
+insert into public.corrections (user_id, page_id, token_index, corrected_text, chosen_from)
+values ('${USER_ID}', '${PAGE_ID}', 0, 'c' || :word, 'keyboard');
+select pg_sleep(0.02);
+commit;
+EOS
+
+SAME_ROUNDS=4
+
 docker exec "$DB_CONTAINER" pgbench -U postgres -n -f /tmp/corrections.sql -c "$WORDS" -j 4 -t "$ROUNDS" postgres > /dev/null || true
+docker exec "$DB_CONTAINER" pgbench -U postgres -n -f /tmp/corrections-same.sql -c "$WORDS" -j 4 -t "$SAME_ROUNDS" postgres > /dev/null || true
 
 expected_text="$(sql -c "select string_agg(last_word, E'\n' order by token_index) from (select distinct on (token_index) token_index, corrected_text as last_word from public.corrections where page_id = '${PAGE_ID}' order by token_index, revision desc) x" | tr '\n' ',')"
 shown_text="$(sql -c "select text from public.page_texts where page_id = '${PAGE_ID}'" | tr '\n' ',')"
 
-check "every correction was kept" "$((WORDS * ROUNDS))" "$(sql -c "select count(*) from public.corrections where page_id = '${PAGE_ID}'")"
-check "each position holds the revisions 1 to ${ROUNDS} with no gap" "$WORDS" "$(sql -c "select count(*) from (select token_index from public.corrections where page_id = '${PAGE_ID}' group by token_index having array_agg(revision order by revision) = (select array_agg(g) from generate_series(1, ${ROUNDS}) g)) x")"
+check "every correction was kept" "$((WORDS * ROUNDS + WORDS * SAME_ROUNDS))" "$(sql -c "select count(*) from public.corrections where page_id = '${PAGE_ID}'")"
+check "every position holds its revisions with no gap" "$WORDS" "$(sql -c "select count(*) from (select token_index from public.corrections where page_id = '${PAGE_ID}' group by token_index having min(revision) = 1 and max(revision) = count(*)) x")"
+check "twenty clients writing one position get distinct revisions" "$((ROUNDS + WORDS * SAME_ROUNDS))" "$(sql -c "select count(distinct revision) from public.corrections where page_id = '${PAGE_ID}' and token_index = 0")"
 check "the shown text holds the correction of every position" "$expected_text" "$shown_text"
 
 exit "$failures"

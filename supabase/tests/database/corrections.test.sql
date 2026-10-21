@@ -1,6 +1,6 @@
 begin;
 
-select plan(55);
+select plan(69);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -60,6 +60,35 @@ insert into public.page_tokens (user_id, page_id, token_index, line_index, text,
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '44444444-4444-4444-4444-444444444444', 5, 1, 'Paris', 2, 'queue', null, 'Paris', 'Paris', 'Paris', 24, 29),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '55555555-5555-5555-5555-555555555555', 0, 0, 'Autre', null, null, null, 'Autre', 'Autre', 'Autre', 0, 5),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '66666666-6666-6666-6666-666666666666', 0, 0, 'Ancien', null, null, null, 'Ancien', 'Ancien', null, null, null);
+
+insert into public.pages (id, user_id, notebook_id, status, page_type) values
+  ('77777777-7777-7777-7777-777777777777', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'text');
+
+insert into public.readings (user_id, page_id, label, raw_text, model, model_version, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms)
+select 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '77777777-7777-7777-7777-777777777777', 'B1', string_agg('ab', ' '), 'gemini-3.6-flash', 'gemini-3.6-flash-001', 'V0', 0, 10, 2, 1500
+from generate_series(0, 24);
+
+insert into public.page_texts (user_id, page_id, text, pipeline_version)
+select 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '77777777-7777-7777-7777-777777777777', string_agg('ab', ' '), 'b1-raw'
+from generate_series(0, 24);
+
+insert into public.page_tokens (user_id, page_id, token_index, line_index, text, reading_b1, b1_start, b1_end)
+select 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '77777777-7777-7777-7777-777777777777', g, 0, 'ab', 'ab', g * 3, g * 3 + 2
+from generate_series(0, 24) g;
+
+insert into public.pages (id, user_id, notebook_id, status, page_type) values
+  ('88888888-8888-8888-8888-888888888888', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'text');
+
+insert into public.readings (user_id, page_id, label, raw_text, model, model_version, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '88888888-8888-8888-8888-888888888888', 'B1', E'\n  caf' || chr(233) || ' ' || chr(128512) || ' ok', 'gemini-3.6-flash', 'gemini-3.6-flash-001', 'V0', 0, 10, 2, 1500);
+
+insert into public.page_texts (user_id, page_id, text, pipeline_version) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '88888888-8888-8888-8888-888888888888', E'\n  caf' || chr(233) || ' ' || chr(128512) || ' ok', 'b1-raw');
+
+insert into public.page_tokens (user_id, page_id, token_index, line_index, text, reading_b1, b1_start, b1_end) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '88888888-8888-8888-8888-888888888888', 0, 1, 'caf' || chr(233), 'caf' || chr(233), 3, 7),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '88888888-8888-8888-8888-888888888888', 1, 1, chr(128512), chr(128512), 8, 9),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '88888888-8888-8888-8888-888888888888', 2, 1, 'ok', 'ok', 10, 12);
 
 select is(
   (select review_status from public.page_tokens where page_id = '44444444-4444-4444-4444-444444444444' and token_index = 5),
@@ -332,11 +361,83 @@ select is(
   'the refused batch left no correction behind'
 );
 
+select lives_ok(
+  $$insert into public.corrections (page_id, token_index, corrected_text, chosen_from)
+    values ('88888888-8888-8888-8888-888888888888', 2, 'OK', 'keyboard')$$,
+  'a user corrects a word on a page with accents, an emoji and a leading line break'
+);
+
+select is(
+  pg_temp.shown('88888888-8888-8888-8888-888888888888'),
+  E'\n  caf' || chr(233) || ' ' || chr(128512) || ' OK',
+  'places count characters, not bytes: only the corrected word changed'
+);
+
+select throws_ok(
+  format($$insert into public.corrections (page_id, token_index, corrected_text, chosen_from)
+    values ('44444444-4444-4444-4444-444444444444', 0, %L, 'keyboard')$$, 'a' || chr(8205) || 'b'),
+  '23514', null, 'a zero-width joiner inside a word is refused'
+);
+
+select throws_ok(
+  format($$insert into public.corrections (page_id, token_index, corrected_text, chosen_from)
+    values ('44444444-4444-4444-4444-444444444444', 0, %L, 'keyboard')$$, 'a' || chr(8238) || 'b'),
+  '23514', null, 'a right-to-left override inside a word is refused'
+);
+
+select throws_ok(
+  format($$insert into public.corrections (page_id, token_index, corrected_text, chosen_from)
+    values ('44444444-4444-4444-4444-444444444444', 0, %L, 'keyboard')$$, 'a' || chr(173) || 'b'),
+  '23514', null, 'a soft hyphen inside a word is refused'
+);
+
+select throws_ok(
+  format($$insert into public.corrections (page_id, token_index, corrected_text, chosen_from)
+    values ('44444444-4444-4444-4444-444444444444', 0, %L, 'keyboard')$$, chr(10240)),
+  '23514', null, 'a braille blank taken for a word is refused'
+);
+
+select is(
+  (select from_queue from public.corrections where page_id = '44444444-4444-4444-4444-444444444444' and token_index = 3),
+  true,
+  'a correction made from the queue on a pending position keeps its mark'
+);
+
+select lives_ok(
+  $$insert into public.corrections (page_id, token_index, corrected_text, chosen_from, from_queue)
+    values ('44444444-4444-4444-4444-444444444444', 0, 'Bonjour', 'B1', true)$$,
+  'a user can claim a queue origin for any correction'
+);
+
+select is(
+  (select from_queue from public.corrections where page_id = '44444444-4444-4444-4444-444444444444' and token_index = 0 and corrected_text = 'Bonjour'),
+  false,
+  'the mark is dropped when the position is not waiting in the queue'
+);
+
+select lives_ok(
+  $$insert into public.corrections (page_id, token_index, corrected_text, chosen_from)
+    select '77777777-7777-7777-7777-777777777777', g % 25, 'x' || g, 'keyboard' from generate_series(1, 2000) g$$,
+  'a page takes 2000 corrections'
+);
+
+select throws_ok(
+  $$insert into public.corrections (page_id, token_index, corrected_text, chosen_from)
+    values ('77777777-7777-7777-7777-777777777777', 0, 'one', 'keyboard')$$,
+  '23514', null, 'the 2001st correction of a page is refused'
+);
+
 reset role;
 
 select pg_temp.login('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 
 select is((select count(*) from public.corrections), 0::bigint, 'another user reads none of the corrections of a user');
+
+select lives_ok(
+  $$insert into public.corrections (page_id, token_index, corrected_text, chosen_from)
+    values ('55555555-5555-5555-5555-555555555555', 0, 'Autres', 'keyboard')$$,
+  'another user corrects their own page'
+);
 
 reset role;
 
@@ -358,9 +459,25 @@ reset role;
 delete from public.pages where id = '44444444-4444-4444-4444-444444444444';
 
 select is(
-  (select count(*) from public.corrections),
+  (select count(*) from public.corrections where page_id = '44444444-4444-4444-4444-444444444444'),
   0::bigint,
   'deleting a page deletes its corrections'
+);
+
+delete from public.notebooks where id = '11111111-1111-1111-1111-111111111111';
+
+select is(
+  (select count(*) from public.corrections where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+  0::bigint,
+  'deleting a notebook deletes the corrections of its pages'
+);
+
+delete from auth.users where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
+select is(
+  (select count(*) from public.corrections),
+  0::bigint,
+  'deleting an account deletes its corrections'
 );
 
 select * from finish();

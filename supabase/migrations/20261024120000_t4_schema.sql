@@ -72,7 +72,7 @@ create table public.corrections (
   created_at timestamptz not null default now(),
   constraint corrections_word_length check (char_length(corrected_text) between 1 and 100),
   constraint corrections_one_word check (
-    corrected_text !~ U&'[\0001-\0020\007f-\00a0\1680\2000-\200b\2028\2029\202f\205f\2060\3000\feff]'
+    corrected_text !~ U&'[\0001-\0020\007f-\00a0\00ad\034f\061c\1680\180e\2000-\200f\2028-\202f\205f-\206f\2800\3000\3164\feff\ffa0]'
   ),
   unique (page_id, token_index, revision),
   foreign key (page_id, user_id) references public.pages (id, user_id)
@@ -124,6 +124,7 @@ create function private.recompute_page_text(p_page_id uuid) returns void
 language plpgsql
 security definer
 set search_path = ''
+set plan_cache_mode = 'force_custom_plan'
 as $$
 declare
   v_base text;
@@ -147,24 +148,19 @@ begin
     raise exception 'invalid_places' using errcode = '23514';
   end if;
 
-  with placed as (
-    select
-      k.b1_start,
-      k.b1_end,
-      case
-        when c.corrected_text is not null then c.corrected_text
-        when k.text is distinct from k.reading_b1 then k.text
-        else substr(v_base, k.b1_start + 1, k.b1_end - k.b1_start)
-      end as shown
+  with latest as materialized (
+    select distinct on (x.token_index) x.token_index, x.corrected_text
+    from public.corrections x
+    where x.page_id = p_page_id
+    order by x.token_index, x.revision desc
+  ),
+  placed as (
+    select k.b1_start, k.b1_end, coalesce(l.corrected_text, k.text) as shown
     from public.page_tokens k
-    left join lateral (
-      select x.corrected_text
-      from public.corrections x
-      where x.page_id = k.page_id and x.token_index = k.token_index
-      order by x.revision desc
-      limit 1
-    ) c on true
-    where k.page_id = p_page_id and k.b1_start is not null
+    left join latest l on l.token_index = k.token_index
+    where k.page_id = p_page_id
+      and k.b1_start is not null
+      and (l.token_index is not null or k.text is distinct from k.reading_b1)
   ),
   gapped as (
     select p.b1_start, p.b1_end, p.shown, coalesce(lag(p.b1_end) over (order by p.b1_start), 0) as previous_end
@@ -211,6 +207,12 @@ begin
   where c.page_id = new.page_id and c.token_index = new.token_index
   order by c.revision desc
   limit 1;
+
+  if (select count(*) from public.corrections c where c.page_id = new.page_id) >= 2000 then
+    raise exception 'too_many_corrections' using errcode = '23514';
+  end if;
+
+  new.from_queue := new.from_queue and coalesce(v_token.review_status = 'pending', false);
 
   new.revision := coalesce(v_revision, 0) + 1;
   new.previous_text := coalesce(v_last, v_token.text);

@@ -1,6 +1,6 @@
 begin;
 
-select plan(39);
+select plan(40);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -57,12 +57,15 @@ insert into public.readings (user_id, page_id, label, raw_text, model, model_ver
 insert into public.readings (user_id, page_id, label, raw_text, model, model_version, duration_ms, alto_path) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 'A', E'Bonjonr\nfin', 'medium', '1', 28000, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/a4000000-0000-0000-0000-000000000001/a-0123456789abcdef0123456789abcdef.xml');
 
-insert into public.page_tokens (user_id, page_id, token_index, line_index, text, reading_a, reading_b1) values
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 0, 0, 'Bonjour', 'Bonjonr', 'Bonjour'),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 1, 0, 'Paul', null, 'Paul');
+insert into public.page_tokens (user_id, page_id, token_index, line_index, text, reading_a, reading_b1, b1_start, b1_end) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 0, 0, 'Bonjour', 'Bonjonr', 'Bonjour', 0, 7),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 1, 0, 'Paul', null, 'Paul', 8, 12);
 
 insert into public.page_texts (user_id, page_id, text, pipeline_version) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', E'Bonsoir Paul\nfin', 'b1-raw');
+
+insert into public.corrections (user_id, page_id, token_index, corrected_text, chosen_from) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 1, 'Pablo', 'keyboard');
 
 insert into public.page_alerts (user_id, page_id, kind) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a4000000-0000-0000-0000-000000000001', 'missing_line'),
@@ -113,6 +116,7 @@ select is((select count(*) from public.page_tokens where page_id = 'a4000000-000
 select is((select row(page_type, language)::text from public.pages where id = 'a4000000-0000-0000-0000-000000000001'), '(math,)', 'the page becomes math and loses its language');
 select is((select count(*) from public.readings where page_id = 'a4000000-0000-0000-0000-000000000001' and label = 'B1'), 1::bigint, 'B1 stays');
 select is((select text from public.page_texts where page_id = 'a4000000-0000-0000-0000-000000000001'), E'Bonjour Paul\nfin', 'the switch to math gives the text of B1 back, as the corrections went with the positions');
+select is((select count(*) from public.corrections where page_id = 'a4000000-0000-0000-0000-000000000001'), 0::bigint, 'the switch to math erases the corrections with the positions they belong to');
 select is((select array_agg(kind) from public.page_alerts where page_id = 'a4000000-0000-0000-0000-000000000001'), array['math_incomplete'], 'the switch to math erases the alert of a missing line, which came from A, and keeps the others');
 
 select pg_temp.as_server();
