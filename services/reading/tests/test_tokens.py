@@ -1,6 +1,7 @@
-from reading.tokens import Token, form_of, line_tokens, token_spans, tokens_of
+from reading.tokens import Token, form_of, line_tokens, raw_spans, token_spans, tokens_of
 
 ACUTE = chr(0x301)
+DIAERESIS = chr(0x308)
 CURLY = chr(0x2019)
 EM_DASH = chr(0x2014)
 
@@ -76,3 +77,44 @@ def test_the_spans_of_the_words_point_into_their_form_line_after_line() -> None:
     spans = token_spans(text)
     form = form_of(text)
     assert [form[start:end] for start, end in spans] == [token.form for token, _ in line_tokens(text)]
+
+
+def test_the_places_of_the_words_in_a_composed_text_are_the_spans_of_its_form() -> None:
+    text = f"l{CURLY}homme est-il là\r\n\n  Paris, 12 h - fin"
+    assert raw_spans(text) == token_spans(text)
+
+
+def test_the_places_of_the_words_cut_the_text_as_it_was_written() -> None:
+    text = f"l{CURLY}homme est-il là\r\n\n  Paris, 12 h - fin\n[?] oui"
+    spans = raw_spans(text)
+    assert spans is not None
+    assert [text[start:end] for start, end in spans] == [
+        f"l{CURLY}homme",
+        "est-il",
+        "là",
+        "Paris",
+        "12",
+        "h",
+        "fin",
+        "[?]",
+        "oui",
+    ]
+
+
+def test_the_places_of_a_decomposed_text_are_counted_in_the_characters_it_has() -> None:
+    text = f"e{ACUTE}te{ACUTE} chaud\ne{ACUTE}cole"
+    spans = raw_spans(text)
+    assert spans is not None
+    assert [text[start:end] for start, end in spans] == [f"e{ACUTE}te{ACUTE}", "chaud", f"e{ACUTE}cole"]
+    assert len(spans) == len(line_tokens(text))
+
+
+def test_a_text_with_no_word_has_no_place() -> None:
+    assert raw_spans(" - \n") == []
+    assert raw_spans("") == []
+
+
+def test_a_word_that_ends_inside_a_composed_character_has_no_place() -> None:
+    text = f"o{DIAERESIS}{ACUTE} oui"
+    assert [token.text for token, _ in line_tokens(text)] == ["ö", "oui"]
+    assert raw_spans(text) is None

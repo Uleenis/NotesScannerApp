@@ -91,6 +91,7 @@ def test_the_command_replays_a_page_as_the_rules_decide_it_directly() -> None:
             "channel": p.channel,
             "reading_a": p.reading_a,
             "reading_b1": p.reading_b1,
+            "reading_b2": p.reading_b2,
         }
         for p in direct
     ]
@@ -208,3 +209,65 @@ def test_replay_returns_the_positions_of_each_page() -> None:
     [replayed] = replay({"pages": [page()]}, Recorder())
     assert replayed.page == "Jour 15"
     assert len(replayed.positions) == len(line_tokens(B1))
+
+
+B2_TEXT = "Jour 15\nje fais du velo avec Marle"
+
+
+def second_page(**changes: object) -> dict[str, object]:
+    b2_flags = [token.text == "Marle" for token, _ in line_tokens(B2_TEXT)]
+    entry = page(b2=B2_TEXT)
+    entities = entry["entities"]
+    assert isinstance(entities, dict)
+    entry["entities"] = {**entities, "b2": b2_flags}
+    entry.update(changes)
+    return entry
+
+
+def test_a_page_with_a_second_reading_is_replayed_with_rules_five_six_and_seven() -> None:
+    code, out, _ = run({"pages": [second_page()]})
+    assert code == 0
+    [replayed] = json.loads(out)["pages"]
+    rows = [(p["text"], p["reading_b2"], p["rule"], p["channel"]) for p in replayed["positions"]]
+    assert rows == [
+        ("Jour", "Jour", 9, "none"),
+        ("15", "15", 2, "queue"),
+        ("je", "je", 9, "none"),
+        ("fais", "fais", 5, "layer"),
+        ("du", "du", 9, "none"),
+        ("velo", "velo", 5, "layer"),
+        ("avec", "avec", 9, "none"),
+        ("Marie", "Marle", 5, "layer"),
+        (PROBE, None, 7, "none"),
+        ("le", None, 7, "none"),
+        ("soir", None, 7, "none"),
+    ]
+
+
+def test_a_page_without_a_second_reading_has_no_word_of_b2() -> None:
+    _, out, _ = run({"pages": [page()]})
+    assert {p["reading_b2"] for p in json.loads(out)["pages"][0]["positions"]} == {None}
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param({"pages": [second_page(entities={"b1": [False], "a": [False], "b2": [False]})]}, id="b1 and a"),
+        pytest.param({"pages": [page(b2=B2_TEXT)]}, id="entities of b2 missing"),
+        pytest.param({"pages": [second_page(b2=None)]}, id="entities of b2 without b2"),
+    ],
+)
+def test_a_second_reading_and_its_entities_come_together(document: object) -> None:
+    code, out, err = run(document)
+    assert code == 2
+    assert out == ""
+    assert err.strip() == "invalid replay input"
+
+
+def test_entities_of_b2_that_do_not_cover_its_words_are_refused() -> None:
+    entry = second_page()
+    entities = entry["entities"]
+    assert isinstance(entities, dict)
+    code, _, err = run({"pages": [second_page(entities={**entities, "b2": [*entities["b2"], False]})]})
+    assert code == 2
+    assert err.strip() == "invalid replay input"

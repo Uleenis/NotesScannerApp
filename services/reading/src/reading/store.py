@@ -1,11 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Protocol
 from urllib.parse import quote, urlsplit
 
 import httpx2
 
-from reading.arbitration import Model, Position
+from reading.arbitration import Alert, Model, Position
 
 ALTO_BUCKET = "alto"
 ALTO_TYPE = "application/xml"
@@ -29,6 +29,7 @@ class ReadingA:
     alto_path: str
     language: str | None
     tokens: list[Position]
+    alerts: list[Alert] = field(default_factory=list)
 
 
 class StoreError(Exception):
@@ -58,8 +59,11 @@ def token_row(position: Position) -> dict[str, object]:
         "channel": position.channel,
         "reading_a": position.reading_a,
         "reading_b1": position.reading_b1,
+        "reading_b2": position.reading_b2,
         "anchor_kind": position.anchor_kind,
         "anchor": None if position.anchor is None else list(position.anchor),
+        "b1_start": position.b1_start,
+        "b1_end": position.b1_end,
     }
 
 
@@ -149,21 +153,20 @@ class SupabaseStore:
         )
 
     def record(self, write: ReadingA) -> str:
-        response = self._send(
-            "POST",
-            "/rest/v1/rpc/record_reading_a",
-            body={
-                "p_page_id": write.page_id,
-                "p_user_id": write.user_id,
-                "p_raw_text": write.raw_text,
-                "p_model": write.model,
-                "p_model_version": write.model_version,
-                "p_duration_ms": write.duration_ms,
-                "p_alto_path": write.alto_path,
-                "p_language": write.language,
-                "p_tokens": [token_row(position) for position in write.tokens],
-            },
-        )
+        body: dict[str, object] = {
+            "p_page_id": write.page_id,
+            "p_user_id": write.user_id,
+            "p_raw_text": write.raw_text,
+            "p_model": write.model,
+            "p_model_version": write.model_version,
+            "p_duration_ms": write.duration_ms,
+            "p_alto_path": write.alto_path,
+            "p_language": write.language,
+            "p_tokens": [token_row(position) for position in write.tokens],
+        }
+        if write.alerts:
+            body["p_alerts"] = [{"kind": alert.kind, "details": alert.details} for alert in write.alerts]
+        response = self._send("POST", "/rest/v1/rpc/record_reading_a", body=body)
         try:
             rows = response.json()
         except ValueError as error:

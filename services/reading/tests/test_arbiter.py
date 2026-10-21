@@ -1,7 +1,7 @@
 import contextlib
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import replace
 from decimal import Decimal
 
@@ -9,9 +9,9 @@ import pytest
 
 from reading.alto import alto_of
 from reading.arbiter import Arbiter, Arbitration, ArbitrationError
-from reading.arbitration import Model, Position
+from reading.arbitration import Alert, Model, Position
 from reading.recognition import Reading, ReadLine, Word
-from reading.rules import Rules
+from reading.rules import Rules, SecondRefusedError
 from reading.store import ReadingA, StoreError
 from reading.tokens import line_tokens
 
@@ -19,6 +19,9 @@ USER = "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
 PAGE = "0b6f3c1e-8d2a-4c5b-9e7f-1a2b3c4d5e6f"
 B1_PROBE = "Zanzibarque"
 A_PROBE = "Zanzibarqe"
+B2_PROBE = "Zanzibarquo"
+DIAERESIS = chr(0x308)
+ACUTE = chr(0x301)
 PATH = re.compile(rf"{USER}/{PAGE}/a-[0-9a-f]{{32}}\.xml")
 
 READING = Reading(
@@ -37,8 +40,8 @@ READING = Reading(
 )
 
 
-def arbitration(b1: str = f"Le {B1_PROBE} dort", reading: Reading = READING) -> Arbitration:
-    return Arbitration(page_id=PAGE, user_id=USER, b1=b1, reading=reading, duration_ms=28000)
+def arbitration(b1: str = f"Le {B1_PROBE} dort", reading: Reading = READING, b2: str | None = None) -> Arbitration:
+    return Arbitration(page_id=PAGE, user_id=USER, b1=b1, reading=reading, duration_ms=28000, b2=b2)
 
 
 class FakeStore:
@@ -98,11 +101,23 @@ class FakeLanguage:
 
 
 class FakeRules:
-    def __init__(self) -> None:
-        self.calls: list[tuple[list[Position], str, str, str | None, str]] = []
+    def __init__(self, refuse_second: bool = False) -> None:
+        self.refuse_second = refuse_second
+        self.calls: list[tuple[list[Position], str, str, str | None, str, str | None, frozenset[int]]] = []
 
-    def decide(self, positions: list[Position], b1: str, a: str, language: str | None, level: str) -> list[Position]:
-        self.calls.append((positions, b1, a, language, level))
+    def decide(
+        self,
+        positions: list[Position],
+        b1: str,
+        a: str,
+        language: str | None,
+        level: str,
+        b2: str | None = None,
+        missing: Collection[int] = frozenset(),
+    ) -> list[Position]:
+        self.calls.append((positions, b1, a, language, level, b2, frozenset(missing)))
+        if self.refuse_second and b2 is not None:
+            raise SecondRefusedError
         return [replace(p, rule=10, channel="none") for p in positions]
 
 
@@ -183,8 +198,9 @@ def test_with_the_gate_open_the_rules_decide_each_position() -> None:
     rules = FakeRules()
     store = FakeStore(models=[Model("active", Decimal("0.129"))], level="journal")
     Arbiter(store, FakeLanguage("en"), rules).arbitrate(arbitration())
-    [(positions, b1, a, language, level)] = rules.calls
+    [(positions, b1, a, language, level, b2, missing)] = rules.calls
     assert (b1, a, language, level) == (f"Le {B1_PROBE} dort", f"Le {A_PROBE}", "en", "journal")
+    assert (b2, missing) == (None, frozenset())
     assert [(p.text, p.a_index, p.confidence) for p in positions] == [
         ("Le", 0, 0.99),
         (B1_PROBE, 1, 0.4),
@@ -325,9 +341,107 @@ def test_an_empty_a_writes_positions_without_anchors() -> None:
 def test_the_logs_carry_no_text_of_the_page(store: FakeStore, caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG)
     with contextlib.suppress(ArbitrationError):
-        Arbiter(store, FakeLanguage(), Rules(Ports(), Ports())).arbitrate(arbitration())
+        Arbiter(store, FakeLanguage(), Rules(Ports(), Ports())).arbitrate(arbitration(b2=f"Le {B2_PROBE} dort"))
     text = logged(caplog)
     assert PAGE in text
     assert B1_PROBE not in text
     assert A_PROBE not in text
+    assert B2_PROBE not in text
     assert USER not in text
+
+
+def test_b2_is_read_into_each_position_even_with_the_gate_closed() -> None:
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration(b2=f"Le {B2_PROBE} dort"))
+    [write] = store.writes
+    assert [(p.text, p.reading_b2) for p in write.tokens] == [("Le", "Le"), (B1_PROBE, B2_PROBE), ("dort", "dort")]
+    assert all(p.rule is None and p.channel is None for p in write.tokens)
+    assert write.alerts == []
+
+
+def test_without_b2_no_position_holds_a_reading_of_it() -> None:
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration())
+    assert [p.reading_b2 for p in store.writes[0].tokens] == [None, None, None]
+
+
+def test_each_position_holds_its_place_in_the_raw_text_of_b1() -> None:
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration())
+    assert [(p.b1_start, p.b1_end) for p in store.writes[0].tokens] == [(0, 2), (3, 14), (15, 19)]
+
+
+def test_the_places_are_counted_in_the_characters_of_a_b1_that_is_not_composed() -> None:
+    b1 = f"e{ACUTE}te{ACUTE} {B1_PROBE} dort"
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration(b1=b1))
+    places = [(p.b1_start, p.b1_end) for p in store.writes[0].tokens]
+    assert [b1[start:end] for start, end in places] == [f"e{ACUTE}te{ACUTE}", B1_PROBE, "dort"]
+
+
+def test_a_b1_whose_words_cannot_be_placed_is_written_without_any_place() -> None:
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration(b1=f"o{DIAERESIS}{ACUTE} oui"))
+    assert [(p.b1_start, p.b1_end) for p in store.writes[0].tokens] == [(None, None), (None, None)]
+
+
+def test_the_rules_are_given_b2_and_the_lines_it_lacks() -> None:
+    rules = FakeRules()
+    store = FakeStore(models=[Model("active", Decimal("0.1"))])
+    Arbiter(store, FakeLanguage("fr"), rules).arbitrate(arbitration(b1="Jour 27\nLe chat dort", b2="Le chat dort"))
+    [(_, _, _, _, _, b2, missing)] = rules.calls
+    assert (b2, missing) == ("Le chat dort", frozenset({0}))
+
+
+def test_a_line_b2_lacks_is_an_alert_even_with_the_gate_closed() -> None:
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration(b1="Jour 27\nLe chat dort", b2="Le chat dort"))
+    assert store.writes[0].alerts == [Alert("missing_line", {"absent_from_b2": [0], "absent_from_b1": []})]
+
+
+def test_a_line_b1_lacks_is_an_alert_too() -> None:
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration(b1="Le chat dort", b2="Jour 27\nLe chat dort"))
+    assert store.writes[0].alerts == [Alert("missing_line", {"absent_from_b2": [], "absent_from_b1": [0]})]
+
+
+def test_the_lines_an_alert_names_are_capped() -> None:
+    b1 = "\n".join(f"mot{i}" for i in range(60))
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration(b1=b1, b2="mot0"))
+    [alert] = store.writes[0].alerts
+    assert alert.details["absent_from_b2"] == list(range(1, 51))
+    assert alert.details["absent_from_b1"] == []
+
+
+def test_readings_that_agree_on_every_line_raise_no_alert() -> None:
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration(b1="Jour 27\nLe chat dort", b2="Jour 27\nLe chat dort"))
+    assert store.writes[0].alerts == []
+
+
+def test_a_b2_beyond_the_bounds_is_left_out_and_the_page_is_read_without_it(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO)
+    b1 = " ".join(f"mot{i}" for i in range(1001))
+    store = FakeStore()
+    Arbiter(store, FakeLanguage()).arbitrate(arbitration(b1=b1, b2=b1))
+    [write] = store.writes
+    assert len(write.tokens) == 1001
+    assert all(p.reading_b2 is None for p in write.tokens)
+    assert write.alerts == []
+    assert "second reading left out" in logged(caplog)
+
+
+def test_a_b2_the_entities_refuse_is_left_out_and_the_page_is_decided_without_it(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO)
+    rules = FakeRules(refuse_second=True)
+    store = FakeStore(models=[Model("active", Decimal("0.1"))])
+    Arbiter(store, FakeLanguage("fr"), rules).arbitrate(arbitration(b1="Jour 27\nLe chat dort", b2="Le chat dort"))
+    assert [(call[5], call[6]) for call in rules.calls] == [("Le chat dort", frozenset({0})), (None, frozenset())]
+    [write] = store.writes
+    assert all(p.reading_b2 is None for p in write.tokens)
+    assert write.alerts == []
+    assert [p.rule for p in write.tokens] == [10] * 5
+    assert "second reading left out" in logged(caplog)

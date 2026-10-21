@@ -538,17 +538,47 @@ Deno.test("the switch to math calls set_page_math with the page and its owner, a
   assertEquals(calls[0].headers.get("apikey"), "secret-key");
 });
 
+function switchedText(stored: unknown) {
+  return stub((call) => (call.url.pathname === "/rest/v1/rpc/set_page_text" ? [{ outcome: "switched", b1: "Bonjour" }] : stored));
+}
+
 Deno.test("the switch to text calls set_page_text and reads B1 back [9]", async () => {
-  const { fetch, calls } = stub(() => [{ outcome: "switched", b1: "Bonjour" }]);
-  assertEquals(await createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID, true), { outcome: "switched", b1: "Bonjour" });
+  const { fetch, calls } = switchedText([{ raw_text: "Bonjour deux" }]);
+  assertEquals(await createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID, true), { outcome: "switched", b1: "Bonjour", b2: "Bonjour deux" });
   assertEquals(calls[0].url.pathname, "/rest/v1/rpc/set_page_text");
   assertEquals(calls[0].body, { p_page_id: PAGE_ID, p_user_id: BOB, p_read_again: true });
 });
 
+Deno.test("the switch to text reads the stored B2 of the page of its owner, as the service [10]", async () => {
+  const { fetch, calls } = switchedText([{ raw_text: "Bonjour deux" }]);
+  await createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID, true);
+  assertEquals(calls.length, 2);
+  assertEquals(calls[1].method, "GET");
+  assertEquals(calls[1].url.pathname, "/rest/v1/readings");
+  assertEquals(calls[1].url.searchParams.get("select"), "raw_text");
+  assertEquals(calls[1].url.searchParams.get("page_id"), `eq.${PAGE_ID}`);
+  assertEquals(calls[1].url.searchParams.get("user_id"), `eq.${BOB}`);
+  assertEquals(calls[1].url.searchParams.get("label"), "eq.B2");
+  assertEquals(calls[1].headers.get("apikey"), "secret-key");
+});
+
+Deno.test("a page with no stored B2 comes back with none", async () => {
+  const { fetch } = switchedText([]);
+  assertEquals(await createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID, true), { outcome: "switched", b1: "Bonjour", b2: null });
+});
+
+Deno.test("a stored B2 of another shape is an error, never a pass", async () => {
+  for (const stored of [[{ raw_text: 3 }], [{ raw_text: "a" }, { raw_text: "b" }], { raw_text: "a" }]) {
+    const { fetch } = switchedText(stored);
+    assertEquals(await storeError(() => createPageTypeStore(KEYS, fetch).setText(BOB, PAGE_ID, true)), true, JSON.stringify(stored));
+  }
+});
+
 Deno.test("a refusal of a switch is read back as such", async () => {
   for (const outcome of ["unchanged", "page_not_found", "page_not_read", "unsupported_script", "no_reading"] as const) {
-    const { fetch } = stub(() => [{ outcome, b1: null }]);
-    assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID, true), { outcome, b1: null }, outcome);
+    const { fetch, calls } = stub(() => [{ outcome, b1: null }]);
+    assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID, true), { outcome, b1: null, b2: null }, outcome);
+    assertEquals(calls.length, 1, outcome);
   }
 });
 
@@ -561,7 +591,7 @@ Deno.test("an unknown outcome of a switch, or one of another shape, is an error,
 
 Deno.test("a switch to text that answers no B1 means no A to read again", async () => {
   const { fetch } = stub(() => [{ outcome: "switched", b1: null }]);
-  assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID, true), { outcome: "switched", b1: null });
+  assertEquals(await createPageTypeStore(KEYS, fetch).setText(ALICE, PAGE_ID, true), { outcome: "switched", b1: null, b2: null });
 });
 
 Deno.test("the ALTO file of the page is removed from the alto bucket by its path", async () => {

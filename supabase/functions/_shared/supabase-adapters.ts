@@ -443,7 +443,12 @@ export function createPageTypeStore(keys: Keys, fetchImpl?: typeof fetch): PageT
       const { data, error } = await client.rpc("set_page_text", { p_page_id: pageId, p_user_id: userId, p_read_again: readAgain });
       if (error) throw new StoreError("setText");
       const { outcome, value } = switched(data, "setText", "b1");
-      return { outcome, b1: value };
+      if (value === null) return { outcome, b1: null, b2: null };
+      const stored = await client.from("readings").select("raw_text").eq("page_id", pageId).eq("user_id", userId).eq("label", "B2");
+      if (stored.error || !Array.isArray(stored.data) || stored.data.length > 1) throw new StoreError("setText");
+      const text = stored.data.length === 1 ? row(stored.data[0])?.raw_text : null;
+      if (typeof text !== "string" && text !== null) throw new StoreError("setText");
+      return { outcome, b1: value, b2: text };
     },
     removeAlto: async (path) => {
       const { error } = await client.storage.from("alto").remove([path]);

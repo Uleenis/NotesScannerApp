@@ -1,9 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 import pytest
 
 from reading.arbitration import Position
-from reading.rules import CONFIDENCE, Rules
+from reading.refusal import RefusalError, too_complex
+from reading.rules import CONFIDENCE, Rules, SecondRefusedError
 from reading.tokens import line_tokens
 
 CURLY = chr(0x2019)
@@ -31,23 +32,41 @@ class FakeEntities:
 
 
 class Witness:
-    def __init__(self, b1: str, a: Sequence[tuple[str, float] | None]) -> None:
+    def __init__(
+        self,
+        b1: str,
+        a: Sequence[tuple[str, float] | None],
+        b2: Sequence[str | None] | None = None,
+        missing: Collection[int] = (),
+    ) -> None:
         self.b1 = b1
         b1_tokens = line_tokens(b1)
         assert len(b1_tokens) == len(a)
+        assert b2 is None or len(b2) == len(a)
         read = [reading for reading in a if reading is not None]
         self.a = " ".join(text for text, _ in read)
+        second = [] if b2 is None else [word for word in b2 if word is not None]
+        self.b2 = None if b2 is None else " ".join(second)
+        self.missing = frozenset(missing)
         self.positions: list[Position] = []
         a_index = 0
+        b2_index = 0
         for index, ((token, line), reading) in enumerate(zip(b1_tokens, a, strict=True)):
+            word = None if b2 is None else b2[index]
+            seen = None
+            if word is not None:
+                seen = b2_index
+                b2_index += 1
             if reading is None:
                 self.positions.append(
-                    Position(index, line, token.text, None, None, None, token.text, None, None, None, None)
+                    Position(index, line, token.text, None, None, None, token.text, None, None, None, None, word, seen)
                 )
                 continue
             text, confidence = reading
             self.positions.append(
-                Position(index, line, token.text, None, None, text, token.text, "word", BOX, a_index, confidence)
+                Position(
+                    index, line, token.text, None, None, text, token.text, "word", BOX, a_index, confidence, word, seen
+                )
             )
             a_index += 1
 
@@ -60,7 +79,9 @@ def decide(
     entities: FakeEntities | None = None,
 ) -> list[tuple[str, int | None, str | None]]:
     rules = Rules(phonemes or FakePhonemes(), entities or FakeEntities())
-    decided = rules.decide(witness.positions, witness.b1, witness.a, language, level)
+    decided = rules.decide(
+        witness.positions, witness.b1, witness.a, language, level, b2=witness.b2, missing=witness.missing
+    )
     return [(p.text, p.rule, p.channel) for p in decided]
 
 
@@ -294,3 +315,207 @@ def test_phonemes_that_do_not_cover_every_word_are_refused() -> None:
     witness = Witness("je fait", [("je", SURE), ("fais", SURE)])
     with pytest.raises(ValueError, match="phonemes"):
         decide(witness, level="journal", phonemes=Short(HOMOPHONES))
+
+
+def test_where_a_confirms_b1_against_b2_the_layer_keeps_b1() -> None:
+    witness = Witness("le chat dort", [("le", SURE), ("chat", 0.4), ("dort", SURE)], b2=["le", "chut", "dort"])
+    assert decide(witness) == [("le", 9, "none"), ("chat", 5, "layer"), ("dort", 9, "none")]
+
+
+def test_where_a_confirms_b2_against_b1_the_layer_writes_the_word_of_b2() -> None:
+    witness = Witness("le chut dort", [("le", SURE), ("chat", 0.4), ("dort", SURE)], b2=["le", "chat", "dort"])
+    assert decide(witness)[1] == ("chat", 5, "layer")
+
+
+def test_the_word_rule_five_writes_is_the_word_of_b2_as_it_was_read() -> None:
+    witness = Witness("le chut", [("le", SURE), ("Chat", 0.4)], b2=["le", "Chat"])
+    assert decide(witness)[1] == ("Chat", 5, "layer")
+
+
+def test_a_number_a_reads_differently_from_b1_goes_to_the_queue_even_when_a_agrees_with_b2() -> None:
+    witness = Witness("Jour 15", [("Jour", SURE), ("16", SURE)], b2=["Jour", "16"])
+    assert decide(witness)[1] == ("15", 2, "queue")
+
+
+def test_a_digit_in_b2_alone_makes_the_word_a_number() -> None:
+    witness = Witness("le lo", [("le", SURE), ("lc", SURE)], b2=["le", "l0"])
+    assert decide(witness)[1] == ("lo", 2, "queue")
+
+
+def test_a_number_b1_and_a_agree_on_against_b2_goes_to_the_layer_by_rule_five() -> None:
+    witness = Witness("le 15", [("le", SURE), ("15", SURE)], b2=["le", "16"])
+    assert decide(witness)[1] == ("15", 5, "layer")
+
+
+def test_rule_five_comes_before_the_proper_nouns() -> None:
+    witness = Witness("Marie dort", [("Marie", SURE), ("dort", SURE)], b2=["Marle", "dort"])
+    assert decide(witness, entities=FakeEntities({"Marie", "Marle"}))[0] == ("Marie", 5, "layer")
+
+
+def test_a_proper_noun_b2_alone_names_is_a_proper_noun() -> None:
+    witness = Witness("Marc dort", [("Mare", 0.5), ("dort", SURE)], b2=["Marie", "dort"])
+    entities = FakeEntities({"Marie"})
+    assert decide(witness, entities=entities)[0] == ("Marc", 3, "layer")
+    assert entities.texts == ["Marc dort", "Mare dort", "Marie dort"]
+
+
+def test_a_proper_noun_both_passes_agree_on_still_goes_to_the_layer() -> None:
+    witness = Witness("Marie dort", [("Marie", SURE), ("dort", SURE)], b2=["Marie", "dort"])
+    assert decide(witness, entities=FakeEntities({"Marie"}))[0] == ("Marie", 3, "layer")
+
+
+def test_rule_four_comes_before_rule_six() -> None:
+    witness = Witness("je fait", [("je", SURE), ("fais", SURE)], b2=["je", "fée"])
+    assert decide(witness, level="journal", phonemes=FakePhonemes(HOMOPHONES))[1] == ("fais", 4, "layer")
+
+
+def test_a_word_a_confirms_in_neither_pass_goes_to_the_queue_with_b1() -> None:
+    witness = Witness("le chat dort", [("le", SURE), ("chut", 0.4), ("dort", SURE)], b2=["le", "chit", "dort"])
+    assert decide(witness)[1] == ("chat", 6, "queue")
+
+
+def test_a_word_a_did_not_read_and_the_passes_disagree_on_goes_to_the_queue_with_b1() -> None:
+    witness = Witness("le chat", [("le", SURE), None], b2=["le", "chut"])
+    assert decide(witness)[1] == ("chat", 6, "queue")
+
+
+def test_a_number_a_did_not_read_and_the_passes_disagree_on_goes_to_the_queue_by_rule_six() -> None:
+    witness = Witness("le 15", [("le", SURE), None], b2=["le", "16"])
+    assert decide(witness)[1] == ("15", 6, "queue")
+
+
+def test_a_proper_noun_the_passes_disagree_on_without_a_goes_to_the_layer_by_rule_three() -> None:
+    witness = Witness("Marc dort", [None, ("dort", SURE)], b2=["Marie", "dort"])
+    assert decide(witness, entities=FakeEntities({"Marc"}))[0] == ("Marc", 3, "layer")
+
+
+def test_the_words_of_a_missing_line_are_written_b1_by_rule_seven_with_no_channel() -> None:
+    witness = Witness(
+        "Jour 27\nle chat",
+        [("Jour", SURE), ("27", SURE), ("le", SURE), ("chat", SURE)],
+        b2=[None, None, "le", "chat"],
+        missing={0},
+    )
+    assert decide(witness) == [("Jour", 7, "none"), ("27", 7, "none"), ("le", 9, "none"), ("chat", 9, "none")]
+
+
+def test_rule_seven_comes_before_the_disagreement_of_a() -> None:
+    witness = Witness(
+        "Jour 27\nle chat",
+        [("Jouf", 0.5), None, ("le", SURE), ("chat", SURE)],
+        b2=[None, None, "le", "chat"],
+        missing={0},
+    )
+    assert decide(witness)[:2] == [("Jour", 7, "none"), ("27", 7, "none")]
+
+
+def test_rule_six_comes_before_rule_seven() -> None:
+    witness = Witness("le chat", [("le", SURE), ("chut", 0.4)], b2=["le", "chit"], missing={0})
+    assert decide(witness) == [("le", 7, "none"), ("chat", 6, "queue")]
+
+
+def test_rule_nine_asks_for_a_and_b1_only() -> None:
+    witness = Witness("le chat", [("le", SURE), ("chat", 0.4)])
+    assert decide(witness) == [("le", 9, "none"), ("chat", 9, "none")]
+
+
+def test_the_three_readings_agreeing_are_harvested_by_rule_nine() -> None:
+    witness = Witness("le chat", [("le", SURE), ("chat", 0.4)], b2=["le", "chat"])
+    assert decide(witness) == [("le", 9, "none"), ("chat", 9, "none")]
+
+
+def test_rule_ten_keeps_the_word_a_did_not_read_when_the_passes_agree() -> None:
+    witness = Witness("le chat", [("le", SURE), None], b2=["le", "chat"])
+    assert decide(witness)[1] == ("chat", 10, "none")
+
+
+def test_the_passes_are_compared_in_their_form() -> None:
+    witness = Witness(f"l{CURLY}école Chat", [("l'école", SURE), ("chat", SURE)], b2=["l'école", "chat"])
+    assert decide(witness) == [(f"l{CURLY}école", 9, "none"), ("chat", 5, "layer")]
+
+
+def test_the_nine_rules_apply_each_in_its_place() -> None:
+    witness = Witness(
+        "15\nchat\nMarie\nfait\nvrai\nJour\nsol\noui\nnon",
+        [
+            ("16", SURE),
+            ("chat", SURE),
+            ("Marle", SURE),
+            ("fais", SURE),
+            None,
+            ("Jour", 0.5),
+            ("sal", 0.5),
+            ("oui", SURE),
+            None,
+        ],
+        b2=["16", "chut", "Marie", "fée", "vroi", None, "sol", "oui", "non"],
+        missing={5},
+    )
+    decided = decide(witness, level="journal", phonemes=FakePhonemes(HOMOPHONES), entities=FakeEntities({"Marie"}))
+    assert [rule for _, rule, _ in decided] == [2, 5, 3, 4, 6, 7, 8, 9, 10]
+
+
+@pytest.mark.parametrize(
+    ("b1", "b2", "a", "names", "missing", "expected"),
+    [
+        pytest.param("15", "16", "16", set(), set(), 2, id="2 before 5"),
+        pytest.param("Marie", "Marle", "Marie", {"Marie", "Marle"}, set(), 5, id="5 before 3"),
+        pytest.param("fait", "fait", "fais", {"fait"}, set(), 3, id="3 before 4"),
+        pytest.param("fait", "fée", "fais", set(), set(), 4, id="4 before 6"),
+        pytest.param("chat", "chit", "chut", set(), {0}, 6, id="6 before 7"),
+        pytest.param("chat", None, "chut", set(), {0}, 7, id="7 before 8"),
+    ],
+)
+def test_a_word_that_meets_two_conditions_gets_the_rule_that_comes_first(
+    b1: str, b2: str | None, a: str, names: set[str], missing: set[int], expected: int
+) -> None:
+    witness = Witness(f"le {b1}", [("le", SURE), (a, SURE)], b2=["le", b2], missing=missing)
+    decided = decide(witness, level="journal", phonemes=FakePhonemes(HOMOPHONES), entities=FakeEntities(names))
+    assert decided[1][1] == expected
+
+
+def test_a_second_reading_the_entities_refuse_is_told_apart_from_the_others() -> None:
+    class Refusing(FakeEntities):
+        def flags(self, text: str) -> list[bool]:
+            if text == "Marle dort":
+                raise too_complex()
+            return super().flags(text)
+
+    witness = Witness("Marie dort", [("Marie", SURE), ("dort", SURE)], b2=["Marle", "dort"])
+    with pytest.raises(SecondRefusedError):
+        decide(witness, entities=Refusing())
+
+
+def test_a_first_reading_the_entities_refuse_is_refused_as_before() -> None:
+    class Refusing(FakeEntities):
+        def flags(self, text: str) -> list[bool]:
+            raise too_complex()
+
+    witness = Witness("le chat", [("le", SURE), ("chat", SURE)], b2=["le", "chat"])
+    with pytest.raises(RefusalError):
+        decide(witness, entities=Refusing())
+
+
+def test_entities_of_b2_that_do_not_cover_its_words_are_refused() -> None:
+    class Short(FakeEntities):
+        def flags(self, text: str) -> list[bool]:
+            flags = super().flags(text)
+            return flags[:-1] if text == "le chut" else flags
+
+    witness = Witness("le chat", [("le", SURE), ("chat", SURE)], b2=["le", "chut"])
+    with pytest.raises(ValueError, match="entities"):
+        decide(witness, entities=Short())
+
+
+def test_an_english_page_never_asks_the_entities_of_b2() -> None:
+    witness = Witness("Paris by sea", [("Paris", SURE), ("by", SURE), ("sea", SURE)], b2=["Paris", "by", "see"])
+    entities = FakeEntities({"Paris"})
+    assert decide(witness, language="en", entities=entities)[2] == ("sea", 5, "layer")
+    assert entities.texts == []
+
+
+def test_a_page_without_a_second_reading_never_asks_for_one() -> None:
+    witness = Witness("Marie dort", [("Marie", SURE), ("dort", SURE)])
+    entities = FakeEntities({"Marie"})
+    decide(witness, entities=entities)
+    assert entities.texts == ["Marie dort", "Marie dort"]

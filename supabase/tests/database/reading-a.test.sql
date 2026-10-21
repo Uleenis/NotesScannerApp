@@ -65,9 +65,9 @@ select is(
   1::bigint,
   'the function that writes A runs with the rights of its owner'
 );
-select is(has_function_privilege('anon', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb)', 'execute'), false, 'a visitor cannot write A');
-select is(has_function_privilege('authenticated', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb)', 'execute'), false, 'a signed-in user cannot write A');
-select is(has_function_privilege('service_role', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb)', 'execute'), true, 'the server can write A');
+select is(has_function_privilege('anon', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb, jsonb)', 'execute'), false, 'a visitor cannot write A');
+select is(has_function_privilege('authenticated', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb, jsonb)', 'execute'), false, 'a signed-in user cannot write A');
+select is(has_function_privilege('service_role', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb, jsonb)', 'execute'), true, 'the server can write A');
 
 select pg_temp.as_server();
 

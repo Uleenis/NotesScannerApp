@@ -213,6 +213,10 @@ export class World {
     this.readings.push({ ...DEFAULT_B1_INPUT, rawText: text, userId, pageId });
   }
 
+  addB2(userId: string, pageId: string, text: string): void {
+    this.readings.push({ ...DEFAULT_B1_INPUT, label: "B2", rawText: text, userId, pageId });
+  }
+
   addReadingA(userId: string, pageId: string, words: number = 2): string {
     const path = `${userId}/${pageId}/a.xml`;
     this.alto.set(path, new TextEncoder().encode("<alto/>"));
@@ -458,17 +462,18 @@ export class World {
       setText: async (userId, pageId, readAgain) => {
         await this.tick("setText");
         const found = switchable(userId, pageId);
-        if (typeof found === "string") return { outcome: found, b1: null };
-        if (found.pageType === "text") return { outcome: "unchanged", b1: null };
+        if (typeof found === "string") return { outcome: found, b1: null, b2: null };
+        if (found.pageType === "text") return { outcome: "unchanged", b1: null, b2: null };
         const b1 = this.readings.filter((reading) => reading.pageId === pageId && reading.label === "B1");
-        if (b1.length !== 1) return { outcome: "no_reading", b1: null };
+        if (b1.length !== 1) return { outcome: "no_reading", b1: null, b2: null };
         found.pageType = "text";
         if (!readAgain || found.aRelaunches >= 3 || (found.aRelaunchedAt !== null && found.aRelaunchedAt > this.clock - 10 * 60_000)) {
-          return { outcome: "switched", b1: null };
+          return { outcome: "switched", b1: null, b2: null };
         }
         found.aRelaunches += 1;
         found.aRelaunchedAt = this.clock;
-        return { outcome: "switched", b1: b1[0].rawText };
+        const b2 = this.readings.find((reading) => reading.pageId === pageId && reading.label === "B2");
+        return { outcome: "switched", b1: b1[0].rawText, b2: b2?.rawText ?? null };
       },
       removeAlto: async (path) => {
         await this.tick("removeAlto");

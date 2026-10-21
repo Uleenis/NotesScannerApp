@@ -1,6 +1,6 @@
 import pytest
 
-from reading.alignment import Step, align_blocks, cells, letter_pairs, sub_cost
+from reading.alignment import Step, align_blocks, align_global, cells, letter_pairs, sub_cost
 
 
 def pairs(steps: list[Step]) -> list[tuple[int | None, int | None]]:
@@ -90,3 +90,22 @@ def test_the_work_grows_with_the_budgets_of_the_holes() -> None:
 def test_the_comparison_work_grows_with_the_letters_of_both_readings() -> None:
     assert letter_pairs(["abc", "de"], ["fghi"]) == 20
     assert letter_pairs([], ["fghi"]) == 0
+
+
+@pytest.mark.parametrize(
+    ("ref", "hyp", "expected"),
+    [
+        pytest.param(["le", "chat", "dort"], ["le", "chut", "dort"], [(0, 0), (1, 1), (2, 2)], id="substitution"),
+        pytest.param(["a", "b"], ["a", "x", "b"], [(0, 0), (None, 1), (1, 2)], id="insertion"),
+        pytest.param(["a", "b", "c"], ["a", "c"], [(0, 0), (1, None), (2, 1)], id="deletion"),
+        pytest.param(["a"], ["b"], [(0, 0)], id="a substitution is cheaper than a deletion and an insertion"),
+        pytest.param(["x", "y"], ["y", "x"], [(0, 0), (1, 1)], id="a tie goes to the substitution"),
+        pytest.param([], ["a", "b"], [(None, 0), (None, 1)], id="no reference"),
+        pytest.param(["a", "b"], [], [(0, None), (1, None)], id="no hypothesis"),
+        pytest.param([], [], [], id="nothing"),
+    ],
+)
+def test_the_global_aligner_pairs_as_the_disagreement_spike(
+    ref: list[str], hyp: list[str], expected: list[tuple[int | None, int | None]]
+) -> None:
+    assert align_global(ref, hyp) == expected
