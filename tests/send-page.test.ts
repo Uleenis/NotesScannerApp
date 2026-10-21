@@ -47,7 +47,7 @@ test("the page is created in the chosen notebook with the moment of the capture"
   const { deps } = makeDeps();
   await sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
 
-  expect(deps.createPage).toHaveBeenCalledWith(NOTEBOOK, NOW);
+  expect(deps.createPage).toHaveBeenCalledWith(NOTEBOOK, NOW, null);
 });
 
 test("the photo goes to the address the server prepared, with its token", async () => {
@@ -225,4 +225,11 @@ test("a photo the storage refuses is reported as a photo problem and never read"
 
   expect(result).toEqual({ status: "photo", pageId: "page-1" });
   expect(deps.startReading).not.toHaveBeenCalled();
+});
+
+test("a page sent for a chapter is created in that chapter", async () => {
+  const { deps } = makeDeps();
+  await sendPage(deps, { notebookId: NOTEBOOK, chapterId: "chapter-3", photoUri: PHOTO, pageId: null });
+
+  expect(deps.createPage).toHaveBeenCalledWith(NOTEBOOK, NOW, "chapter-3");
 });

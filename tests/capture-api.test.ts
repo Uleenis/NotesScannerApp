@@ -93,21 +93,21 @@ test("a failed read of the last notebook is an error", async () => {
 
 test("a page is created with its notebook, its source and its moment, and nothing else", async () => {
   const fake = pagesClient({ data: { id: "page-1" }, error: null });
-  const result = await insertPage(client(fake), "notebook-1", "2026-10-06T10:00:00.000Z");
+  const result = await insertPage(client(fake), "notebook-1", "2026-10-06T10:00:00.000Z", null);
 
   expect(fake.insert).toHaveBeenCalledWith({ notebook_id: "notebook-1", source: "camera", captured_at: "2026-10-06T10:00:00.000Z" });
   expect(result).toEqual({ status: "created", pageId: "page-1" });
 });
 
 test("a page that cannot be created is a failure, a lost network is a network failure", async () => {
-  expect(await insertPage(client(pagesClient({ data: null, error: { code: "42501", message: "denied" } })), "n", "t")).toEqual({
+  expect(await insertPage(client(pagesClient({ data: null, error: { code: "42501", message: "denied" } })), "n", "t", null)).toEqual({
     status: "failed",
   });
-  expect(await insertPage(client(pagesClient({ data: null, error: { message: "TypeError: Network request failed" } })), "n", "t")).toEqual({
+  expect(await insertPage(client(pagesClient({ data: null, error: { message: "TypeError: Network request failed" } })), "n", "t", null)).toEqual({
     status: "network",
   });
   const throwing = { from: () => ({ insert: () => ({ select: () => ({ single: () => Promise.reject(new TypeError("Network request failed")) }) }) }) };
-  expect(await insertPage(client(throwing), "n", "t")).toEqual({ status: "network" });
+  expect(await insertPage(client(throwing), "n", "t", null)).toEqual({ status: "network" });
 });
 
 function functionsClient(outcome: Outcome) {
@@ -210,7 +210,7 @@ test("a photo of exactly the limit is sent", async () => {
 
 test("a failure that is a TypeError is a network failure whatever its words", async () => {
   const insertThrows = { from: () => ({ insert: () => ({ select: () => ({ single: () => Promise.reject(new TypeError("Load failed")) }) }) }) };
-  expect(await insertPage(client(insertThrows), "n", "t")).toEqual({ status: "network" });
+  expect(await insertPage(client(insertThrows), "n", "t", null)).toEqual({ status: "network" });
   const prepareThrows = { functions: { invoke: () => Promise.reject(new TypeError("Load failed")) } };
   expect(await callPrepare(client(prepareThrows), "p")).toEqual({ status: "network" });
   const uploadThrows = { storage: { from: () => ({ uploadToSignedUrl: () => Promise.reject(new TypeError("Load failed")) }) } };
@@ -219,7 +219,7 @@ test("a failure that is a TypeError is a network failure whatever its words", as
 
 test("a database error with a code is never taken for a network failure", async () => {
   const error = { code: "42501", message: "connection to the database was denied" };
-  expect(await insertPage(client(pagesClient({ data: null, error })), "n", "t")).toEqual({ status: "failed" });
+  expect(await insertPage(client(pagesClient({ data: null, error })), "n", "t", null)).toEqual({ status: "failed" });
 });
 
 test("the page is marked as uploaded with the moment, and only that field is written", async () => {
@@ -282,12 +282,12 @@ test("a file that cannot be read is a failure and nothing is uploaded", async ()
 test("a lost network as the database client reports it, with an empty code, is a network failure", async () => {
   const lost = { message: "TypeError: Network request failed", details: "stack", hint: "", code: "" };
 
-  expect(await insertPage(client(pagesClient({ data: null, error: lost })), "n", "t")).toEqual({ status: "network" });
+  expect(await insertPage(client(pagesClient({ data: null, error: lost })), "n", "t", null)).toEqual({ status: "network" });
   expect(await markUploaded(client(pagesClient({ data: null, error: lost })), "p", "t")).toBe("network");
 });
 
 test("an empty code on an error that says nothing about the network is still a failure", async () => {
   const odd = { message: "something else", details: "", hint: "", code: "" };
 
-  expect(await insertPage(client(pagesClient({ data: null, error: odd })), "n", "t")).toEqual({ status: "failed" });
+  expect(await insertPage(client(pagesClient({ data: null, error: odd })), "n", "t", null)).toEqual({ status: "failed" });
 });

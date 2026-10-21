@@ -48,6 +48,7 @@ function record(overrides: Partial<PageRecord>): PageRecord {
   return {
     id: "page-1",
     notebookId: "notebook-1",
+    chapterId: null,
     status: "read",
     queueReason: null,
     capturedAt: "2026-09-26T12:32:00+00:00",
@@ -138,6 +139,7 @@ describe("listPages", () => {
       {
         id: "page-1",
         notebookId: "notebook-1",
+        chapterId: null,
         status: "queued",
         queueReason: "read_error",
         capturedAt: "2026-09-26T12:32:00+00:00",

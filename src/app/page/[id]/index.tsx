@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Redirect, Stack, router, useIsFocused, useLocalSearchParams } from "expo-router";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 
 import { useAuth } from "@/auth/auth-provider";
@@ -14,10 +14,13 @@ import { DocumentView } from "@/components/reading/document-view";
 import { PageThumbnail } from "@/components/reading/page-thumbnail";
 import { WaitingView, type ViewAction } from "@/components/reading/waiting-view";
 import { LoadError } from "@/components/load-error";
+import { MenuButton } from "@/components/menu-button";
 import { useStrings } from "@/i18n";
+import { confirmDeletion, showMenu } from "@/lib/action-menu";
 import { useNotebook } from "@/notebooks/queries";
+import type { DeleteResult } from "@/notebooks/removal";
 import type { NumberedPage, StartResult } from "@/pages/pages";
-import { usePage, usePhotoUrl, useStartReading } from "@/pages/queries";
+import { useDeletePage, usePage, usePhotoUrl, useStartReading } from "@/pages/queries";
 import { fadeDelay, readingView, startReadingDelay, type ReadingView } from "@/pages/reading-state";
 import { FADE_MS } from "@/pages/timing";
 import { colors } from "@/theme";
@@ -43,7 +46,8 @@ function LoadedPage({ page, notebookName, now, refetchPage }: LoadedPageProps) {
   const t = useStrings();
   const { userId } = useAuth();
   const queryClient = useQueryClient();
-  const openCapture = useOpenCapture(page.notebookId);
+  const openCapture = useOpenCapture(page.notebookId, page.chapterId);
+  const deletion = useDeletePage(page.id);
   const photo = usePhotoUrl(page.id);
   const start = useStartReading();
   const focused = useIsFocused();
@@ -152,6 +156,30 @@ function LoadedPage({ page, notebookName, now, refetchPage }: LoadedPageProps) {
     router.dismissTo(`/notebook/${page.notebookId}`);
   }
 
+  async function remove() {
+    const result = await deletion.mutateAsync().catch((): DeleteResult => ({ status: "error" }));
+    if (result.status === "deleted" || result.status === "missing") {
+      backToNotebook();
+    } else {
+      Alert.alert(result.status === "busy" ? t.pageMenu.deleteBusy : t.pageMenu.deleteFailed);
+    }
+  }
+
+  function openMenu() {
+    showMenu(
+      [
+        { label: t.pageMenu.move, onPress: () => router.push({ pathname: "/page/[id]/move", params: { id: page.id } }) },
+        {
+          label: t.pageMenu.delete,
+          destructive: true,
+          onPress: () =>
+            confirmDeletion(t.pageMenu.deleteTitle, t.pageMenu.deleteBody, { cancel: t.common.cancel, confirm: t.pageMenu.delete }, () => void remove()),
+        },
+      ],
+      t.common.cancel,
+    );
+  }
+
   function openPhoto() {
     router.push({ pathname: "/page/[id]/photo", params: { id: page.id } });
   }
@@ -201,7 +229,14 @@ function LoadedPage({ page, notebookName, now, refetchPage }: LoadedPageProps) {
         options={{
           headerBackVisible: false,
           headerLeft: () => <BackLink name={notebookName} label={t.common.back} onPress={backToNotebook} />,
-          headerRight: inDocument ? () => <PageThumbnail photoUrl={photo.data} open={!focused} onPress={openPhoto} /> : undefined,
+          headerRight: inDocument
+            ? () => (
+                <View style={styles.actions}>
+                  <MenuButton label={t.pageMenu.label} onPress={openMenu} />
+                  <PageThumbnail photoUrl={photo.data} open={!focused} onPress={openPhoto} />
+                </View>
+              )
+            : undefined,
         }}
       />
       {inDocument ? (
@@ -252,6 +287,11 @@ export default function PageScreen() {
 const styles = StyleSheet.create({
   fill: {
     flex: 1,
+  },
+  actions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
   },
   document: {
     backgroundColor: colors.paper,

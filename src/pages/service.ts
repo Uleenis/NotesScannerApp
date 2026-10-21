@@ -1,5 +1,20 @@
 import { getSupabase } from "@/lib/supabase";
-import { countPages, getPage, listPages, photoUrl, setPageType, startReading, type NumberedPage, type SetTypeResult, type StartResult, type SwitchableType } from "./pages";
+import type { DeleteResult } from "@/notebooks/removal";
+import {
+  countPages,
+  deletePage,
+  getPage,
+  listPages,
+  movePage,
+  photoUrl,
+  setPageType,
+  startReading,
+  type MoveResult,
+  type NumberedPage,
+  type SetTypeResult,
+  type StartResult,
+  type SwitchableType,
+} from "./pages";
 
 export type PageService = {
   list: () => Promise<NumberedPage[]>;
@@ -8,6 +23,8 @@ export type PageService = {
   photoUrl: (userId: string, pageId: string) => Promise<string>;
   startReading: (pageId: string) => Promise<StartResult>;
   setPageType: (pageId: string, pageType: SwitchableType) => Promise<SetTypeResult>;
+  move: (pageId: string, notebookId: string, chapterId: string | null) => Promise<MoveResult>;
+  remove: (pageId: string) => Promise<DeleteResult>;
 };
 
 export const pageService: PageService = {
@@ -17,4 +34,6 @@ export const pageService: PageService = {
   photoUrl: (userId, pageId) => photoUrl(getSupabase(), userId, pageId),
   startReading: (pageId) => startReading(getSupabase(), pageId),
   setPageType: (pageId, pageType) => setPageType(getSupabase(), pageId, pageType),
+  move: (pageId, notebookId, chapterId) => movePage(getSupabase(), pageId, notebookId, chapterId),
+  remove: (pageId) => deletePage(getSupabase(), pageId),
 };

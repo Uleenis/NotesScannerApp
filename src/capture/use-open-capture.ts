@@ -7,7 +7,7 @@ import { blockFor } from "./allowance";
 import { limitParams } from "./limit-route";
 import { freshAllowance, useAllowance } from "./queries";
 
-export function useOpenCapture(notebookId?: string): () => Promise<void> {
+export function useOpenCapture(notebookId?: string, chapterId?: string | null): () => Promise<void> {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
   useAllowance();
@@ -24,7 +24,13 @@ export function useOpenCapture(notebookId?: string): () => Promise<void> {
         router.push({ pathname: "/limit", params: limitParams(block) });
         return;
       }
-      router.push(notebookId === undefined ? "/capture" : { pathname: "/capture", params: { notebook: notebookId } });
+      if (notebookId === undefined) {
+        router.push("/capture");
+      } else if (chapterId === undefined || chapterId === null) {
+        router.push({ pathname: "/capture", params: { notebook: notebookId } });
+      } else {
+        router.push({ pathname: "/capture", params: { notebook: notebookId, chapter: chapterId } });
+      }
     } finally {
       opening.current = false;
     }

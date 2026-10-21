@@ -77,11 +77,17 @@ export async function fetchLatestNotebookId(client: CaptureClient): Promise<stri
   return typeof id === "string" ? id : null;
 }
 
-export async function insertPage(client: CaptureClient, notebookId: string, capturedAt: string): Promise<CreatePageResult> {
+export async function insertPage(
+  client: CaptureClient,
+  notebookId: string,
+  capturedAt: string,
+  chapterId: string | null,
+): Promise<CreatePageResult> {
   try {
+    const row: Record<string, string> = { notebook_id: notebookId, source: "camera", captured_at: capturedAt };
     const { data, error } = await client
       .from("pages")
-      .insert({ notebook_id: notebookId, source: "camera", captured_at: capturedAt })
+      .insert(chapterId === null ? row : { ...row, chapter_id: chapterId })
       .select("id")
       .single();
     const id = field(data, "id");

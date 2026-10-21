@@ -3,7 +3,8 @@ import { useIsFocused } from "expo-router";
 import { useEffect, useRef } from "react";
 
 import { useAuth } from "@/auth/auth-provider";
-import type { PageStatus, SetTypeResult, StartResult, SwitchableType } from "./pages";
+import type { DeleteResult } from "@/notebooks/removal";
+import type { MoveResult, PageStatus, SetTypeResult, StartResult, SwitchableType } from "./pages";
 import { pageService } from "./service";
 import { LIST_POLL_MS, PAGE_POLL_MS } from "./timing";
 
@@ -18,6 +19,7 @@ export function refreshPages(queryClient: QueryClient, userId: string | null): P
     queryClient.invalidateQueries({ queryKey: ["pages", userId] }),
     queryClient.invalidateQueries({ queryKey: ["notebooks", userId] }),
     queryClient.invalidateQueries({ queryKey: ["notebook", userId] }),
+    queryClient.invalidateQueries({ queryKey: ["chapters", userId] }),
     queryClient.invalidateQueries({ queryKey: ["allowance", userId] }),
     queryClient.invalidateQueries({ queryKey: ["latest-notebook", userId] }),
   ]);
@@ -89,6 +91,31 @@ export function useSetPageType(pageId: string) {
     mutationFn: (pageType) => pageService.setPageType(pageId, pageType),
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] });
+    },
+  });
+}
+
+export function useMovePage(pageId: string) {
+  const { userId } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation<MoveResult, Error, { notebookId: string; chapterId: string | null }>({
+    mutationFn: ({ notebookId, chapterId }) => pageService.move(pageId, notebookId, chapterId),
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] });
+      await refreshPages(queryClient, userId);
+    },
+  });
+}
+
+export function useDeletePage(pageId: string) {
+  const { userId } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation<DeleteResult, Error, void>({
+    mutationFn: () => pageService.remove(pageId),
+    onSuccess: (result) => {
+      if (result.status === "deleted" || result.status === "missing") {
+        void refreshPages(queryClient, userId);
+      }
     },
   });
 }

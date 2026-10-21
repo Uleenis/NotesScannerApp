@@ -2,6 +2,7 @@ import { FunctionsFetchError, FunctionsHttpError, type SupabaseClient } from "@s
 
 import type { BlockReason } from "@/capture/allowance";
 import { field, isBlockReason, looksLikeNetworkFailure, refusalCode } from "@/capture/api";
+import { callDeletion, callLibrary, type DeleteResult, type LibraryFailure } from "@/notebooks/removal";
 import { parseMoment } from "./dates";
 
 export type PageStatus = "queued" | "processing" | "read" | "failed";
@@ -15,6 +16,7 @@ export type SwitchableType = Exclude<PageType, "unsupported_script">;
 export type PageRecord = {
   id: string;
   notebookId: string;
+  chapterId: string | null;
   status: PageStatus;
   queueReason: QueueReason | null;
   capturedAt: string;
@@ -25,6 +27,8 @@ export type PageRecord = {
 };
 
 export type NumberedPage = PageRecord & { number: number };
+
+export type MoveResult = { status: "moved" } | { status: LibraryFailure };
 
 export type PagesClient = Pick<SupabaseClient, "from" | "functions" | "storage">;
 
@@ -42,7 +46,7 @@ export type StartResult =
 
 export type SetTypeResult = { status: "done"; pageType: SwitchableType } | { status: "refused" } | { status: "network" } | { status: "error" };
 
-const PAGE_COLUMNS = "id, notebook_id, status, queue_reason, captured_at, uploaded_at, attempted_at, page_type, page_texts(text)";
+const PAGE_COLUMNS = "id, notebook_id, chapter_id, status, queue_reason, captured_at, uploaded_at, attempted_at, page_type, page_texts(text)";
 
 const STATUSES: readonly string[] = ["queued", "processing", "read", "failed"];
 const QUEUE_REASONS: readonly string[] = ["read_error", "offline"];
@@ -59,6 +63,7 @@ function readText(embedded: unknown): string | null {
 function readPage(value: unknown): PageRecord {
   const id = field(value, "id");
   const notebookId = field(value, "notebook_id");
+  const chapterId = field(value, "chapter_id") ?? null;
   const status = field(value, "status");
   const queueReason = field(value, "queue_reason") ?? null;
   const capturedAt = field(value, "captured_at");
@@ -68,6 +73,7 @@ function readPage(value: unknown): PageRecord {
   if (
     typeof id !== "string" ||
     typeof notebookId !== "string" ||
+    (chapterId !== null && typeof chapterId !== "string") ||
     typeof status !== "string" ||
     !STATUSES.includes(status) ||
     (queueReason !== null && (typeof queueReason !== "string" || !QUEUE_REASONS.includes(queueReason))) ||
@@ -82,6 +88,7 @@ function readPage(value: unknown): PageRecord {
   return {
     id,
     notebookId,
+    chapterId,
     status: status as PageStatus,
     queueReason: queueReason as QueueReason | null,
     capturedAt,
@@ -224,4 +231,16 @@ export async function setPageType(client: PagesClient, pageId: string, pageType:
   } catch (error) {
     return { status: looksLikeNetworkFailure(error) ? "network" : "error" };
   }
+}
+
+export function deletePage(client: PagesClient, pageId: string): Promise<DeleteResult> {
+  return callDeletion(client, "delete-page", { page_id: pageId });
+}
+
+export async function movePage(client: PagesClient, pageId: string, notebookId: string, chapterId: string | null): Promise<MoveResult> {
+  const call = await callLibrary(client, "move-page", { page_id: pageId, notebook_id: notebookId, chapter_id: chapterId });
+  if (call.status !== "answered") {
+    return { status: call.status };
+  }
+  return typeof field(call.data, "moved") === "boolean" ? { status: "moved" } : { status: "error" };
 }

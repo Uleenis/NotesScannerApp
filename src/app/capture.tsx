@@ -73,7 +73,15 @@ function Stage({ camera, flash, shotFailed, counter, onShoot }: StageProps) {
   );
 }
 
-function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[]; requested: string | undefined }) {
+function Capture({
+  notebooks: list,
+  requested,
+  requestedChapter,
+}: {
+  notebooks: NotebookSummary[];
+  requested: string | undefined;
+  requestedChapter: string | undefined;
+}) {
   const t = useStrings();
   const offline = useOffline();
   const access = useCameraAccess();
@@ -222,7 +230,9 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
     busy.current = true;
     setFailure(null);
     try {
-      const result = await send.mutateAsync({ notebookId: selected.id, photoUri, pageId }).catch((): SendResult => ({ status: "failed", pageId }));
+      const chapterId = requestedChapter !== undefined && selected.id === requested ? requestedChapter : null;
+      const input = chapterId === null ? { notebookId: selected.id, photoUri, pageId } : { notebookId: selected.id, chapterId, photoUri, pageId };
+      const result = await send.mutateAsync(input).catch((): SendResult => ({ status: "failed", pageId }));
       if (!mounted.current) {
         return;
       }
@@ -307,7 +317,7 @@ function Capture({ notebooks: list, requested }: { notebooks: NotebookSummary[];
 }
 
 export default function CaptureScreen() {
-  const { notebook: requested } = useLocalSearchParams<{ notebook?: string }>();
+  const { notebook: requested, chapter: requestedChapter } = useLocalSearchParams<{ notebook?: string; chapter?: string }>();
   const t = useStrings();
   const offline = useOffline();
   const notebooks = useNotebooks();
@@ -327,7 +337,7 @@ export default function CaptureScreen() {
   if (list.length === 0) {
     return <Redirect href="/" />;
   }
-  return <Capture notebooks={list} requested={requested} />;
+  return <Capture notebooks={list} requested={requested} requestedChapter={requestedChapter} />;
 }
 
 const styles = StyleSheet.create({

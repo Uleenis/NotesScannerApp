@@ -20,7 +20,7 @@ export type CaptureService = {
 function realDeps(onReadingSettled?: () => void): SendDeps {
   const client = getSupabase();
   return {
-    createPage: (notebookId, capturedAt) => insertPage(client, notebookId, capturedAt),
+    createPage: (notebookId, capturedAt, chapterId) => insertPage(client, notebookId, capturedAt, chapterId),
     preparePage: (pageId) => callPrepare(client, pageId),
     upload: (path, token, photoUri) => uploadPhotoFile(client, new File(photoUri), path, token),
     markUploaded: (pageId, uploadedAt) => markUploaded(client, pageId, uploadedAt),
