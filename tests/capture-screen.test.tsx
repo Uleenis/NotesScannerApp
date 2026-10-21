@@ -26,6 +26,8 @@ import {
 import { histoire, installFakeNotebooks, sciences } from "./fake-notebook-service";
 import { phoneLocale } from "./phone-locale";
 
+jest.setTimeout(30_000);
+
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
 jest.mock("expo-camera", () => require("./fake-camera").cameraModule);
 jest.mock("expo-network", () => ({ useNetworkState: jest.fn() }));
