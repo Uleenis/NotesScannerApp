@@ -27,6 +27,7 @@ export function page(overrides: Partial<NumberedPage> = {}): NumberedPage {
   return {
     id: "page-1",
     notebookId: histoire.id,
+    chapterId: null,
     status: "read",
     queueReason: null,
     capturedAt: localMoment(8, 26, 14, 32),

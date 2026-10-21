@@ -19,7 +19,7 @@ jest.mock("@/auth/default-services", () => ({
 jest.mock("@/auth/account-service", () => require("./account-service-module").accountServiceModule);
 
 jest.mock("@/notebooks/service", () => ({
-  notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn() },
+  notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn(), chapters: jest.fn(async () => []) },
 }));
 
 jest.mock("expo-camera", () => require("./fake-camera").cameraModule);

@@ -50,6 +50,7 @@ export function useSendPage() {
       queryClient.invalidateQueries({ queryKey: ["pages", userId] }),
       queryClient.invalidateQueries({ queryKey: ["notebooks", userId] }),
       queryClient.invalidateQueries({ queryKey: ["notebook", userId] }),
+      queryClient.invalidateQueries({ queryKey: ["chapters", userId] }),
       queryClient.invalidateQueries({ queryKey: ["allowance", userId] }),
       queryClient.invalidateQueries({ queryKey: ["latest-notebook", userId] }),
     ]);

@@ -17,7 +17,7 @@ jest.mock("@/auth/default-services", () => ({
   defaultAuthServices: { watch: () => () => undefined, ensureSession: jest.fn(), syncLanguage: jest.fn() },
 }));
 jest.mock("@/auth/account-service", () => require("./account-service-module").accountServiceModule);
-jest.mock("@/notebooks/service", () => ({ notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn() } }));
+jest.mock("@/notebooks/service", () => ({ notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn(), chapters: jest.fn(async () => []) } }));
 jest.mock("@/capture/service", () => ({
   captureService: { allowance: jest.fn(), latestNotebookId: jest.fn(), send: jest.fn() },
 }));

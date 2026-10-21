@@ -6,10 +6,10 @@ import { useOpenCapture } from "@/capture/use-open-capture";
 import { useStrings } from "@/i18n";
 import { colors, typography } from "@/theme";
 
-export function ScanButton({ notebookId }: { notebookId?: string }) {
+export function ScanButton({ notebookId, chapterId }: { notebookId?: string; chapterId?: string }) {
   const t = useStrings();
   const insets = useSafeAreaInsets();
-  const open = useOpenCapture(notebookId);
+  const open = useOpenCapture(notebookId, chapterId);
 
   return (
     <View pointerEvents="box-none" style={[styles.container, { bottom: insets.bottom + 24 }]}>

@@ -8,6 +8,12 @@ export type CreateNotebookResult =
   | { status: "duplicate"; name: string }
   | { status: "failed" };
 
+export type RenameNotebookResult =
+  | { status: "renamed"; notebook: NotebookSummary }
+  | { status: "empty" }
+  | { status: "duplicate"; name: string }
+  | { status: "failed" };
+
 export type NotebookClient = Pick<SupabaseClient, "from">;
 
 const UNIQUE_VIOLATION = "23505";
@@ -107,6 +113,26 @@ export async function createNotebook(client: NotebookClient, rawName: string): P
     }
     const notebook = inserted.error ? null : readNotebook(inserted.data);
     return notebook === null ? { status: "failed" } : { status: "created", notebook };
+  } catch {
+    return { status: "failed" };
+  }
+}
+
+export async function renameNotebook(client: NotebookClient, id: string, rawName: string): Promise<RenameNotebookResult> {
+  const name = rawName.trim();
+  if (name === "") {
+    return { status: "empty" };
+  }
+  try {
+    const updated = await client.from("notebooks").update({ name }).eq("id", id).select("id, name").single();
+    if (updated.error?.code === UNIQUE_VIOLATION) {
+      return { status: "duplicate", name };
+    }
+    if (updated.error?.code === CHECK_VIOLATION) {
+      return { status: "empty" };
+    }
+    const notebook = updated.error ? null : readNotebook(updated.data);
+    return notebook === null ? { status: "failed" } : { status: "renamed", notebook };
   } catch {
     return { status: "failed" };
   }

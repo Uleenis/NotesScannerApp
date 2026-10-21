@@ -20,7 +20,7 @@ jest.mock("@/auth/default-services", () => ({
   },
 }));
 jest.mock("@/notebooks/service", () => ({
-  notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn() },
+  notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn(), chapters: jest.fn(async () => []) },
 }));
 jest.mock("expo-splash-screen", () => ({
   preventAutoHideAsync: jest.fn(),

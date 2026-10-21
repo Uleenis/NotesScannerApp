@@ -65,8 +65,20 @@ export default function RootLayout() {
                 contentStyle: { backgroundColor: colors.sheet },
               }}
             />
+            <Stack.Screen
+              name="page/[id]/move"
+              options={{
+                presentation: "formSheet",
+                headerShown: false,
+                sheetAllowedDetents: [0.5, 1],
+                sheetGrabberVisible: true,
+                contentStyle: { backgroundColor: colors.sheet },
+              }}
+            />
             <Stack.Screen name="account" options={{ presentation: "modal" }} />
             <Stack.Screen name="new-notebook" options={{ presentation: "modal" }} />
+            <Stack.Screen name="new-chapter" options={{ presentation: "modal" }} />
+            <Stack.Screen name="rename" options={{ presentation: "modal" }} />
             <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />
           </Stack>
         </QueryClientProvider>
