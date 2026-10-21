@@ -100,6 +100,11 @@ select set_eq(
       ('pages', 'captured_at', 'insert'),
       ('pages', 'position', 'update'),
       ('pages', 'uploaded_at', 'update'),
+      ('corrections', 'page_id', 'insert'),
+      ('corrections', 'token_index', 'insert'),
+      ('corrections', 'corrected_text', 'insert'),
+      ('corrections', 'chosen_from', 'insert'),
+      ('corrections', 'from_queue', 'insert'),
       ('profiles', 'interface_language', 'update')
   $$,
   'the columns a user can write are exactly the ones the client may decide'
