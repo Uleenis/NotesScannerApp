@@ -6,8 +6,8 @@ Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** `t4/schema`.
-- **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section. Create the folder with the first branch.
+- **Next branch:** `t4/second-pass`.
+- **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
 - **Slice 3 is done** (PRs 46, 49 to 53 and the PR of `t3/screens`): its Bilan is `../Tranche 3/Bilan.md`, its decisions `../Tranche 3/Décisions.md`, and the phone checks of slices 2 and 3 are in `../Vérifications 1.md`, for the owner's return.
@@ -17,7 +17,7 @@ Paths below are from the repository root.
 
 | # | Branch | Criteria | Level | Session | Merged by | State |
 |---|---|---|---|---|---|---|
-| 1 | `t4/schema` | 4, 5 | sensitive (access rights) | Sonnet, High | Claude | to do |
+| 1 | `t4/schema` | 4, 5 | sensitive (access rights) | Sonnet, High | Claude | done (PR 58) |
 | 2 | `t4/second-pass` | 1, 2 | sensitive (model call) | Sonnet, High | Claude | to do |
 | 3 | `t4/rules` | 3 | ordinary | Sonnet, High | Claude | to do |
 | 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | to do |
@@ -70,3 +70,11 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 
 - `t3/screens` adds the chapter screen (`/chapter/[id]`), the sheets `new-chapter`, `rename` and `page/[id]/move`, and the menus (`ActionSheetIOS`, `Alert`) of the notebook, the chapter and the page. `pages` carry `chapterId`; `chapters` are a query of their own (`["chapters", userId]`, refreshed with the pages).
 - Set aside after review: a stale chapter in the capture route (deleted elsewhere while the camera is open) fails the send until the user leaves the screen; the back link of a page leads to its notebook, not its chapter; the move sheet shows no progress while it waits. The `pages(count)` embed of `listChapters` answers on the local stack; no page was read through it with real rows.
+
+## Notes carried from slice 4, branch 1
+
+- `t4/schema` (migration `20261024120000_t4_schema.sql`) adds `corrections`, `page_alerts`, and to `page_tokens` `reading_b2`, `review_status` and the place of the word in B1 (`b1_start`, `b1_end`, in characters of the raw text of the B1 reading). `record_reading_a` keeps its signature and now reads `reading_b2`, `b1_start` and `b1_end` from each token object: `t4/rules` makes the service send them (the offsets must be in the raw text of B1, not in the NFC form `tokens.py` uses, if the two differ), and `t4/second-pass` writes the B2 row in `readings` (one B2 a page at most). The text a page shows is rebuilt by `private.recompute_page_text` from B1, the places and the corrections; a page whose positions have no place keeps its text, and a correction on such a position is refused.
+- The mode "Modifier" (`t4/edit`) keeps words added and line changes outside the positions: the rebuilt text is B1 plus word replacements only, so that branch needs its own place for the text of the user (and `recompute_page_text` must respect it).
+- `set_page_math` erases the corrections with the positions: `t4/correction` should ask for a confirmation before the switch when the page has corrections ("Pour Tim" of slice 4). The `math_incomplete` alert is not cleared on math to text: `t4/math-check` decides.
+- `corrections-race.sh` is not in `db:test:concurrency` until the owner applies `../Tranche 4/t4-schema package.json.patch`; run it by hand after a `db reset`.
+- A function that runs many times on a page must force custom plans (`set plan_cache_mode = 'force_custom_plan'`, as `recompute_page_text` does): PostgreSQL switches to a generic plan at the sixth call and the page-sized queries went from 2.5 ms to 145 ms.
