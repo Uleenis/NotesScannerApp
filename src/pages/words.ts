@@ -14,7 +14,9 @@ export type WordRecord = {
 
 export type CorrectionRecord = { tokenIndex: number; revision: number; text: string };
 
-export type PageWords = { words: WordRecord[]; corrections: CorrectionRecord[] };
+export type GapRecord = { index: number; text: string };
+
+export type PageWords = { words: WordRecord[]; corrections: CorrectionRecord[]; gaps: GapRecord[] };
 
 export type Source = "A" | "B1" | "B2";
 
@@ -38,6 +40,7 @@ const MAX_WORD_LENGTH = 100;
 
 const TOKEN_COLUMNS = "token_index, line_index, text, reading_a, reading_b1, reading_b2, b1_start, b1_end";
 const CORRECTION_COLUMNS = "token_index, revision, corrected_text";
+const GAP_COLUMNS = "gap_index, text";
 
 const FORBIDDEN_RANGES: readonly (readonly [number, number])[] = [
   [0x0001, 0x0020],
@@ -135,6 +138,15 @@ function readCorrection(row: unknown): CorrectionRecord {
   return { tokenIndex, revision, text };
 }
 
+function readGap(row: unknown): GapRecord {
+  const index = field(row, "gap_index");
+  const text = field(row, "text");
+  if (!isIndex(index) || typeof text !== "string") {
+    throw new Error("A gap could not be read.");
+  }
+  return { index, text };
+}
+
 async function readAll(read: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>): Promise<unknown[]> {
   const rows: unknown[] = [];
   for (let at = 0; at < MAX_READS; at += 1) {
@@ -157,7 +169,8 @@ export async function listWords(client: PagesClient, pageId: string): Promise<Pa
   const corrections = await readAll((from, to) =>
     client.from("corrections").select(CORRECTION_COLUMNS).eq("page_id", pageId).order("token_index").order("revision").range(from, to),
   );
-  return { words: words.map(readWord), corrections: corrections.map(readCorrection) };
+  const gaps = await readAll((from, to) => client.from("page_gaps").select(GAP_COLUMNS).eq("page_id", pageId).order("gap_index").range(from, to));
+  return { words: words.map(readWord), corrections: corrections.map(readCorrection), gaps: gaps.map(readGap) };
 }
 
 export function placeWords(text: string, data: PageWords): PlacedWord[] | null {
@@ -182,17 +195,34 @@ export function placeWords(text: string, data: PageWords): PlacedWord[] | null {
     return null;
   }
 
+  const gapAt = new Map<number, string>();
+  for (const gap of data.gaps) {
+    if (gapAt.has(gap.index)) {
+      return null;
+    }
+    gapAt.set(gap.index, gap.text);
+  }
+  const ordered = [...data.words].sort((a, b) => a.index - b.index);
+  if ([...gapAt.keys()].some((index) => index > ordered.length)) {
+    return null;
+  }
+
   const placed: PlacedWord[] = [];
-  let delta = 0;
+  let cursor = 0;
   let rawEnd = 0;
-  for (const word of [...data.words].sort((a, b) => a.index - b.index)) {
+  for (const [at, word] of ordered.entries()) {
     if (word.start === null || word.end === null || word.start < rawEnd) {
+      return null;
+    }
+    const before = gapAt.get(at);
+    const gapLength = before === undefined ? word.start - rawEnd : Array.from(before).length;
+    if (before !== undefined && points.slice(cursor, cursor + gapLength).join("") !== before) {
       return null;
     }
     const correction = latest.get(word.index);
     const rewritten = correction !== undefined ? correction.text : word.text !== word.readingB1 ? word.text : null;
     const length = rewritten === null ? word.end - word.start : Array.from(rewritten).length;
-    const start = word.start + delta;
+    const start = cursor + gapLength;
     const end = start + length;
     if (end > points.length) {
       return null;
@@ -202,8 +232,12 @@ export function placeWords(text: string, data: PageWords): PlacedWord[] | null {
       return null;
     }
     placed.push({ word, start: units[start], end: units[end], shown, suggestions: suggestionsFor(word) });
-    delta += length - (word.end - word.start);
+    cursor = end;
     rawEnd = word.end;
+  }
+  const tail = gapAt.get(ordered.length);
+  if (tail !== undefined && points.slice(cursor).join("") !== tail) {
+    return null;
   }
   return placed;
 }

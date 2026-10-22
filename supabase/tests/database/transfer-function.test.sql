@@ -93,6 +93,10 @@ insert into public.corrections (user_id, page_id, token_index, corrected_text, c
 insert into public.page_alerts (user_id, page_id, kind) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', 'missing_line');
 
+insert into public.page_gaps (user_id, page_id, gap_index, text) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', 1, E' ok
+');
+
 insert into public.page_charges (user_id, page_id, charged_at) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000001', now()),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a3000000-0000-0000-0000-000000000002', now() - interval '70 days'),
@@ -159,7 +163,7 @@ select is(has_function_privilege('service_role', 'public.transfer_account_rows(u
 
 select ok(pg_temp.user_tables() >= 7, 'the check for leftover rows looks at every table that has a user_id');
 
-select is(pg_temp.leftovers('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 20::bigint, 'the giving account holds 2 notebooks, 1 chapter, 3 pages, 3 images, 2 readings, 1 text, 4 charges, 2 positions, 1 correction and 1 alert before the transfer');
+select is(pg_temp.leftovers('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 21::bigint, 'the giving account holds 2 notebooks, 1 chapter, 3 pages, 3 images, 2 readings, 1 text, 4 charges, 2 positions, 1 correction, 1 alert and 1 text of the user before the transfer');
 
 create temp table bystander_before as select pg_temp.rows_of('cccccccc-cccc-cccc-cccc-cccccccccccc') as n;
 
@@ -242,9 +246,10 @@ select is(
 
 select is(
   (select count(*) from public.corrections where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001')
-    + (select count(*) from public.page_alerts where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001'),
-  2::bigint,
-  'the correction and the alert moved with their page'
+    + (select count(*) from public.page_alerts where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001')
+    + (select count(*) from public.page_gaps where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and page_id = 'a3000000-0000-0000-0000-000000000001'),
+  3::bigint,
+  'the correction, the alert and the text of the user moved with their page'
 );
 
 select is(

@@ -1,12 +1,12 @@
 # Current slice
 
-Slice 4 — Vérification.
+Slice 4 — Vérification (done).
 
 Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** `t4/edit` (branch 7, the last of the slice), after `t4/correction` (PRs 58 to 62, `t4/schema`, `t4/second-pass`, `t4/rules`, `t4/replay` and `t4/math-check`, and PR 64, `t4/correction`, are merged).
+- **Next branch:** none. Slice 4 is done: its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`. The slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 7 next; no document of slice 7 is in `../../02 Design/` yet, so the next session stops and asks for it.
 - **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
@@ -23,7 +23,7 @@ Paths below are from the repository root.
 | 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | done, PR 61 merged |
 | 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | done, PR 62 merged |
 | 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | done, PR 64 merged |
-| 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan and the status of `AGENTS.md` (no Cloud Run: it is in the pre-beta slice) |
+| 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | done, PR to merge; last of the slice: Bilan and status of `AGENTS.md` written |
 
 ## Slice 3
 
@@ -112,3 +112,11 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - The mode "Modifier" can reuse `displayPieces` and `placeWords`; the alerts (`missing_line`, `math_incomplete`) are read by the app through its own select policy on `page_alerts`, next to the title.
 - The phone check (criterion 11) must look at: the correction bar above the keyboard (header height under `KeyboardAvoidingView`), the tapped word staying visible, and VoiceOver reaching a word (nested `Text` in a selectable `Text`).
 - `pageService` gained `words` and `correct`: every test that mocks it by hand lists them.
+
+## Notes carried from slice 4, branch 7
+
+- `t4/edit` adds the "Modifier" mode and the alerts next to the title. Migration `20261027120000_t4_edit.sql`: `page_gaps` (the text of the user between the words: gap `n` comes before the position of rank `n`, the last after the last position, and a page of math has its whole text in gap 0), `edit_page` (server only), a new `recompute_page_text` that takes a gap when there is one, empty corrections written by the server only (a deleted word), gaps erased by `set_page_math` and `set_page_text`, gaps moved by `transfer_account_rows`. Edge Function `edit-page` (no `config.toml` section: the default `verify_jwt` is true; optional patch `../Tranche 4/t4-edit config.toml.patch`). Client: `src/pages/edit.ts` (`alignEdit`, `editPage`), `alerts.ts`, `use-text-edit.ts`, `words.ts` reads `page_gaps` and `placeWords` takes them, `page-text-edit.tsx`.
+- `PageWords` has a third list, `gaps`; every test that mocks `pageService` by hand lists `edit` and `alerts` as well as `words` and `correct`.
+- `edit-race.sh` is in `db:test:concurrency` only once the owner applies `../Tranche 4/t4-schema package.json.patch` (it now adds `corrections-race.sh` and `edit-race.sh`); run both by hand after a `db reset`.
+- The migrations of slice 4 (`20261024120000_t4_schema.sql`, `20261025120000_t4_rules.sql`, `20261026120000_t4_math_check.sql`, `20261027120000_t4_edit.sql`) go to production with those of slices 2 and 3 in the pre-beta slice, the owner's; deploy `read-page`, `relaunch-page`, `set-page-type` and `edit-page` only after them.
+- Not on the phone yet: criterion 11 (keyboard bars, VoiceOver, English then French). The points to look at are in `../Tranche 4/Décisions.md`.

@@ -31,6 +31,10 @@ export function PieceText({ pieces, words, editing, onEdit, ...rest }: PieceText
     }
     while (next < words.length && words[next].end <= to) {
       const placed = words[next];
+      if (placed.start === placed.end) {
+        next += 1;
+        continue;
+      }
       if (placed.start > cursor) {
         children.push(piece.text.slice(cursor - from, placed.start - from));
       }

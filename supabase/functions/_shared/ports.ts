@@ -201,3 +201,19 @@ export type RelaunchPageDeps = ReadingDeps & {
   secret: string;
   reader: PageReader;
 };
+
+export type EditOutcome = "edited" | "page_not_found" | "page_not_read" | "unsupported_script" | "not_editable" | "text_mismatch" | "invalid_edit";
+
+export type EditedWord = { token_index: number; text: string };
+
+export type EditedGap = { gap_index: number; text: string };
+
+export type EditStore = {
+  editPage: (userId: string, pageId: string, text: string, words: readonly EditedWord[], gaps: readonly EditedGap[]) => Promise<EditOutcome>;
+};
+
+export type EditDeps = {
+  auth: Auth;
+  edits: EditStore;
+  log: Logger;
+};

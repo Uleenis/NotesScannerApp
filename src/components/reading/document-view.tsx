@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { KeyboardAvoidingView, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import { useStrings } from "@/i18n";
 import { dateParts } from "@/pages/dates";
@@ -7,17 +7,19 @@ import { displayPieces } from "@/pages/display";
 import { mathDocument, type MathRow } from "@/pages/formulas";
 import type { NumberedPage, PageType } from "@/pages/pages";
 import { confirmDeletion } from "@/lib/action-menu";
-import { useCorrectWord, usePageWords, useSetPageType } from "@/pages/queries";
+import { useCorrectWord, usePageAlerts, usePageWords, useSetPageType } from "@/pages/queries";
 import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
+import { useTextEdit } from "@/pages/use-text-edit";
 import { placeWords, type ChosenFrom, type PlacedWord } from "@/pages/words";
 import { colors, typography } from "@/theme";
 import { Formula } from "./formula";
+import { PageTextBar, PageTextField } from "./page-text-edit";
 import { PieceText } from "./piece-text";
 import { WordEditor } from "./word-editor";
 
 const BLOCK_SPACING = typography.documentBody.lineHeight * 0.4;
 
-function MathSwitch({ page, mayLoseCorrections }: { page: NumberedPage; mayLoseCorrections: boolean }) {
+function MathSwitch({ page, mayLoseWork }: { page: NumberedPage; mayLoseWork: boolean }) {
   const t = useStrings();
   const change = useSetPageType(page.id);
   const stored = page.pageType === "math";
@@ -36,8 +38,8 @@ function MathSwitch({ page, mayLoseCorrections }: { page: NumberedPage; mayLoseC
   }
 
   function ask(math: boolean) {
-    if (math && mayLoseCorrections) {
-      confirmDeletion(t.document.switchLosesTitle, t.document.switchLosesBody, { cancel: t.common.cancel, confirm: t.document.switchLosesConfirm }, () => void toggle(true));
+    if (mayLoseWork) {
+      confirmDeletion(t.document.switchLosesTitle, t.document.switchLosesBody, { cancel: t.common.cancel, confirm: t.document.switchLosesConfirm }, () => void toggle(math));
     } else {
       void toggle(math);
     }
@@ -94,8 +96,10 @@ export function DocumentView({ page }: { page: NumberedPage }) {
   const parts = dateParts(page.capturedAt, new Date());
   const info = parts === null ? t.document.pageNumber(page.number) : t.document.info(page.number, t.dates.long(parts.day, parts.month, parts.year));
 
-  const correctable = page.pageType === "text" && page.status === "read";
-  const stored = usePageWords(page.id, correctable, page.text ?? "");
+  const read = page.status === "read";
+  const correctable = page.pageType === "text" && read;
+  const stored = usePageWords(page.id, read && (page.pageType === "text" || page.pageType === "math"), page.text ?? "", page.pageType === "text");
+  const alerts = usePageAlerts(page.id, read && page.pageType !== "unsupported_script");
   const correct = useCorrectWord(page.id);
   const [editing, setEditing] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
@@ -104,7 +108,11 @@ export function DocumentView({ page }: { page: NumberedPage }) {
     [correctable, stored.data, page.text],
   );
   const current = editing === null ? null : (words.find((placed) => placed.word.index === editing) ?? null);
-  const mayLoseCorrections = stored.data === undefined || stored.data.corrections.length > 0;
+  const mayLoseWork = stored.data === undefined || stored.data.corrections.length > 0 || stored.data.gaps.length > 0;
+  const textEdit = useTextEdit(page, words);
+  const editable = read && ((page.pageType === "text" && words.length > 0) || page.pageType === "math");
+  const writing = textEdit.draft !== null;
+  const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "missing_line" ? page.pageType === "text" : page.pageType === "math"));
 
   function edit(index: number) {
     setFailed(false);
@@ -125,43 +133,74 @@ export function DocumentView({ page }: { page: NumberedPage }) {
     }
   }
 
+  const title =
+    laid !== null ? (
+      <PieceText
+        accessibilityRole="header"
+        selectable
+        style={styles.title}
+        pieces={laid.title ?? [{ text: t.document.pageNumber(page.number), offset: null }]}
+        words={words}
+        editing={editing}
+        onEdit={edit}
+      />
+    ) : (
+      <Text accessibilityRole="header" selectable style={styles.title}>
+        {math?.title ?? t.document.pageNumber(page.number)}
+      </Text>
+    );
+
   return (
     <KeyboardAvoidingView behavior="padding" style={styles.fill}>
       <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled">
-        <Text style={styles.info}>{info}</Text>
-        {laid !== null ? (
-          <PieceText
-            accessibilityRole="header"
-            selectable
-            style={styles.title}
-            pieces={laid.title ?? [{ text: t.document.pageNumber(page.number), offset: null }]}
-            words={words}
-            editing={editing}
-            onEdit={edit}
-          />
+        <View style={styles.infoRow}>
+          <Text style={styles.info}>{info}</Text>
+          {editable && !writing ? (
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => {
+                setEditing(null);
+                textEdit.start();
+              }}
+              style={styles.editAction}
+            >
+              <Text style={styles.editText}>{t.document.edit}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {textEdit.draft !== null ? (
+          <PageTextField value={textEdit.draft} saving={textEdit.saving} onChange={textEdit.setDraft} />
         ) : (
-          <Text accessibilityRole="header" selectable style={styles.title}>
-            {math?.title ?? t.document.pageNumber(page.number)}
-          </Text>
-        )}
-        {page.pageType === "unsupported_script" ? (
-          <Text style={[styles.secondary, styles.warning]}>{t.document.unsupportedScript}</Text>
-        ) : (
-          <MathSwitch page={page} mayLoseCorrections={mayLoseCorrections} />
-        )}
-        {math !== null ? (
-          <MathBody rows={math.rows} />
-        ) : (
-          laid?.blocks.map((block, index) =>
-            block.kind === "gap" ? (
-              <View key={index} style={styles.gap} />
+          <>
+            {title}
+            {shownAlerts.map((kind) => (
+              <Text key={kind} style={[styles.secondary, styles.alert]}>
+                {kind === "missing_line" ? t.document.alertMissingLine : t.document.alertMathIncomplete}
+              </Text>
+            ))}
+            {page.pageType === "unsupported_script" ? (
+              <Text style={[styles.secondary, styles.warning]}>{t.document.unsupportedScript}</Text>
             ) : (
-              <PieceText key={index} selectable style={styles.line} pieces={block.pieces} words={words} editing={editing} onEdit={edit} />
-            ),
-          )
+              <MathSwitch page={page} mayLoseWork={mayLoseWork} />
+            )}
+            {math !== null ? (
+              <MathBody rows={math.rows} />
+            ) : (
+              laid?.blocks.map((block, index) =>
+                block.kind === "gap" ? (
+                  <View key={index} style={styles.gap} />
+                ) : (
+                  <PieceText key={index} selectable style={styles.line} pieces={block.pieces} words={words} editing={editing} onEdit={edit} />
+                ),
+              )
+            )}
+          </>
         )}
       </ScrollView>
-      {current !== null ? (
+      {writing ? (
+        <PageTextBar problem={textEdit.problem} saving={textEdit.saving} onCancel={textEdit.cancel} onSave={() => void textEdit.save()} />
+      ) : current !== null ? (
         <WordEditor
           key={current.word.index}
           word={current}
@@ -184,10 +223,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
   },
+  infoRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingBottom: 8,
+  },
   info: {
     ...typography.interfaceSecondary,
     color: colors.inkSecondary,
-    paddingBottom: 8,
+  },
+  editAction: {
+    justifyContent: "center",
+    minHeight: 44,
+  },
+  editText: {
+    ...typography.interfaceBody,
+    color: colors.blue,
+  },
+  alert: {
+    paddingBottom: 12,
   },
   title: {
     ...typography.pageTitle,

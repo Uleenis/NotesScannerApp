@@ -6,7 +6,8 @@ import { useAuth } from "@/auth/auth-provider";
 import type { DeleteResult } from "@/notebooks/removal";
 import type { MoveResult, PageStatus, SetTypeResult, StartResult, SwitchableType } from "./pages";
 import { pageService } from "./service";
-import { LIST_POLL_MS, PAGE_POLL_MS, WORDS_POLL_MAX, WORDS_POLL_MS } from "./timing";
+import { ALERTS_POLL_MAX, ALERTS_POLL_MS, LIST_POLL_MS, PAGE_POLL_MS, WORDS_POLL_MAX, WORDS_POLL_MS } from "./timing";
+import type { EditedGap, EditedWord, EditResult } from "./edit";
 import { placeWords, type ChosenFrom, type CorrectResult } from "./words";
 
 const PHOTO_URL_STALE_MS = 50 * 60_000;
@@ -91,7 +92,11 @@ export function useSetPageType(pageId: string) {
   return useMutation<SetTypeResult, Error, SwitchableType>({
     mutationFn: (pageType) => pageService.setPageType(pageId, pageType),
     onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] }),
+        queryClient.invalidateQueries({ queryKey: ["page-words", userId, pageId] }),
+        queryClient.invalidateQueries({ queryKey: ["page-alerts", userId, pageId] }),
+      ]);
     },
   });
 }
@@ -121,7 +126,7 @@ export function useDeletePage(pageId: string) {
   });
 }
 
-export function usePageWords(pageId: string, enabled: boolean, text: string) {
+export function usePageWords(pageId: string, enabled: boolean, text: string, expectWords: boolean) {
   const { status, userId } = useAuth();
   const focused = useIsFocused();
   const queryClient = useQueryClient();
@@ -131,7 +136,7 @@ export function usePageWords(pageId: string, enabled: boolean, text: string) {
     enabled: enabled && status === "ready",
   });
 
-  const unplaced = query.data !== undefined && (query.data.words.length === 0 || placeWords(text, query.data) === null);
+  const unplaced = expectWords && query.data !== undefined && (query.data.words.length === 0 || placeWords(text, query.data) === null);
   const [attempts, setAttempts] = useState(0);
   const { refetch } = query;
   const retrying = enabled && unplaced && focused && attempts < WORDS_POLL_MAX;
@@ -161,5 +166,31 @@ export function useCorrectWord(pageId: string) {
         queryClient.invalidateQueries({ queryKey: ["page-words", userId, pageId] }),
       ]);
     },
+  });
+}
+
+export function useEditPage(pageId: string) {
+  const { userId } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation<EditResult, Error, { text: string; words: EditedWord[]; gaps: EditedGap[] }>({
+    mutationFn: ({ text, words, gaps }) => pageService.edit(pageId, text, words, gaps),
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] }),
+        queryClient.invalidateQueries({ queryKey: ["page-words", userId, pageId] }),
+        refreshPages(queryClient, userId),
+      ]);
+    },
+  });
+}
+
+export function usePageAlerts(pageId: string, enabled: boolean) {
+  const { status, userId } = useAuth();
+  const focused = useIsFocused();
+  return useQuery({
+    queryKey: ["page-alerts", userId, pageId],
+    queryFn: () => pageService.alerts(pageId),
+    enabled: enabled && status === "ready",
+    refetchInterval: (query) => (focused && query.state.dataUpdateCount < ALERTS_POLL_MAX ? ALERTS_POLL_MS : false),
   });
 }
