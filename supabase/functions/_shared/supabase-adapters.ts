@@ -13,6 +13,8 @@ import type {
   ClaimExpectation,
   LibraryOutcome,
   LibraryStore,
+  MathAlertOutcome,
+  MathCheckStore,
   NotebookPage,
   PageReader,
   PageRow,
@@ -237,9 +239,30 @@ export function createTransferStore(keys: Keys, fetchImpl?: typeof fetch): Trans
   };
 }
 
+const MATH_ALERT_OUTCOMES: readonly string[] = ["recorded", "page_not_found", "not_math", "no_readings"];
+
+function mathChecks(client: SupabaseClient): MathCheckStore {
+  return {
+    mathCheckReadings: async (userId, pageId) => {
+      const { data, error } = await client.rpc("math_check_readings", { p_page_id: pageId, p_user_id: userId });
+      if (error || !Array.isArray(data) || data.length > 1) throw new StoreError("mathCheckReadings");
+      const found = first(data);
+      if (!found) return null;
+      if (typeof found.b1 !== "string" || typeof found.b2 !== "string") throw new StoreError("mathCheckReadings");
+      return { b1: found.b1, b2: found.b2 };
+    },
+    recordMathAlert: async (userId, pageId, onlyB1, onlyB2) => {
+      const { data, error } = await client.rpc("record_math_alert", { p_page_id: pageId, p_user_id: userId, p_only_b1: onlyB1, p_only_b2: onlyB2 });
+      if (error || typeof data !== "string" || !MATH_ALERT_OUTCOMES.includes(data)) throw new StoreError("recordMathAlert");
+      return data as MathAlertOutcome;
+    },
+  };
+}
+
 export function createServerStore(keys: Keys, fetchImpl?: typeof fetch): ServerStore {
   const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
   return {
+    ...mathChecks(client),
     charge: async (pageId): Promise<ChargeResult> => {
       const { data, error } = await client.rpc("charge_page", { p_page_id: pageId });
       if (error) throw new StoreError("charge");
@@ -444,6 +467,7 @@ async function storedSecond(client: SupabaseClient, userId: string, pageId: stri
 export function createPageTypeStore(keys: Keys, fetchImpl?: typeof fetch): PageTypeStore {
   const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
   return {
+    ...mathChecks(client),
     setMath: async (userId, pageId) => {
       const { data, error } = await client.rpc("set_page_math", { p_page_id: pageId, p_user_id: userId });
       if (error) throw new StoreError("setMath");

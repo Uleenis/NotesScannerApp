@@ -231,7 +231,7 @@ Deno.test("read-page checks the owner, then the photo, then charges, then claims
   const world = new World();
   world.readyPage();
   await call(world, TOKEN_ALICE);
-  const order = ["getPage", "photoInfo", "download", "charge", "recordOriginalImage", "claim", "gemini", "gemini_b2", "insertReading", "upsertPageText", "markRead", "insertReadingB2"];
+  const order = ["getPage", "photoInfo", "download", "charge", "recordOriginalImage", "claim", "gemini", "gemini_b2", "insertReading", "upsertPageText", "markRead", "insertReadingB2", "mathCheckReadings"];
   assertEquals(world.calls, order);
 });
 

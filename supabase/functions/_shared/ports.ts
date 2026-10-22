@@ -67,7 +67,14 @@ export type CallerStore = PageReader & {
   allowance: () => Promise<Allowance | null>;
 };
 
-export type ServerStore = {
+export type MathAlertOutcome = "recorded" | "page_not_found" | "not_math" | "no_readings";
+
+export type MathCheckStore = {
+  mathCheckReadings: (userId: string, pageId: string) => Promise<{ b1: string; b2: string } | null>;
+  recordMathAlert: (userId: string, pageId: string, onlyB1: number, onlyB2: number) => Promise<MathAlertOutcome>;
+};
+
+export type ServerStore = MathCheckStore & {
   charge: (pageId: string) => Promise<ChargeResult>;
   recordOriginalImage: (userId: string, pageId: string, path: string) => Promise<void>;
   claimForReading: (userId: string, pageId: string, expected: ClaimExpectation) => Promise<boolean>;
@@ -130,7 +137,7 @@ export type ReadingDeps = {
 
 export type SwitchOutcome = "switched" | "unchanged" | "page_not_found" | "page_not_read" | "unsupported_script" | "no_reading";
 
-export type PageTypeStore = {
+export type PageTypeStore = MathCheckStore & {
   setMath: (userId: string, pageId: string) => Promise<{ outcome: SwitchOutcome; altoPath: string | null }>;
   setText: (userId: string, pageId: string, readAgain: boolean) => Promise<{ outcome: SwitchOutcome; b1: string | null; b2: string | null }>;
   removeAlto: (path: string) => Promise<void>;

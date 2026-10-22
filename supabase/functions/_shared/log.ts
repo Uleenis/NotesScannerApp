@@ -7,6 +7,7 @@ export type LogEvent =
   | "b2_done"
   | "b2_failed"
   | "b2_late"
+  | "math_checked"
   | "read_queued"
   | "read_failed"
   | "manual_relaunch"

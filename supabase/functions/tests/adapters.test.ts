@@ -714,3 +714,32 @@ Deno.test("a page with no file removes nothing, and a file still there afterward
   const unlisted = storageWith([`${ALICE}/${PAGE_ID}/original.jpg`], { failList: true });
   assertEquals(await storeError(() => createLibraryStore(KEYS, unlisted.fetch).removePageFiles("photos", ALICE, PAGE_ID)), true);
 });
+
+Deno.test("the passes to compare are read through math_check_readings, with the page and its owner alone, as the service [10]", async () => {
+  const { fetch, calls } = stub(() => [{ b1: "Soit $x = 1$", b2: "Soit $x = 2$" }]);
+  assertEquals(await createServerStore(KEYS, fetch).mathCheckReadings(ALICE, PAGE_ID), { b1: "Soit $x = 1$", b2: "Soit $x = 2$" });
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/math_check_readings");
+  assertEquals(calls[0].body, { p_page_id: PAGE_ID, p_user_id: ALICE });
+  assertEquals(calls[0].headers.get("apikey"), "secret-key");
+});
+
+Deno.test("a page with nothing to compare gives nothing, and an answer of another shape is an error [10]", async () => {
+  assertEquals(await createPageTypeStore(KEYS, stub(() => []).fetch).mathCheckReadings(ALICE, PAGE_ID), null);
+  for (const odd of [[{ b1: "x", b2: 3 }], [{ b1: null, b2: "x" }], [{ b1: "x" }]]) {
+    assertEquals(await thrownBy(() => createPageTypeStore(KEYS, stub(() => odd).fetch).mathCheckReadings(ALICE, PAGE_ID)) instanceof StoreError, true);
+  }
+});
+
+Deno.test("the alert is written through record_math_alert with two counts and nothing else, and its outcome is read back [10]", async () => {
+  const { fetch, calls } = stub(() => "recorded");
+  assertEquals(await createServerStore(KEYS, fetch).recordMathAlert(ALICE, PAGE_ID, 2, 0), "recorded");
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/record_math_alert");
+  assertEquals(calls[0].body, { p_page_id: PAGE_ID, p_user_id: ALICE, p_only_b1: 2, p_only_b2: 0 });
+  assertEquals(await createPageTypeStore(KEYS, stub(() => "not_math").fetch).recordMathAlert(ALICE, PAGE_ID, 1, 1), "not_math");
+});
+
+Deno.test("an outcome the alert does not know is an error, never a pass [10]", async () => {
+  for (const odd of ["something_new", null, 3, ["recorded"]]) {
+    assertEquals(await thrownBy(() => createServerStore(KEYS, stub(() => odd).fetch).recordMathAlert(ALICE, PAGE_ID, 1, 1)) instanceof StoreError, true);
+  }
+});

@@ -82,7 +82,7 @@ Deno.test("a page whose B1 holds LaTeX is math: no call to /arbitrate, the readi
   assertEquals(world.page().status, "read");
   assertEquals(world.recognitions[0].signal.aborted, true);
   assertEquals(world.arbitrations, []);
-  assertEquals(world.logs.at(-1), { event: "a_cancelled", fields: { pageId: PAGE_ID, code: "math" } });
+  assertEquals(world.logs.filter((record) => record.event === "a_cancelled"), [{ event: "a_cancelled", fields: { pageId: PAGE_ID, code: "math" } }]);
 });
 
 Deno.test("a page of math whose A already arrived throws A away [5]", async () => {
