@@ -15,6 +15,8 @@ import type {
   LibraryStore,
   ChargeReason,
   ChargeResult,
+  MathAlertOutcome,
+  MathCheckStore,
   MoveResult,
   PageRow,
   PageReader,
@@ -143,6 +145,7 @@ export class World {
   models = new Map<string, Uint8Array>();
   altoReadings: { userId: string; pageId: string; path: string }[] = [];
   pageTokens: { userId: string; pageId: string; index: number }[] = [];
+  mathAlerts: { userId: string; pageId: string; onlyB1: number; onlyB2: number }[] = [];
   charges: { userId: string; pageId: string }[] = [];
   chargeArguments: unknown[][] = [];
   claimArguments: unknown[][] = [];
@@ -323,8 +326,33 @@ export class World {
     };
   }
 
+  mathChecks(): MathCheckStore {
+    return {
+      mathCheckReadings: async (userId, pageId) => {
+        await this.tick("mathCheckReadings");
+        const page = this.pages.get(pageId);
+        if (!page || page.userId !== userId || page.pageType !== "math") return null;
+        const first = this.readings.filter((reading) => reading.pageId === pageId && reading.label === "B1");
+        const second = this.readings.filter((reading) => reading.pageId === pageId && reading.label === "B2");
+        if (first.length !== 1 || second.length !== 1) return null;
+        return { b1: first[0].rawText, b2: second[0].rawText };
+      },
+      recordMathAlert: async (userId, pageId, onlyB1, onlyB2): Promise<MathAlertOutcome> => {
+        await this.tick("recordMathAlert");
+        const page = this.pages.get(pageId);
+        if (!page || page.userId !== userId) return "page_not_found";
+        if (page.pageType !== "math") return "not_math";
+        const labels = this.readings.filter((reading) => reading.pageId === pageId).map((reading) => reading.label);
+        if (labels.filter((label) => label === "B1").length !== 1 || labels.filter((label) => label === "B2").length !== 1) return "no_readings";
+        if (!this.mathAlerts.some((alert) => alert.pageId === pageId)) this.mathAlerts.push({ userId, pageId, onlyB1, onlyB2 });
+        return "recorded";
+      },
+    };
+  }
+
   server(): ServerStore {
     return {
+      ...this.mathChecks(),
       charge: async (...args: unknown[]): Promise<ChargeResult> => {
         this.chargeArguments.push(args);
         await this.tick("charge");
@@ -448,6 +476,7 @@ export class World {
       return page;
     };
     return {
+      ...this.mathChecks(),
       setMath: async (userId, pageId) => {
         await this.tick("setMath");
         const found = switchable(userId, pageId);
@@ -467,6 +496,7 @@ export class World {
         const b1 = this.readings.filter((reading) => reading.pageId === pageId && reading.label === "B1");
         if (b1.length !== 1) return { outcome: "no_reading", b1: null, b2: null };
         found.pageType = "text";
+        this.mathAlerts = this.mathAlerts.filter((alert) => alert.pageId !== pageId);
         if (!readAgain || found.aRelaunches >= 3 || (found.aRelaunchedAt !== null && found.aRelaunchedAt > this.clock - 10 * 60_000)) {
           return { outcome: "switched", b1: null, b2: null };
         }

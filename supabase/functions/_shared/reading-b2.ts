@@ -1,5 +1,6 @@
 import { attemptReading, readingInput } from "./gemini-pass.ts";
 import { errorName } from "./log.ts";
+import { checkMathPage } from "./math-check.ts";
 import type { ReadingDeps } from "./ports.ts";
 
 export const MAX_ARBITRATED_TEXT = 200_000;
@@ -26,6 +27,7 @@ export function startSecondPass(deps: ReadingDeps, pageId: string, image: Uint8A
           }
           await deps.server.insertReading(userId, pageId, readingInput("B2", done));
           deps.log.event("b2_done", { pageId, durationMs: done.durationMs });
+          deps.background(checkMathPage({ store: deps.server, log: deps.log }, userId, pageId));
           return done.reading.text.length > MAX_ARBITRATED_TEXT ? null : done.reading.text;
         } catch (error) {
           deps.log.event("unexpected_error", { errorName: errorName(error) });

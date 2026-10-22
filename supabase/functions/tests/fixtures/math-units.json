@@ -1,0 +1,258 @@
+[
+ {
+  "input": "a) 3x\u00b2 - 6x = 0\n3x\u00b7(x - 6) = 0\nS = {0 ; 6}",
+  "keys": [
+   "a)3x^2-6x=0",
+   "3x.(x-6)=0",
+   "s={0;6}"
+  ]
+ },
+ {
+  "input": "S={0;6} S={1}",
+  "keys": [
+   "s={0;6}",
+   "s={1}"
+  ]
+ },
+ {
+  "input": "S = [0 ; 6]  S = [1]",
+  "keys": [
+   "s={0;6}",
+   "s={1}"
+  ]
+ },
+ {
+  "input": "x\u00b3 \u2265 8 et y\u2074 \u2264 16, z \u2260 0",
+  "keys": [
+   "x^3\u22658",
+   "ety^4\u226416,",
+   "z\u22600"
+  ]
+ },
+ {
+  "input": "a < b > c = d",
+  "keys": [
+   "a<b>c=d"
+  ]
+ },
+ {
+  "input": "\u00d8 = \u03a6 = \u03d5 = \u00f8",
+  "keys": [
+   "\u2205=\u2205=\u2205=\u2205"
+  ]
+ },
+ {
+  "input": "f(x) = 3\u00d7x \u22c5 2 \u2217 y \u2219 z",
+  "keys": [
+   "f(x)=3.x",
+   ".2.y.z"
+  ]
+ },
+ {
+  "input": "a \u2010 b \u2011 c \u2012 d \u2013 e \u2014 f \u2015 g \u2212 h = 0",
+  "keys": [
+   "a-b-c-d-e-f-g-h=0"
+  ]
+ },
+ {
+  "input": "l\u2019\u00e9quation \u2018x\u2019 = \u00b4y\u00b4 = \u02bcz\u02bc",
+  "keys": [
+   "l'\u00e9quation'x'='y'='z'"
+  ]
+ },
+ {
+  "input": "$3x^2 - 6x = 0$\n$3x \\cdot (x - 6) = 0$\n$S = \\{0 ; 6\\}$",
+  "keys": [
+   "3x^2-6x=0",
+   "3x.(x-6)=0",
+   "s={0;6}"
+  ]
+ },
+ {
+  "input": "$x = \\frac{3}{2}$\n$y = \\dfrac{1}{x + 1}$\n$z = \\frac{\\frac{1}{2}}{3}$",
+  "keys": [
+   "x=3/2",
+   "y=1/x+1",
+   "z=1/2/3"
+  ]
+ },
+ {
+  "input": "$\\sqrt{12} = 2\\sqrt{3}$ et \\text{donc} x = \\mathrm{e}",
+  "keys": [
+   "\u221a12=2\u221a3",
+   "etdoncx=e"
+  ]
+ },
+ {
+  "input": "$S = \\varnothing$ ou $S = \\emptyset$",
+  "keys": [
+   "s=\u2205",
+   "ous=\u2205"
+  ]
+ },
+ {
+  "input": "$a \\times b \\div c = 0$",
+  "keys": [
+   "a.b/c=0"
+  ]
+ },
+ {
+  "input": "$\\left( x + 1 \\right) = 0$",
+  "keys": [
+   "(x+1)=0"
+  ]
+ },
+ {
+  "input": "$x \\quad = \\qquad 3$ puis $a \\; b \\, c \\! d \\  e = 1$",
+  "keys": [
+   "x=3",
+   "puisabcde=1"
+  ]
+ },
+ {
+  "input": "**Titre**\n# Section\n`code` = _x_",
+  "keys": [
+   "titre",
+   "section",
+   "code=x"
+  ]
+ },
+ {
+  "input": "Titre\n\nDevoir\n\n1) Etude de fonctions",
+  "keys": [
+   "titre",
+   "devoir",
+   "1)etudedefonctions"
+  ]
+ },
+ {
+  "input": "a = (b + 1\nc = b)",
+  "keys": [
+   "a=(b+1",
+   "c=b)"
+  ]
+ },
+ {
+  "input": "((a = b) = c) = d e = f",
+  "keys": [
+   "((a=b)=c)=d",
+   "e=f"
+  ]
+ },
+ {
+  "input": "x = 1, y = 2; z = 3",
+  "keys": [
+   "x=1,",
+   "y=2;",
+   "z=3"
+  ]
+ },
+ {
+  "input": "x = 1 + y = 2",
+  "keys": [
+   "x=1+",
+   "y=2"
+  ]
+ },
+ {
+  "input": "a) x = 1 b) y = 2 c) z = 3",
+  "keys": [
+   "a)x=1",
+   "b)y=2",
+   "c)z=3"
+  ]
+ },
+ {
+  "input": "-y.(7 + 3y) = 0 S = {-2/3}",
+  "keys": [
+   "-y.(7+3y)=0",
+   "s={-2/3}"
+  ]
+ },
+ {
+  "input": "x =\n= y",
+  "keys": [
+   "x=",
+   "=y"
+  ]
+ },
+ {
+  "input": "A = B = C",
+  "keys": [
+   "a=b=c"
+  ]
+ },
+ {
+  "input": "  \t\n   ",
+  "keys": []
+ },
+ {
+  "input": "R\u00c9PONSE = \u00c0 la fin \u03a3 = \u03c3",
+  "keys": [
+   "r\u00e9ponse=\u00e0",
+   "lafin\u03c2=\u03c3"
+  ]
+ },
+ {
+  "input": "e\u0301 = 1 et \u00e9 = 1",
+  "keys": [
+   "\u00e9=1",
+   "et\u00e9=1"
+  ]
+ },
+ {
+  "input": "a\u00a0=\u00a0b\u2003=\u2009c",
+  "keys": [
+   "a=b=c"
+  ]
+ },
+ {
+  "input": "x\u2028y = 1\u2029z = 2",
+  "keys": [
+   "x",
+   "y=1",
+   "z=2"
+  ]
+ },
+ {
+  "input": "x\rd = 1\r\ne = 2\u0085f = 3\u000bg = 4\fh = 5",
+  "keys": [
+   "x",
+   "d=1",
+   "e=2",
+   "f=3",
+   "g=4",
+   "h=5"
+  ]
+ },
+ {
+  "input": "\\{ x \\} = \\{ y \\}",
+  "keys": [
+   "{x}={y}"
+  ]
+ },
+ {
+  "input": "\\unknown{x} = \\foo",
+  "keys": [
+   "unknown{x}=foo"
+  ]
+ },
+ {
+  "input": "$$x^2 = 1$$",
+  "keys": [
+   "x^2=1"
+  ]
+ },
+ {
+  "input": "1) a) b) c) = 0",
+  "keys": [
+   "1)a)b)c)=0"
+  ]
+ },
+ {
+  "input": "S={ -\\frac{1}{2} }",
+  "keys": [
+   "s={-1/2}"
+  ]
+ }
+]

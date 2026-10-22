@@ -1,5 +1,6 @@
 import { admitCaller, failed, json, refuse } from "../_shared/http.ts";
 import { errorName } from "../_shared/log.ts";
+import { checkMathPage } from "../_shared/math-check.ts";
 import { looksLikeJpeg, MAX_PHOTO_BYTES, photoPath } from "../_shared/photo.ts";
 import type { SetPageTypeDeps, SwitchOutcome } from "../_shared/ports.ts";
 import { startReadingA } from "../_shared/reading-a.ts";
@@ -45,6 +46,7 @@ async function toMath(deps: SetPageTypeDeps, userId: string, pageId: string): Pr
     }
   }
   deps.log.event("page_type_set", { pageId, code: outcome === "switched" ? "math" : "math_unchanged" });
+  if (outcome === "switched") await checkMathPage({ store: deps.pageTypes, log: deps.log }, userId, pageId);
   return json(200, { page_type: "math" });
 }
 
