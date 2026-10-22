@@ -7,7 +7,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - App: Expo SDK 57, React Native 0.86, React 19, TypeScript strict. Expo has changed: read the versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing app code.
 - Backend: Supabase (Postgres, Auth, Storage, Edge Functions in TypeScript on Deno), Paris region.
 - Reading model: `gemini-3.6-flash`, prompt V0, default temperature, `thinkingBudget: 0`, called only from Edge Functions.
-- Reading service: Python 3.13 in `services/reading/` (FastAPI, Kraken 7.1.1, PyTorch for the processor only), one Docker image. It runs on the PC next to the local Supabase stack until Cloud Run, at the end of slice 4.
+- Reading service: Python 3.13 in `services/reading/` (FastAPI, Kraken 7.1.1, PyTorch for the processor only), one Docker image. It runs on the PC next to the local Supabase stack until Cloud Run, in the pre-beta slice (after slice 8, with the paid accounts).
 
 ## Layout
 

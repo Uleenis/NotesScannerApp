@@ -6,12 +6,12 @@ Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** `t4/correction` (branch 6), after the merge of `t4/math-check` (PRs 58 to 61, `t4/schema`, `t4/second-pass`, `t4/rules` and `t4/replay`, are merged).
+- **Next branch:** `t4/correction` (branch 6), after `t4/math-check` (PRs 58 to 62, `t4/schema`, `t4/second-pass`, `t4/rules`, `t4/replay` and `t4/math-check`, are merged).
 - **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
 - **Slice 3 is done** (PRs 46, 49 to 53 and the PR of `t3/screens`): its Bilan is `../Tranche 3/Bilan.md`, its decisions `../Tranche 3/Décisions.md`, and the phone checks of slices 2 and 3 are in `../Vérifications 1.md`, for the owner's return.
-- **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 7, 9, 5, 6, 8. Cloud Run comes at the end of slice 4 (see the notes carried from slice 2). A slice whose document is missing or not validated: stop and ask.
+- **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 7, 9, 5, 6, 8. Cloud Run comes in the pre-beta slice (PB, after slice 8), with the paid accounts, the migrations and functions of slices 2 to 4, and Vertex AI; production stays at slice 1 until then (see the notes carried from slice 2). A slice whose document is missing or not validated: stop and ask.
 
 ## Branches
 
@@ -21,9 +21,9 @@ Paths below are from the repository root.
 | 2 | `t4/second-pass` | 1, 2 | sensitive (model call) | Sonnet, High | Claude | done, PR 59 merged |
 | 3 | `t4/rules` | 3 | ordinary | Sonnet, High | Claude | done, PR 60 merged |
 | 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | done, PR 61 merged |
-| 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | done (PR below) |
+| 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | done, PR 62 merged |
 | 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | to do |
-| 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan, the status of `AGENTS.md`, and the Cloud Run end of slice if the plan asks for it |
+| 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan and the status of `AGENTS.md` (no Cloud Run: it is in the pre-beta slice) |
 
 ## Slice 3
 
@@ -35,10 +35,10 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 
 ## Notes carried from slice 2
 
-- Cloud Run (end of slice 4): concurrency 1, a request timeout above `ARBITRATE_TIMEOUT_MS` (30 s), a maximum number of instances; `read-page` and the relaunch task must not retry a page answered `too_complex`; give espeak an exec-allowed folder (`READING_ESPEAK_DIR`) and set `ORT_DISABLE_TELEMETRY=1` (the image does); restrict the egress of the service to Supabase; measure again an arbitration near the NER bound (about 12 s on the PC).
+- Cloud Run (pre-beta slice): concurrency 1, a request timeout above `ARBITRATE_TIMEOUT_MS` (30 s), a maximum number of instances; `read-page` and the relaunch task must not retry a page answered `too_complex`; give espeak an exec-allowed folder (`READING_ESPEAK_DIR`) and set `ORT_DISABLE_TELEMETRY=1` (the image does); restrict the egress of the service to Supabase; measure again an arbitration near the NER bound (about 12 s on the PC).
 - Cloud Run: a bad `READING_URL` or `READING_SECRET` in production reads every page with B1 alone, with one `reading_service_misconfigured` line per cold start; the deploy must check that A gets written.
 - Cloud Run: a cancelled recognition goes on in the service and holds its one-page lock; concurrency and instance count settle it. One user can keep the four places of the service busy with re-readings: add a per-user bound before Cloud Run ("Pour Tim" of slice 2).
-- Do not deploy `read-page`, `relaunch-page` or `set-page-type` before the migrations of slice 2: the plan deploys nothing before the end of slice 4.
+- Do not deploy `read-page`, `relaunch-page` or `set-page-type` before the migrations of slice 2: the plan deploys nothing before the pre-beta slice.
 - The service key lives in the process that decodes photos, and ALTO files left behind are never swept: both are for the owner to decide before Cloud Run (`../Tranche 2/Décisions.md`). The nightly sweep of slice 3 is the place to sweep `alto` files no `readings.alto_path` names, if the owner agrees.
 - Deleting a page (slice 3) erases its files in `photos` and `alto`; a page being read by A (A runs after `read`, in the background) can still record A after the deletion: `record_reading_a` answers `page_not_found` and the service erases its ALTO, as for a transfer.
 - Slice 5: retiring the active personal model leaves notebooks above `course` as they are; a transfer would lose the personal model of an anonymous account, if one ever has one. Reading loads `.safetensors` files only, through `kraken.models.load_models`; never `load_from_checkpoint`.
@@ -100,7 +100,7 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 
 ## Notes carried from slice 4, branch 5
 
-- `t4/math-check` adds the completeness check of a page of math: `_shared/math-check.ts` (port of the unit of `Math Spike/scripts/units.py`, with two measured differences written in `../Tranche 4/Décisions.md`: the exponent or index in braces of one to three characters, and statements with no letter, digit or empty set), `checkMathPage` (called in the background after B2 is written in `reading-b2.ts`, and by `set-page-type` after a switch to math), and the migration `20261026120000_t4_math_check.sql`: `math_check_readings` and `record_math_alert` (server only) and `set_page_text` recreated to erase the `math_incomplete` alert. The alert holds two counts, `only_b1` and `only_b2`, and no text. The migration goes to production with the others of slice 4, the owner's.
+- `t4/math-check` adds the completeness check of a page of math: `_shared/math-check.ts` (port of the unit of `Math Spike/scripts/units.py`, with two measured differences written in `../Tranche 4/Décisions.md`: the exponent or index in braces of one to three characters, and statements with no letter, digit or empty set), `checkMathPage` (called in the background after B2 is written in `reading-b2.ts`, and by `set-page-type` after a switch to math), and the migration `20261026120000_t4_math_check.sql`: `math_check_readings` and `record_math_alert` (server only) and `set_page_text` recreated to erase the `math_incomplete` alert. The alert holds two counts, `only_b1` and `only_b2`, and no text. The migration goes to production with the others of slices 2 to 4 in the pre-beta slice, the owner's.
 - Criterion 10 is measured by the kit `04 Testing/T4 mesures/math-check/` (`python run.py`, outside the repository): 0 alerts on the 20 ordered pairs of the production passes, an alert in both directions between `t0-pass-3` and each of the 17 other passes, 0 alerts on the 272 pairs of the 17 others. The fidelity fixture of the port is `supabase/functions/tests/fixtures/math-units.json` (synthetic lines; `fixture.py` in the kit writes it from `units.py`).
 - Every B2 written now costs one more read of the database (`mathCheckReadings`), on text pages too, to close the race with a switch to math: the order test of `read-page.test.ts` counts it.
 - `t4/edit` shows the alerts next to the title (`missing_line` and `math_incomplete`); the app reads `page_alerts` through its own select policy.
