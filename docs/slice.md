@@ -6,7 +6,7 @@ Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** `t4/edit` (branch 7, the last of the slice), after `t4/correction` (PRs 58 to 62, `t4/schema`, `t4/second-pass`, `t4/rules`, `t4/replay` and `t4/math-check`, and the PR of `t4/correction`, are merged).
+- **Next branch:** `t4/edit` (branch 7, the last of the slice), after `t4/correction` (PRs 58 to 62, `t4/schema`, `t4/second-pass`, `t4/rules`, `t4/replay` and `t4/math-check`, and PR 64, `t4/correction`, are merged).
 - **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
@@ -22,7 +22,7 @@ Paths below are from the repository root.
 | 3 | `t4/rules` | 3 | ordinary | Sonnet, High | Claude | done, PR 60 merged |
 | 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | done, PR 61 merged |
 | 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | done, PR 62 merged |
-| 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | done, PR to fill in merged |
+| 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | done, PR 64 merged |
 | 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan and the status of `AGENTS.md` (no Cloud Run: it is in the pre-beta slice) |
 
 ## Slice 3
