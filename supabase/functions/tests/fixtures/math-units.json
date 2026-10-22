@@ -1,23 +1,23 @@
 [
  {
-  "input": "a) 4x\u00b2 - 8x = 0\n4x\u00b7(x - 4) = 0\nS = {0 ; 4}",
+  "input": "a) 3x\u00b2 - 6x = 0\n3x\u00b7(x - 6) = 0\nS = {0 ; 6}",
   "keys": [
-   "a)4x^2-8x=0",
-   "4x.(x-4)=0",
-   "s={0;4}"
+   "a)3x^2-6x=0",
+   "3x.(x-6)=0",
+   "s={0;6}"
   ]
  },
  {
-  "input": "S={0;4} S={1}",
+  "input": "S={0;6} S={1}",
   "keys": [
-   "s={0;4}",
+   "s={0;6}",
    "s={1}"
   ]
  },
  {
-  "input": "S = [0 ; 4]  S = [1]",
+  "input": "S = [0 ; 6]  S = [1]",
   "keys": [
-   "s={0;4}",
+   "s={0;6}",
    "s={1}"
   ]
  },
@@ -61,11 +61,11 @@
   ]
  },
  {
-  "input": "$4x^2 - 8x = 0$\n$4x \\cdot (x - 4) = 0$\n$S = \\{0 ; 4\\}$",
+  "input": "$3x^2 - 6x = 0$\n$3x \\cdot (x - 6) = 0$\n$S = \\{0 ; 6\\}$",
   "keys": [
-   "4x^2-8x=0",
-   "4x.(x-4)=0",
-   "s={0;4}"
+   "3x^2-6x=0",
+   "3x.(x-6)=0",
+   "s={0;6}"
   ]
  },
  {
@@ -118,11 +118,11 @@
   ]
  },
  {
-  "input": "Chapitre 1\n\nExercices\n\n1) R\u00e9solutions d'\u00e9quations",
+  "input": "Titre\n\nDevoir\n\n1) Etude de fonctions",
   "keys": [
-   "chapitre1",
-   "exercices",
-   "1)r\u00e9solutionsd'\u00e9quations"
+   "titre",
+   "devoir",
+   "1)etudedefonctions"
   ]
  },
  {
@@ -163,10 +163,10 @@
   ]
  },
  {
-  "input": "-x.(5 + 2x) = 0 S = {-1/2}",
+  "input": "-y.(7 + 3y) = 0 S = {-2/3}",
   "keys": [
-   "-x.(5+2x)=0",
-   "s={-1/2}"
+   "-y.(7+3y)=0",
+   "s={-2/3}"
   ]
  },
  {

@@ -3,12 +3,12 @@ import { compareMath, MAX_CHECKED_TEXT, statementKeys } from "../_shared/math-ch
 import fixture from "./fixtures/math-units.json" with { type: "json" };
 
 const PAGE = [
-  "Chapitre 1",
-  "a) 4x² - 8x = 0",
-  "4x.(x - 4) = 0",
-  "S = {0 ; 4}",
-  "b) (x - 3)² = 0",
-  "S = {3}",
+  "Titre",
+  "a) 3x² - 6x = 0",
+  "3x.(x - 6) = 0",
+  "S = {0 ; 6}",
+  "b) (x - 5)² = 0",
+  "S = {5}",
 ].join("\n");
 
 function without(text: string, line: string): string {
@@ -20,26 +20,26 @@ Deno.test("the same page twice has nothing missing from either pass [10]", () =>
 });
 
 Deno.test("spacing, case and the look of a symbol are not a difference [10]", () => {
-  const compact = "Chapitre 1\na)4x²-8x=0\n4x·(x-4)=0\nS={0;4}\nb)(x-3)²=0\nS={3}";
+  const compact = "Titre\na)3x²-6x=0\n3x·(x-6)=0\nS={0;6}\nb)(x-5)²=0\nS={5}";
   assertEquals(compareMath(PAGE, compact), { onlyB1: 0, onlyB2: 0 });
-  assertEquals(compareMath(PAGE, PAGE.replace("S = {0 ; 4}", "S = [0 ; 4]").replace("4x²", "4x^2")), { onlyB1: 0, onlyB2: 0 });
+  assertEquals(compareMath(PAGE, PAGE.replace("S = {0 ; 6}", "S = [0 ; 6]").replace("3x²", "3x^2")), { onlyB1: 0, onlyB2: 0 });
 });
 
 Deno.test("a page written in LaTeX says the same as the page written in plain symbols [10]", () => {
   const latex = [
-    "Chapitre 1",
-    "a) $4x^2 - 8x = 0$",
-    "$4x \\cdot (x - 4) = 0$",
-    "$S = \\{0 ; 4\\}$",
-    "b) $(x - 3)^2 = 0$",
-    "$S = \\{3\\}$",
+    "Titre",
+    "a) $3x^2 - 6x = 0$",
+    "$3x \\cdot (x - 6) = 0$",
+    "$S = \\{0 ; 6\\}$",
+    "b) $(x - 5)^2 = 0$",
+    "$S = \\{5\\}$",
   ].join("\n");
   assertEquals(compareMath(PAGE, latex), { onlyB1: 0, onlyB2: 0 });
   assertEquals(compareMath("S = \\varnothing\nx = \\frac{3}{2}\ny = \\sqrt{12}", "S = ∅\nx = 3/2\ny = √12"), { onlyB1: 0, onlyB2: 0 });
 });
 
 Deno.test("two statements that share a line, or one split over two, are the same statements [10]", () => {
-  const joined = "Chapitre 1\na) 4x² - 8x = 0\n4x.(x - 4) = 0 S = {0 ; 4}\nb) (x - 3)² = 0 S = {3}";
+  const joined = "Titre\na) 3x² - 6x = 0\n3x.(x - 6) = 0 S = {0 ; 6}\nb) (x - 5)² = 0 S = {5}";
   assertEquals(compareMath(PAGE, joined), { onlyB1: 0, onlyB2: 0 });
 });
 
@@ -51,18 +51,18 @@ Deno.test("the order of the statements is not a difference, even by columns [10]
 });
 
 Deno.test("a statement one pass forgot is counted on the side of the pass that has it [10]", () => {
-  assertEquals(compareMath(PAGE, without(PAGE, "S = {3}")), { onlyB1: 1, onlyB2: 0 });
-  assertEquals(compareMath(without(PAGE, "S = {3}"), PAGE), { onlyB1: 0, onlyB2: 1 });
+  assertEquals(compareMath(PAGE, without(PAGE, "S = {5}")), { onlyB1: 1, onlyB2: 0 });
+  assertEquals(compareMath(without(PAGE, "S = {5}"), PAGE), { onlyB1: 0, onlyB2: 1 });
 });
 
 Deno.test("a statement one pass wrote otherwise counts on both sides [10]", () => {
-  const changed = PAGE.replace("4x.(x - 4) = 0", "4x.(x - 2) = 0").replace("S = {0 ; 4}", "S = {0 ; 2}");
+  const changed = PAGE.replace("3x.(x - 6) = 0", "3x.(x - 2) = 0").replace("S = {0 ; 6}", "S = {0 ; 2}");
   assertEquals(compareMath(PAGE, changed), { onlyB1: 2, onlyB2: 2 });
 });
 
 Deno.test("a statement written twice by one pass only is a difference, counted once per copy [10]", () => {
-  assertEquals(compareMath(PAGE, `${PAGE}\nS = {3}`), { onlyB1: 0, onlyB2: 1 });
-  assertEquals(compareMath(`${PAGE}\nS = {3}\nS = {3}`, `${PAGE}\nS = {3}`), { onlyB1: 1, onlyB2: 0 });
+  assertEquals(compareMath(PAGE, `${PAGE}\nS = {5}`), { onlyB1: 0, onlyB2: 1 });
+  assertEquals(compareMath(`${PAGE}\nS = {5}\nS = {5}`, `${PAGE}\nS = {5}`), { onlyB1: 1, onlyB2: 0 });
 });
 
 Deno.test("a pass with no statement leaves every statement of the other missing [10]", () => {
@@ -71,8 +71,8 @@ Deno.test("a pass with no statement leaves every statement of the other missing 
 });
 
 Deno.test("the statements are cut at a relation followed by a balanced operand [10]", () => {
-  assertEquals(statementKeys("S = {0 ; 4} S = {1}"), ["s={0;4}", "s={1}"]);
-  assertEquals(statementKeys("4x . (x - 4) = 0"), ["4x.(x-4)=0"]);
+  assertEquals(statementKeys("S = {0 ; 6} S = {1}"), ["s={0;6}", "s={1}"]);
+  assertEquals(statementKeys("3x . (x - 6) = 0"), ["3x.(x-6)=0"]);
   assertEquals(statementKeys("a = (b + 1"), ["a=(b+1"]);
   assertEquals(statementKeys("\n  \n"), []);
 });
@@ -107,11 +107,11 @@ Deno.test("every character that can start or break a statement is read without a
 });
 
 Deno.test("a short exponent or index in braces is the same as without, and as the superscript [10]", () => {
-  assertEquals(statementKeys("4x^{2} - 8x = 0"), statementKeys("4x² - 8x = 0"));
-  assertEquals(statementKeys("4x^{2} - 8x = 0"), ["4x^2-8x=0"]);
-  assertEquals(statementKeys("$(x-3)^{2}=0$"), ["(x-3)^2=0"]);
+  assertEquals(statementKeys("3x^{2} - 6x = 0"), statementKeys("3x² - 6x = 0"));
+  assertEquals(statementKeys("3x^{2} - 6x = 0"), ["3x^2-6x=0"]);
+  assertEquals(statementKeys("$(x-5)^{2}=0$"), ["(x-5)^2=0"]);
   assertEquals(statementKeys("u_{1} = 3"), statementKeys("u_1 = 3"));
-  assertEquals(compareMath("a) $x^{2} - 12 = 0$\n$S = \{ 3 \}$", "a) x^2 - 12 = 0\nS = {3}"), { onlyB1: 0, onlyB2: 0 });
+  assertEquals(compareMath("a) $x^{2} - 12 = 0$\n$S = \\{ 5 \\}$", "a) x^2 - 12 = 0\nS = {5}"), { onlyB1: 0, onlyB2: 0 });
 });
 
 Deno.test("an exponent too long to be one symbol keeps its braces, so a real difference stays one [10]", () => {
