@@ -17,7 +17,7 @@ function word(index: number, start: number | null, end: number | null, overrides
 }
 
 function data(words: WordRecord[], corrections: CorrectionRecord[] = []): PageWords {
-  return { words, corrections };
+  return { words, corrections, gaps: [] };
 }
 
 describe("placeWords", () => {
@@ -102,7 +102,7 @@ describe("placeWords", () => {
 
 describe("placeWords against the text the database rebuilt", () => {
   test.each(places.map((entry) => [entry.name, entry] as const))("finds every word where the database left it: %s", (_, entry) => {
-    const placed = placeWords(entry.shown, { words: entry.words, corrections: entry.corrections });
+    const placed = placeWords(entry.shown, { words: entry.words, corrections: entry.corrections, gaps: [] });
     expect(placed).not.toBeNull();
     expect(placed).toHaveLength(entry.words.length);
 
@@ -119,7 +119,7 @@ describe("placeWords against the text the database rebuilt", () => {
 
   test("shows the last correction of a word where the database put it", () => {
     const entry = places[0];
-    const placed = placeWords(entry.shown, { words: entry.words, corrections: entry.corrections });
+    const placed = placeWords(entry.shown, { words: entry.words, corrections: entry.corrections, gaps: [] });
     expect(placed?.map((word) => word.shown)).toEqual(["Un", "chats", "n", "sûr", "la", "toit"]);
     expect(placed?.map((word) => entry.shown.slice(word.start, word.end))).toEqual(["Un", "chats", "n", "sûr", "la", "toit"]);
   });
@@ -202,17 +202,20 @@ const tokenRow = (index: number) => ({
 });
 
 describe("listWords", () => {
-  test("reads the words and the corrections of the page, in order", async () => {
+  test("reads the words, the corrections and the gaps of the page, in order", async () => {
     const { client, from, calls } = reader([
       { data: [tokenRow(0), tokenRow(1)], error: null },
       { data: [{ token_index: 1, revision: 1, corrected_text: "mat" }], error: null },
+      { data: [{ gap_index: 1, text: " tout " }], error: null },
     ]);
     const result = await listWords(client, "page-1");
-    expect(from.mock.calls.map(([table]) => table)).toEqual(["page_tokens", "corrections"]);
+    expect(from.mock.calls.map(([table]) => table)).toEqual(["page_tokens", "corrections", "page_gaps"]);
     expect(calls.filter(([name]) => name === "eq")).toEqual([
       ["eq", ["page_id", "page-1"]],
       ["eq", ["page_id", "page-1"]],
+      ["eq", ["page_id", "page-1"]],
     ]);
+    expect(result.gaps).toEqual([{ index: 1, text: " tout " }]);
     expect(result.words.map((entry) => [entry.index, entry.start, entry.end])).toEqual([
       [0, 0, 3],
       [1, 4, 7],
@@ -225,6 +228,7 @@ describe("listWords", () => {
     const { client, calls } = reader([
       { data: first, error: null },
       { data: [tokenRow(1000)], error: null },
+      { data: [], error: null },
       { data: [], error: null },
     ]);
     const result = await listWords(client, "page-1");
@@ -249,6 +253,28 @@ describe("listWords", () => {
     ["a place of one end only", { data: [{ ...tokenRow(0), b1_end: null }], error: null }],
   ])("fails on %s", async (_, outcome) => {
     const { client } = reader([outcome]);
+    await expect(listWords(client, "page-1")).rejects.toThrow();
+  });
+
+  test.each([
+    ["a gap without an index", { gap_index: "1", text: " " }],
+    ["a gap without a text", { gap_index: 1, text: null }],
+    ["a negative gap", { gap_index: -1, text: " " }],
+  ])("fails on %s", async (_, row) => {
+    const { client } = reader([
+      { data: [tokenRow(0)], error: null },
+      { data: [], error: null },
+      { data: [row], error: null },
+    ]);
+    await expect(listWords(client, "page-1")).rejects.toThrow();
+  });
+
+  test("fails when the gaps cannot be read", async () => {
+    const { client } = reader([
+      { data: [tokenRow(0)], error: null },
+      { data: [], error: null },
+      { data: null, error: { message: "boom" } },
+    ]);
     await expect(listWords(client, "page-1")).rejects.toThrow();
   });
 });
@@ -299,5 +325,67 @@ describe("addCorrection", () => {
     expect(await addCorrection(writer({ data: null, error: { message: "Network request failed" } }).client, "p", 0, "chat", "A")).toEqual({
       status: "network",
     });
+  });
+});
+
+describe("placeWords with the text of the user between the words", () => {
+  const base = [word(0, 0, 2, { text: "Un" }), word(1, 3, 7, { text: "chat" }), word(2, 8, 12, { text: "noir" })];
+
+  test("puts the words after a gap that replaces what B1 had", () => {
+    const text = "Un tout petit chat noir";
+    const placed = placeWords(text, { words: base, corrections: [], gaps: [{ index: 1, text: " tout petit " }] });
+    expect(placed?.map(({ start, end }) => text.slice(start, end))).toEqual(["Un", "chat", "noir"]);
+  });
+
+  test("puts the words around a line cut and a changed punctuation", () => {
+    const text = "Un\nchat;\nnoir.";
+    const placed = placeWords(text, {
+      words: base,
+      corrections: [],
+      gaps: [
+        { index: 1, text: "\n" },
+        { index: 2, text: ";\n" },
+        { index: 3, text: "." },
+      ],
+    });
+    expect(placed?.map(({ start, end }) => text.slice(start, end))).toEqual(["Un", "chat", "noir"]);
+  });
+
+  test("puts a gap before the first word and one after the last", () => {
+    const text = "-> Un chat noir <-";
+    const placed = placeWords(text, {
+      words: base,
+      corrections: [],
+      gaps: [
+        { index: 0, text: "-> " },
+        { index: 3, text: " <-" },
+      ],
+    });
+    expect(placed?.map(({ start, end }) => text.slice(start, end))).toEqual(["Un", "chat", "noir"]);
+  });
+
+  test("gives a deleted word no length and goes on after it", () => {
+    const text = "Un  noir";
+    const placed = placeWords(text, { words: base, corrections: [{ tokenIndex: 1, revision: 1, text: "" }], gaps: [] });
+    expect(placed?.map(({ start, end, shown }) => [start, end, shown])).toEqual([
+      [0, 2, "Un"],
+      [3, 3, ""],
+      [4, 8, "noir"],
+    ]);
+  });
+
+  test("counts a gap in characters", () => {
+    const text = "Un 😀 chat noir";
+    const placed = placeWords(text, { words: base, corrections: [], gaps: [{ index: 1, text: " 😀 " }] });
+    expect(placed?.map(({ start, end }) => text.slice(start, end))).toEqual(["Un", "chat", "noir"]);
+  });
+
+  test.each([
+    ["a gap that is not in the text", [{ index: 1, text: " tout " }], "Un chat noir"],
+    ["a gap given twice", [{ index: 1, text: " " }, { index: 1, text: " " }], "Un chat noir"],
+    ["a gap beyond the last", [{ index: 4, text: " " }], "Un chat noir"],
+    ["a last gap that is not the end of the text", [{ index: 3, text: "!" }], "Un chat noir"],
+  ])("is null for %s", (_, gaps, text) => {
+    expect(placeWords(text, { words: base, corrections: [], gaps })).toBeNull();
   });
 });

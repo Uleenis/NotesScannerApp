@@ -47,6 +47,8 @@ jest.mock("@/pages/service", () => ({
     setPageType: jest.fn(),
     words: jest.fn(),
     correct: jest.fn(),
+    edit: jest.fn(),
+    alerts: jest.fn(async () => []),
   },
 }));
 
@@ -138,7 +140,7 @@ describe("tapping a word", () => {
 
   test("makes nothing editable on a page that has no word to place", async () => {
     pages.change("page-1", { text: "Titre\nUn mot" });
-    jest.mocked(pageService.words).mockResolvedValue({ words: [], corrections: [] });
+    jest.mocked(pageService.words).mockResolvedValue({ words: [], corrections: [], gaps: [] });
     await renderRouter("./src/app", { initialUrl: "/page/page-1" });
     await screen.findByText("Titre");
 
@@ -291,7 +293,7 @@ describe("correcting a word with the keyboard", () => {
 describe("a page whose words cannot be used", () => {
   test("becomes tappable once A has written its words, without leaving the page", async () => {
     const all = readingsOf(TEXT);
-    jest.mocked(pageService.words).mockResolvedValueOnce({ words: [], corrections: [] }).mockResolvedValue({ words: all, corrections: [] });
+    jest.mocked(pageService.words).mockResolvedValueOnce({ words: [], corrections: [], gaps: [] }).mockResolvedValue({ words: all, corrections: [], gaps: [] });
     await openPage();
 
     await fireEvent.press(await screen.findByText("Portugaise"));
@@ -300,7 +302,7 @@ describe("a page whose words cannot be used", () => {
   });
 
   test("looks again for its words a bounded number of times only", async () => {
-    jest.mocked(pageService.words).mockResolvedValue({ words: [], corrections: [] });
+    jest.mocked(pageService.words).mockResolvedValue({ words: [], corrections: [], gaps: [] });
     await openPage();
     await act(async () => {
       await jest.advanceTimersByTimeAsync(20 * 200);
@@ -320,7 +322,7 @@ describe("a page whose words cannot be used", () => {
   });
 
   test("has no word to tap when the places do not fit the text", async () => {
-    jest.mocked(pageService.words).mockResolvedValue({ words: wordsOf("Autre texte tout autre"), corrections: [] });
+    jest.mocked(pageService.words).mockResolvedValue({ words: wordsOf("Autre texte tout autre"), corrections: [], gaps: [] });
     await openPage();
 
     expect(screen.getByText("Nationalité: Portugaise")).toBeTruthy();
@@ -330,9 +332,10 @@ describe("a page whose words cannot be used", () => {
 
   test("has no word to tap on a page of math", async () => {
     pages.change("page-1", { pageType: "math" });
-    await openPage();
+    await renderRouter("./src/app", { initialUrl: "/page/page-1" });
+    await screen.findByLabelText(fr.document.mathPage);
 
-    expect(pageService.words).not.toHaveBeenCalled();
+    expect(screen.queryAllByHintText(fr.document.wordHint)).toHaveLength(0);
   });
 
   test("has no word to tap on a page in another script", async () => {

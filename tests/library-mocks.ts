@@ -18,6 +18,8 @@ export const PAGE_SERVICE_MOCK = {
   setPageType: jest.fn(),
   move: jest.fn(),
   remove: jest.fn(),
-  words: jest.fn(async () => ({ words: [], corrections: [] })),
+  words: jest.fn(async () => ({ words: [], corrections: [], gaps: [] })),
   correct: jest.fn(),
+  edit: jest.fn(),
+  alerts: jest.fn(async () => []),
 };

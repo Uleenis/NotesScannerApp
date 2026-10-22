@@ -11,6 +11,8 @@ import type {
   ChargeReason,
   ChargeResult,
   ClaimExpectation,
+  EditOutcome,
+  EditStore,
   LibraryOutcome,
   LibraryStore,
   MathAlertOutcome,
@@ -440,6 +442,20 @@ export function createLibraryStore(keys: Keys, fetchImpl?: typeof fetch): Librar
       const { data, error } = await client.rpc("move_page", { p_page_id: pageId, p_user_id: userId, p_notebook_id: notebookId, p_chapter_id: chapterId });
       if (error) throw new StoreError("movePage");
       return outcomeOf(data, "movePage");
+    },
+  };
+}
+
+const EDIT_OUTCOMES: readonly string[] = ["edited", "page_not_found", "page_not_read", "unsupported_script", "not_editable", "text_mismatch", "invalid_edit"];
+
+export function createEditStore(keys: Keys, fetchImpl?: typeof fetch): EditStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    editPage: async (userId, pageId, text, words, gaps) => {
+      const { data, error } = await client.rpc("edit_page", { p_page_id: pageId, p_user_id: userId, p_text: text, p_words: words, p_gaps: gaps });
+      if (error) throw new StoreError("editPage");
+      if (typeof data !== "string" || !EDIT_OUTCOMES.includes(data)) throw new StoreError("editPage");
+      return data as EditOutcome;
     },
   };
 }

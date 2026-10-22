@@ -27,6 +27,7 @@ export type LogEvent =
   | "chapter_deleted"
   | "notebook_deleted"
   | "page_moved"
+  | "page_edited"
   | "files_left"
   | "alto_swept"
   | "reading_service_misconfigured"

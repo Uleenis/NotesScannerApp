@@ -1,5 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import type { DeleteResult } from "@/notebooks/removal";
+import { listAlerts, type ShownAlert } from "./alerts";
+import { editPage, type EditedGap, type EditedWord, type EditResult } from "./edit";
 import {
   countPages,
   deletePage,
@@ -28,6 +30,8 @@ export type PageService = {
   remove: (pageId: string) => Promise<DeleteResult>;
   words: (pageId: string) => Promise<PageWords>;
   correct: (pageId: string, tokenIndex: number, text: string, chosenFrom: ChosenFrom) => Promise<CorrectResult>;
+  edit: (pageId: string, text: string, words: EditedWord[], gaps: EditedGap[]) => Promise<EditResult>;
+  alerts: (pageId: string) => Promise<ShownAlert[]>;
 };
 
 export const pageService: PageService = {
@@ -41,4 +45,6 @@ export const pageService: PageService = {
   remove: (pageId) => deletePage(getSupabase(), pageId),
   words: (pageId) => listWords(getSupabase(), pageId),
   correct: (pageId, tokenIndex, text, chosenFrom) => addCorrection(getSupabase(), pageId, tokenIndex, text, chosenFrom),
+  edit: (pageId, text, words, gaps) => editPage(getSupabase(), pageId, text, words, gaps),
+  alerts: (pageId) => listAlerts(getSupabase(), pageId),
 };

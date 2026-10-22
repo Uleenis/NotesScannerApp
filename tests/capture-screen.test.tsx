@@ -51,7 +51,7 @@ jest.mock("@/capture/service", () => ({
 }));
 
 jest.mock("@/pages/service", () => ({
-  pageService: { list: jest.fn(async () => []), get: jest.fn(() => new Promise(() => {})), photoUrl: jest.fn(), startReading: jest.fn(), setPageType: jest.fn(), words: jest.fn(async () => ({ words: [], corrections: [] })), correct: jest.fn() },
+  pageService: { list: jest.fn(async () => []), get: jest.fn(() => new Promise(() => {})), photoUrl: jest.fn(), startReading: jest.fn(), setPageType: jest.fn(), words: jest.fn(async () => ({ words: [], corrections: [], gaps: [] })), correct: jest.fn(), edit: jest.fn(), alerts: jest.fn(async () => []) },
 }));
 
 const fr = strings.fr;
