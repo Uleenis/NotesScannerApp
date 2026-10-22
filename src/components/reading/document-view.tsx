@@ -156,7 +156,15 @@ export function DocumentView({ page }: { page: NumberedPage }) {
         <View style={styles.infoRow}>
           <Text style={styles.info}>{info}</Text>
           {editable && !writing ? (
-            <Pressable accessibilityRole="button" hitSlop={8} onPress={textEdit.start} style={styles.editAction}>
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => {
+                setEditing(null);
+                textEdit.start();
+              }}
+              style={styles.editAction}
+            >
               <Text style={styles.editText}>{t.document.edit}</Text>
             </Pressable>
           ) : null}

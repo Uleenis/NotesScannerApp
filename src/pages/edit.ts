@@ -24,13 +24,46 @@ type Found = { text: string; start: number; end: number };
 
 type Span = { start: number; end: number };
 
-function wordsOf(text: string): Found[] {
+const STICKY_WORD = new RegExp(WORD.source, "uy");
+const WORD_CHARACTER = new RegExp("^" + WORD.source.slice(WORD.source.indexOf("|") + 1, -1) + "$", "u");
+const REGULAR_WORD = new RegExp("^(?:" + WORD.source + ")$", "u");
+
+const isOdd = (word: string): boolean => !REGULAR_WORD.test(word) || (word !== "[?]" && word.replace(NOT_A_LETTER, "") === "");
+
+function isWordCharacter(character: string | undefined): boolean {
+  return character !== undefined && WORD_CHARACTER.test(character);
+}
+
+function wordsOf(text: string, odd: string[]): Found[] {
+  const byFirst = new Map<string, string[]>();
+  for (const word of [...new Set(odd)].sort((a, b) => b.length - a.length)) {
+    byFirst.set(word[0], [...(byFirst.get(word[0]) ?? []), word]);
+  }
   const found: Found[] = [];
-  for (const match of text.matchAll(WORD)) {
-    if (match[0] !== "[?]" && match[0].replace(NOT_A_LETTER, "") === "") {
+  let at = 0;
+  while (at < text.length) {
+    const odds = byFirst.get(text[at]);
+    const oddWord = odds?.find(
+      (word) =>
+        text.startsWith(word, at) &&
+        !(isWordCharacter(text[at]) && isWordCharacter(text[at - 1])) &&
+        !(isWordCharacter(word[word.length - 1]) && isWordCharacter(text[at + word.length])),
+    );
+    if (oddWord !== undefined) {
+      found.push({ text: oddWord, start: at, end: at + oddWord.length });
+      at += oddWord.length;
       continue;
     }
-    found.push({ text: match[0], start: match.index, end: match.index + match[0].length });
+    STICKY_WORD.lastIndex = at;
+    const match = STICKY_WORD.exec(text);
+    if (match === null) {
+      at += 1;
+      continue;
+    }
+    if (match[0] === "[?]" || match[0].replace(NOT_A_LETTER, "") !== "") {
+      found.push({ text: match[0], start: at, end: at + match[0].length });
+    }
+    at += match[0].length;
   }
   return found;
 }
@@ -101,20 +134,12 @@ export function alignEdit(shown: string, placed: PlacedWord[], edited: string): 
 
   const count = placed.length;
   const live = placed.map((_, at) => at).filter((at) => placed[at].shown !== "");
-  const found = wordsOf(edited);
+  const found = wordsOf(
+    edited,
+    live.map((at) => placed[at].shown).filter(isOdd),
+  );
 
-  const spanEnd = (i: number, j: number): number => {
-    const word = placed[live[i]].shown;
-    const target = found[j];
-    if (!edited.startsWith(word, target.start)) {
-      return -1;
-    }
-    const end = target.start + word.length;
-    const limit = j + 1 < found.length ? found[j + 1].start : edited.length;
-    return end >= target.end && end <= limit ? end : -1;
-  };
-
-  const pairs = matches((i, j) => spanEnd(i, j) >= 0, live.length, found.length);
+  const pairs = matches((i, j) => placed[live[i]].shown === found[j].text, live.length, found.length);
   if (pairs === null) {
     return { status: "refused" };
   }
@@ -132,7 +157,7 @@ export function alignEdit(shown: string, placed: PlacedWord[], edited: string): 
       }
     }
     if (i < live.length) {
-      spans[live[i]] = { start: found[j].start, end: spanEnd(i, j) };
+      spans[live[i]] = { start: found[j].start, end: found[j].end };
     }
     previousI = i + 1;
     previousJ = j + 1;

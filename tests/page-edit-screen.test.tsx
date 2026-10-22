@@ -262,6 +262,13 @@ describe("the alerts next to the title", () => {
     expect(await screen.findByText(fr.document.alertMathIncomplete)).toBeTruthy();
   });
 
+  test("shows an alert that is written after the page is on screen", async () => {
+    jest.mocked(pageService.alerts).mockResolvedValueOnce([]).mockResolvedValue(["missing_line"]);
+    await openPage();
+
+    expect(await screen.findByText(fr.document.alertMissingLine)).toBeTruthy();
+  });
+
   test("shows nothing when the page has no alert", async () => {
     await openPage();
     await waitFor(() => expect(pageService.alerts).toHaveBeenCalledWith("page-1"));

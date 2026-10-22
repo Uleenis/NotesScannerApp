@@ -157,6 +157,23 @@ begin
 end;
 $$;
 
+create or replace function private.apply_correction() returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.page_tokens k
+  set review_status = case when new.corrected_text = new.previous_text then 'confirmed' else 'corrected' end
+  where k.page_id = new.page_id and k.token_index = new.token_index and k.review_status = 'pending';
+
+  if current_setting('private.rebuild_later', true) is distinct from 'on' then
+    perform private.recompute_page_text(new.page_id);
+  end if;
+  return null;
+end;
+$$;
+
 create function public.edit_page(p_page_id uuid, p_user_id uuid, p_text text, p_words jsonb, p_gaps jsonb)
 returns text
 language plpgsql
@@ -239,6 +256,9 @@ begin
         from jsonb_to_recordset(p_gaps) as g (gap_index integer, text text)) then
       return 'invalid_edit';
     end if;
+    if (select coalesce(sum(char_length(g.text)), 0) from jsonb_to_recordset(p_gaps) as g (gap_index integer, text text)) > char_length(p_text) then
+      return 'invalid_edit';
+    end if;
     if exists (
       select 1 from jsonb_to_recordset(p_words) as w (token_index integer, text text)
       where not exists (
@@ -248,10 +268,12 @@ begin
       return 'invalid_edit';
     end if;
 
+    perform set_config('private.rebuild_later', 'on', true);
     for v_word in select w.token_index, w.text from jsonb_to_recordset(p_words) as w (token_index integer, text text) order by w.token_index loop
       insert into public.corrections (user_id, page_id, token_index, corrected_text, chosen_from, from_queue)
       values (p_user_id, p_page_id, v_word.token_index, v_word.text, 'keyboard', false);
     end loop;
+    perform set_config('private.rebuild_later', 'off', true);
 
     insert into public.page_gaps (page_id, user_id, gap_index, text)
     select p_page_id, p_user_id, g.gap_index, g.text

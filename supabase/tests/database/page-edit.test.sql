@@ -1,6 +1,6 @@
 begin;
 
-select plan(68);
+select plan(72);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -242,6 +242,36 @@ select throws_ok(
 select pg_temp.as_server();
 select is((select outcome from public.delete_page('e1000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')), 'deleted', 'an edited page is deleted');
 select is((select count(*) from public.page_gaps where page_id = 'e1000000-0000-0000-0000-000000000001'), 0::bigint, 'deleting a page deletes its gaps');
+
+select pg_temp.as_server();
+insert into public.pages (id, user_id, notebook_id, status, page_type) values
+  ('e1000000-0000-0000-0000-0000000000f1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'text');
+insert into public.readings (user_id, page_id, label, raw_text, model, model_version, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms)
+select 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'e1000000-0000-0000-0000-0000000000f1', 'B1', string_agg('w' || g, ' ' order by g), 'gemini-3.6-flash', 'v', 'V0', 0, 1, 1, 1
+from generate_series(0, 999) g;
+insert into public.page_texts (user_id, page_id, text, pipeline_version)
+select 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'e1000000-0000-0000-0000-0000000000f1', string_agg('w' || g, ' ' order by g), 'b1-raw' from generate_series(0, 999) g;
+insert into public.page_tokens (user_id, page_id, token_index, line_index, text, reading_b1, b1_start, b1_end)
+select 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'e1000000-0000-0000-0000-0000000000f1', g, 0, 'w' || g, 'w' || g,
+  (select coalesce(sum(char_length('w' || h) + 1), 0) from generate_series(0, g - 1) h),
+  (select coalesce(sum(char_length('w' || h) + 1), 0) from generate_series(0, g - 1) h) + char_length('w' || g)
+from generate_series(0, 999) g;
+create temp table big_edit as
+select clock_timestamp() as started,
+  public.edit_page(
+    'e1000000-0000-0000-0000-0000000000f1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    (select string_agg(case when g % 2 = 0 then 'x' || g else 'w' || g end, ' ' order by g) from generate_series(0, 999) g),
+    (select jsonb_agg(jsonb_build_object('token_index', g, 'text', 'x' || g)) from generate_series(0, 999, 2) g),
+    '[]'
+  ) as outcome;
+select is((select outcome from big_edit), 'edited', 'five hundred words are edited at once');
+select ok((select clock_timestamp() - started < interval '5 seconds' from big_edit), 'five hundred words in a thousand are edited in a few seconds, the text being rebuilt once');
+select is((select count(*) from public.corrections where page_id = 'e1000000-0000-0000-0000-0000000000f1'), 500::bigint, 'each of the five hundred words is a correction');
+select is(
+  pg_temp.shown('e1000000-0000-0000-0000-0000000000f1'),
+  (select string_agg(case when g % 2 = 0 then 'x' || g else 'w' || g end, ' ' order by g) from generate_series(0, 999) g),
+  'the text of the big edit is the text asked for'
+);
 
 select * from finish();
 

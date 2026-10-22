@@ -179,6 +179,33 @@ describe("alignEdit", () => {
     expect(second.result).toEqual({ status: "edit", words: [], gaps: [{ gap_index: 3, text: " !" }] });
   });
 
+  test.each([
+    ["3.5", "paid x euros", 1, "paid 3.5 euros", "paid 3.5 dollars", { token_index: 2, text: "dollars" }],
+    ["a/b", "go to x now", 2, "go to a/b now", "go to a/b then", { token_index: 3, text: "then" }],
+    ['"hello', "x world foo", 0, '"hello world foo', '"hello world bar', { token_index: 2, text: "bar" }],
+    ["(x)", "see x now", 1, "see (x) now", "see (x) later", { token_index: 2, text: "later" }],
+  ])("keeps a position whose word is %s when it is not the word that changed", (_, raw, index, shown, text, expected) => {
+    const base = apply(fresh(raw), [{ token_index: index, text: _ }], []);
+    expect(shownText(base)).toBe(shown);
+    const { result, state } = edited(base, text);
+    expect(result).toEqual({ status: "edit", words: [expected], gaps: [] });
+    expect(shownText(state)).toBe(text);
+  });
+
+  test("still gives the exact text when the word with a character that is no letter is the one that changed", () => {
+    const base = apply(fresh("paid x euros"), [{ token_index: 1, text: "3.5" }], []);
+    const { result, state } = edited(base, "paid 4.5 euros");
+    expect(result).toMatchObject({ status: "edit" });
+    expect(shownText(state)).toBe("paid 4.5 euros");
+  });
+
+  test("does not take a word with a character that is no letter from the inside of another word", () => {
+    const base = apply(fresh("paid x euros"), [{ token_index: 1, text: "3.5" }], []);
+    const { result, state } = edited(base, "paid 13.55 euros");
+    expect(result).toMatchObject({ status: "edit" });
+    expect(shownText(state)).toBe("paid 13.55 euros");
+  });
+
   test("leaves a deleted word alone, whatever the user does around it", () => {
     const base = apply(fresh("un grand chat noir"), [{ token_index: 1, text: "" }], [{ gap_index: 1, text: " " }, { gap_index: 2, text: "" }]);
     expect(shownText(base)).toBe("un chat noir");
@@ -232,7 +259,7 @@ describe("alignEdit", () => {
 
 describe("alignEdit on random edits", () => {
   const CORPUS = "Bonjour Paul,\nje suis a Paris. L'\u00e9t\u00e9 est l\u00e0 !\n\nOn a vu 3 chats -- noirs; peut-\u00eatre 4 [?] x\u00b2 + 1 = 2.\nFin.";
-  const PIECES = ["chat", "un", "\n", " ", ",", ".", " - ", "l'", "Paris", "\u00e9", "3", "\n\n", "[?]", "\u{1f600}", "mot", "  "];
+  const PIECES = ["(Paul)", "3.5", "a/b", "chat", "un", "\n", " ", ",", ".", " - ", "l'", "Paris", "\u00e9", "3", "\n\n", "[?]", "\u{1f600}", "mot", "  "];
 
   function random(seed: number): () => number {
     let value = seed;
@@ -261,7 +288,7 @@ describe("alignEdit on random edits", () => {
 
   test.each(Array.from({ length: 400 }, (_, seed) => seed))("gives exactly the text of the user and keeps the words placeable: seed %i", (seed) => {
     const next = random(seed + 1);
-    let state = fresh(CORPUS);
+    let state = apply(fresh(CORPUS), [{ token_index: 1, text: "(Paul)" }, { token_index: 3, text: "a/b" }, { token_index: 8, text: "3.5" }], []);
     for (let round = 0; round < 3; round += 1) {
       let text = shownText(state);
       for (let step = 0, steps = 1 + Math.floor(next() * 5); step < steps; step += 1) {

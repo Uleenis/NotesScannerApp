@@ -7,6 +7,10 @@ export const MAX_WORDS = 2_000;
 export const MAX_GAPS = 20_001;
 export const MAX_WORD_UNITS = 200;
 
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+
+const unsafe = (text: string): boolean => text.includes(String.fromCharCode(0)) || LONE_SURROGATE.test(text);
+
 export type PageEdit = { pageId: string; text: string; words: EditedWord[]; gaps: EditedGap[] };
 
 const isIndex = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -25,7 +29,7 @@ function wordsFrom(value: unknown): EditedWord[] | null {
     if (!exactly(entry, ["token_index", "text"])) return null;
     const index = entry.token_index;
     const text = entry.text;
-    if (!isIndex(index) || typeof text !== "string" || text.length > MAX_WORD_UNITS || Array.from(text).length > 100 || seen.has(index)) return null;
+    if (!isIndex(index) || typeof text !== "string" || text.length > MAX_WORD_UNITS || Array.from(text).length > 100 || unsafe(text) || seen.has(index)) return null;
     seen.add(index);
     words.push({ token_index: index, text });
   }
@@ -41,7 +45,7 @@ function gapsFrom(value: unknown, limit: number): EditedGap[] | null {
     if (!exactly(entry, ["gap_index", "text"])) return null;
     const index = entry.gap_index;
     const text = entry.text;
-    if (!isIndex(index) || typeof text !== "string" || seen.has(index)) return null;
+    if (!isIndex(index) || typeof text !== "string" || unsafe(text) || seen.has(index)) return null;
     total += text.length;
     if (total > limit) return null;
     seen.add(index);
@@ -51,6 +55,8 @@ function gapsFrom(value: unknown, limit: number): EditedGap[] | null {
 }
 
 export async function editFrom(request: Request): Promise<PageEdit | null> {
+  const declared = Number(request.headers.get("content-length") ?? 0);
+  if (declared > MAX_BODY_CHARS) return null;
   let body: unknown;
   try {
     const raw = await request.text();
@@ -65,7 +71,7 @@ export async function editFrom(request: Request): Promise<PageEdit | null> {
   if (keys.length !== 4 || !["page_id", "text", "words", "gaps"].every((key) => keys.includes(key))) return null;
   const pageId = given.page_id;
   const text = given.text;
-  if (typeof pageId !== "string" || !UUID.test(pageId) || typeof text !== "string" || text.length > MAX_TEXT_UNITS) return null;
+  if (typeof pageId !== "string" || !UUID.test(pageId) || typeof text !== "string" || text.length > MAX_TEXT_UNITS || unsafe(text)) return null;
   const words = wordsFrom(given.words);
   const gaps = gapsFrom(given.gaps, text.length);
   if (words === null || gaps === null) return null;

@@ -87,6 +87,13 @@ Deno.test("a body that is not exactly what is expected is refused before any cal
     { ...VALID, gaps: [{ gap_index: 1, text: 2 }] },
     { ...VALID, text: "ab", gaps: [{ gap_index: 0, text: "abc" }] },
     { ...VALID, gaps: Array.from({ length: 20_002 }, (_, index) => ({ gap_index: index, text: "" })) },
+    { ...VALID, text: "a" + String.fromCharCode(0) + "b" },
+    { ...VALID, text: "a" + String.fromCharCode(0xd800) + "b" },
+    { ...VALID, text: "a" + String.fromCharCode(0xdc00) },
+    { ...VALID, words: [{ token_index: 1, text: "a" + String.fromCharCode(0) }] },
+    { ...VALID, words: [{ token_index: 1, text: String.fromCharCode(0xd83d) }] },
+    { ...VALID, gaps: [{ gap_index: 1, text: String.fromCharCode(0) }] },
+    { ...VALID, gaps: [{ gap_index: 1, text: String.fromCharCode(0xde00) }] },
   ];
   for (const body of bodies) {
     const response = await call(world, store, TOKEN_ALICE, body);
@@ -101,7 +108,20 @@ Deno.test("a body that is not exactly what is expected is refused before any cal
   assertEquals(sent.length, 0);
 });
 
-Deno.test("a body of more than two megabytes is refused unread", async () => {
+Deno.test("a body that declares more than two megabytes is refused before it is read", async () => {
+  const world = new World();
+  const { store, sent } = fakeStore();
+  const request = new Request("http://functions.test/fn", {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN_ALICE}`, "content-length": "2000001" },
+    body: JSON.stringify(VALID),
+  });
+  const response = await handleEditPage(request, { auth: world.authPort(), edits: store, log: world.logger() });
+  assertEquals(response.status, 400);
+  assertEquals(sent.length, 0);
+});
+
+Deno.test("a body of more than two megabytes is refused", async () => {
   const world = new World();
   const { store, sent } = fakeStore();
   const response = await call(world, store, TOKEN_ALICE, JSON.stringify({ ...VALID, text: "x".repeat(2_100_000) }));
