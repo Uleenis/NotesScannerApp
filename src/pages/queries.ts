@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/auth/auth-provider";
 import type { DeleteResult } from "@/notebooks/removal";
 import type { MoveResult, PageStatus, SetTypeResult, StartResult, SwitchableType } from "./pages";
 import { pageService } from "./service";
-import { LIST_POLL_MS, PAGE_POLL_MS } from "./timing";
-import type { ChosenFrom, CorrectResult } from "./words";
+import { LIST_POLL_MS, PAGE_POLL_MS, WORDS_POLL_MAX, WORDS_POLL_MS } from "./timing";
+import { placeWords, type ChosenFrom, type CorrectResult } from "./words";
 
 const PHOTO_URL_STALE_MS = 50 * 60_000;
 
@@ -121,13 +121,33 @@ export function useDeletePage(pageId: string) {
   });
 }
 
-export function usePageWords(pageId: string, enabled: boolean) {
+export function usePageWords(pageId: string, enabled: boolean, text: string) {
   const { status, userId } = useAuth();
-  return useQuery({
+  const focused = useIsFocused();
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: ["page-words", userId, pageId],
     queryFn: () => pageService.words(pageId),
     enabled: enabled && status === "ready",
   });
+
+  const unplaced = query.data !== undefined && (query.data.words.length === 0 || placeWords(text, query.data) === null);
+  const [attempts, setAttempts] = useState(0);
+  const { refetch } = query;
+  const retrying = enabled && unplaced && focused && attempts < WORDS_POLL_MAX;
+  useEffect(() => {
+    if (!retrying) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setAttempts((count) => count + 1);
+      void refetch();
+      void queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] });
+    }, WORDS_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [retrying, query.dataUpdatedAt, refetch, queryClient, userId, pageId]);
+
+  return query;
 }
 
 export function useCorrectWord(pageId: string) {

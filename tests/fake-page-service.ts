@@ -6,6 +6,8 @@ import { histoire } from "./fake-notebook-service";
 export const timing = {
   PAGE_POLL_MS: 20,
   LIST_POLL_MS: 20,
+  WORDS_POLL_MS: 20,
+  WORDS_POLL_MAX: 30,
   CAPTURE_GRACE_MS: 60,
   STROKE_CYCLE_MS: 40,
   MAX_FADE_WAIT_MS: 10,

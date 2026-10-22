@@ -95,7 +95,7 @@ export function DocumentView({ page }: { page: NumberedPage }) {
   const info = parts === null ? t.document.pageNumber(page.number) : t.document.info(page.number, t.dates.long(parts.day, parts.month, parts.year));
 
   const correctable = page.pageType === "text" && page.status === "read";
-  const stored = usePageWords(page.id, correctable);
+  const stored = usePageWords(page.id, correctable, page.text ?? "");
   const correct = useCorrectWord(page.id);
   const [editing, setEditing] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);

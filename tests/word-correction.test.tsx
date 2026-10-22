@@ -289,6 +289,27 @@ describe("correcting a word with the keyboard", () => {
 });
 
 describe("a page whose words cannot be used", () => {
+  test("becomes tappable once A has written its words, without leaving the page", async () => {
+    const all = readingsOf(TEXT);
+    jest.mocked(pageService.words).mockResolvedValueOnce({ words: [], corrections: [] }).mockResolvedValue({ words: all, corrections: [] });
+    await openPage();
+
+    await fireEvent.press(await screen.findByText("Portugaise"));
+    expect(await screen.findByLabelText(fr.document.wordField)).toBeTruthy();
+    expect(jest.mocked(pageService.words).mock.calls.length).toBeGreaterThan(1);
+  });
+
+  test("looks again for its words a bounded number of times only", async () => {
+    jest.mocked(pageService.words).mockResolvedValue({ words: [], corrections: [] });
+    await openPage();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(20 * 200);
+    });
+
+    expect(jest.mocked(pageService.words).mock.calls.length).toBeLessThanOrEqual(32);
+    expect(jest.mocked(pageService.words).mock.calls.length).toBeGreaterThan(2);
+  });
+
   test("is shown as it was read, with no word to tap, when the words could not be loaded", async () => {
     jest.mocked(pageService.words).mockRejectedValue(new Error("offline"));
     await openPage();

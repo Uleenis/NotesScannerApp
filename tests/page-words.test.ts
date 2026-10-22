@@ -9,6 +9,7 @@ import {
   type WordRecord,
 } from "@/pages/words";
 import type { PagesClient } from "@/pages/pages";
+import places from "./fixtures/word-places.json";
 
 function word(index: number, start: number | null, end: number | null, overrides: Partial<WordRecord> = {}): WordRecord {
   const text = overrides.text ?? overrides.readingB1 ?? "mot";
@@ -96,6 +97,31 @@ describe("placeWords", () => {
 
   test("has no word to touch when the page has none", () => {
     expect(placeWords("Un chat", data([]))).toEqual([]);
+  });
+});
+
+describe("placeWords against the text the database rebuilt", () => {
+  test.each(places.map((entry) => [entry.name, entry] as const))("finds every word where the database left it: %s", (_, entry) => {
+    const placed = placeWords(entry.shown, { words: entry.words, corrections: entry.corrections });
+    expect(placed).not.toBeNull();
+    expect(placed).toHaveLength(entry.words.length);
+
+    const raw = Array.from(entry.raw);
+    let restored = "";
+    let at = 0;
+    for (const word of placed ?? []) {
+      restored += entry.shown.slice(at, word.start) + raw.slice(word.word.start ?? 0, word.word.end ?? 0).join("");
+      at = word.end;
+    }
+    restored += entry.shown.slice(at);
+    expect(restored).toBe(entry.raw);
+  });
+
+  test("shows the last correction of a word where the database put it", () => {
+    const entry = places[0];
+    const placed = placeWords(entry.shown, { words: entry.words, corrections: entry.corrections });
+    expect(placed?.map((word) => word.shown)).toEqual(["Un", "chats", "n", "sûr", "la", "toit"]);
+    expect(placed?.map((word) => entry.shown.slice(word.start, word.end))).toEqual(["Un", "chats", "n", "sûr", "la", "toit"]);
   });
 });
 
