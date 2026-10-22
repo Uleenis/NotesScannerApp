@@ -3,19 +3,19 @@ name = "reading"
 version = "0.1.0"
 requires-python = "==3.13.*"
 dependencies = [
-    "fastapi>=0.120",
+    "fastapi>=0.149.0",
     "espeakng-loader==0.2.4",
-    "httpx2>=2.13",
+    "httpx2>=2.15.1",
     "kraken==7.1.1",
     "lingua-language-detector>=2.1",
     "numpy==2.4.6",
-    "onnxruntime==1.30.0",
+    "onnxruntime==1.31.0",
     "phonemizer==3.4.0",
     "pillow==13.0.0",
     "scikit-image==0.25.2",
     "scipy==1.15.3",
     "threadpoolctl==3.6.0",
-    "tokenizers==0.23.2",
+    "tokenizers==0.23.3",
     "torch==2.14.0",
     "torchvision==0.29.0",
     "uvicorn>=0.38",
@@ -26,11 +26,11 @@ dev = [
     "mypy>=1.18",
     "pip-audit>=2.9",
     "pytest>=8.4",
-    "ruff>=0.14",
+    "ruff>=0.17.1",
 ]
 
 [build-system]
-requires = ["uv_build>=0.13,<0.14"]
+requires = ["uv_build>=0.13.1,<0.14"]
 build-backend = "uv_build"
 
 [tool.uv]
