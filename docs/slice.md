@@ -6,7 +6,7 @@ Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** `t4/replay` (branch 4), after the merge of `t4/rules` (PRs 58 and 59, `t4/schema` and `t4/second-pass`, are merged).
+- **Next branch:** `t4/math-check` (branch 5), after the merge of `t4/replay` (PRs 58, 59 and 60, `t4/schema`, `t4/second-pass` and `t4/rules`, are merged).
 - **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
@@ -19,8 +19,8 @@ Paths below are from the repository root.
 |---|---|---|---|---|---|---|
 | 1 | `t4/schema` | 4, 5 | sensitive (access rights) | Sonnet, High | Claude | done, PR 58 merged |
 | 2 | `t4/second-pass` | 1, 2 | sensitive (model call) | Sonnet, High | Claude | done, PR 59 merged |
-| 3 | `t4/rules` | 3 | ordinary | Sonnet, High | Claude | done (PR below) |
-| 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | to do |
+| 3 | `t4/rules` | 3 | ordinary | Sonnet, High | Claude | done, PR 60 merged |
+| 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | done (PR below) |
 | 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | to do |
 | 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | to do |
 | 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan, the status of `AGENTS.md`, and the Cloud Run end of slice if the plan asks for it |
@@ -92,3 +92,8 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - For `t4/replay`: `python -m reading.replay` takes an optional `b2` and `entities.b2` per page and returns `reading_b2`; it does not compute the alert. The forms keep their case (the spike lowercased them), and a missing line is one with no paired word whose run of words is nowhere in the other pass (the spike's harness fed rule 7 every unpaired line): if criterion 8 differs on a page, look there first, and write it in `../Tranche 4/Décisions.md`. Pairing matches the spike on 399 random pages and 52 stored pairs of real readings; criteria 8 and 9 are not measured yet.
 - The alert is written gate closed too (`../Tranche 4/Décisions.md`, "Pour Tim"). `t4/math-check` writes `math_incomplete` the same way through `p_alerts` after widening the kinds `record_reading_a` accepts, or through its own path.
 - Checked live on the local stack: the arbiter with the real store, espeak and the NER wrote the expected positions, places, rules 5 and 7 and the alert; the Edge Function path `set-page-type` is tested with fakes only.
+
+## Notes carried from slice 4, branch 4
+
+- `t4/replay` changes no code of the repository: the measure is the kit `04 Testing/T4 mesures/replay/` (`sh run.sh`, results in `Résultats.md`), outside the repository. Criterion 8: 18 pages, 1,819 positions, 0 differences against the harness reduced to rules 2 to 10 with B2 pinned. Criterion 9: 88 readings of the 11 free pages (V1, passes `lay` and `lay-swap`, four folds), 10,800 positions, 8 differences, all rule 7 in the harness and rule 9 in the service, on one line of `La France`; the harness gave rule 7 to every B1 line without a partner, the service only to a line whose words are nowhere in B2 (the spec of branch 3). With that definition on the harness side (`--refined`), 0 differences on both. Written in `../Tranche 4/Décisions.md`.
+- NER labels are pinned (those of `camembert-ner`); the NER of the service was measured on its own in slice 2. The `missing_line` alert is not replayed (`reading.replay` computes rules only).
