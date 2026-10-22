@@ -1,0 +1,243 @@
+[
+  {
+    "raw": "Un chat noir\nsur le toit",
+    "name": "shorter, longer and rewritten words",
+    "shown": "Un chats n\ns\u00fbr la toit",
+    "words": [
+      {
+        "end": 2,
+        "line": 0,
+        "text": "Un",
+        "index": 0,
+        "start": 0,
+        "readingA": null,
+        "readingB1": "Un",
+        "readingB2": null
+      },
+      {
+        "end": 7,
+        "line": 0,
+        "text": "chat",
+        "index": 1,
+        "start": 3,
+        "readingA": null,
+        "readingB1": "chat",
+        "readingB2": null
+      },
+      {
+        "end": 12,
+        "line": 0,
+        "text": "noir",
+        "index": 2,
+        "start": 8,
+        "readingA": null,
+        "readingB1": "noir",
+        "readingB2": null
+      },
+      {
+        "end": 16,
+        "line": 0,
+        "text": "s\u00fbr",
+        "index": 3,
+        "start": 13,
+        "readingA": "s\u00fbr",
+        "readingB1": "sur",
+        "readingB2": null
+      },
+      {
+        "end": 19,
+        "line": 0,
+        "text": "le",
+        "index": 4,
+        "start": 17,
+        "readingA": null,
+        "readingB1": "le",
+        "readingB2": null
+      },
+      {
+        "end": 24,
+        "line": 0,
+        "text": "toit",
+        "index": 5,
+        "start": 20,
+        "readingA": null,
+        "readingB1": "toit",
+        "readingB2": null
+      }
+    ],
+    "corrections": [
+      {
+        "text": "chats",
+        "revision": 1,
+        "tokenIndex": 1
+      },
+      {
+        "text": "n",
+        "revision": 1,
+        "tokenIndex": 2
+      },
+      {
+        "text": "la",
+        "revision": 1,
+        "tokenIndex": 4
+      },
+      {
+        "text": "toiture",
+        "revision": 1,
+        "tokenIndex": 5
+      },
+      {
+        "text": "toit",
+        "revision": 2,
+        "tokenIndex": 5
+      }
+    ]
+  },
+  {
+    "raw": "Cafe\u0301 noir fin",
+    "name": "decomposed accent",
+    "shown": "Cafe\u0301 noire fin",
+    "words": [
+      {
+        "end": 5,
+        "line": 0,
+        "text": "Caf\u00e9",
+        "index": 0,
+        "start": 0,
+        "readingA": null,
+        "readingB1": "Caf\u00e9",
+        "readingB2": null
+      },
+      {
+        "end": 10,
+        "line": 0,
+        "text": "noir",
+        "index": 1,
+        "start": 6,
+        "readingA": null,
+        "readingB1": "noir",
+        "readingB2": null
+      },
+      {
+        "end": 14,
+        "line": 0,
+        "text": "fin",
+        "index": 2,
+        "start": 11,
+        "readingA": null,
+        "readingB1": "fin",
+        "readingB2": null
+      }
+    ],
+    "corrections": [
+      {
+        "text": "noire",
+        "revision": 1,
+        "tokenIndex": 1
+      }
+    ]
+  },
+  {
+    "raw": "Un\r\nchat\r\nnoir",
+    "name": "carriage returns",
+    "shown": "Un\r\nchien\r\nnoir",
+    "words": [
+      {
+        "end": 2,
+        "line": 0,
+        "text": "Un",
+        "index": 0,
+        "start": 0,
+        "readingA": null,
+        "readingB1": "Un",
+        "readingB2": null
+      },
+      {
+        "end": 8,
+        "line": 0,
+        "text": "chat",
+        "index": 1,
+        "start": 4,
+        "readingA": null,
+        "readingB1": "chat",
+        "readingB2": null
+      },
+      {
+        "end": 14,
+        "line": 0,
+        "text": "noir",
+        "index": 2,
+        "start": 10,
+        "readingA": null,
+        "readingB1": "noir",
+        "readingB2": null
+      }
+    ],
+    "corrections": [
+      {
+        "text": "chien",
+        "revision": 1,
+        "tokenIndex": 1
+      }
+    ]
+  },
+  {
+    "raw": "\ud83d\ude00 mot \ud83d\ude00 fin",
+    "name": "astral characters",
+    "shown": "\ud83d\ude00 mots \ud83d\ude00 fins",
+    "words": [
+      {
+        "end": 1,
+        "line": 0,
+        "text": "\ud83d\ude00",
+        "index": 0,
+        "start": 0,
+        "readingA": null,
+        "readingB1": "\ud83d\ude00",
+        "readingB2": null
+      },
+      {
+        "end": 5,
+        "line": 0,
+        "text": "mot",
+        "index": 1,
+        "start": 2,
+        "readingA": null,
+        "readingB1": "mot",
+        "readingB2": null
+      },
+      {
+        "end": 7,
+        "line": 0,
+        "text": "\ud83d\ude00",
+        "index": 2,
+        "start": 6,
+        "readingA": null,
+        "readingB1": "\ud83d\ude00",
+        "readingB2": null
+      },
+      {
+        "end": 11,
+        "line": 0,
+        "text": "fin",
+        "index": 3,
+        "start": 8,
+        "readingA": null,
+        "readingB1": "fin",
+        "readingB2": null
+      }
+    ],
+    "corrections": [
+      {
+        "text": "mots",
+        "revision": 1,
+        "tokenIndex": 1
+      },
+      {
+        "text": "fins",
+        "revision": 1,
+        "tokenIndex": 3
+      }
+    ]
+  }
+]

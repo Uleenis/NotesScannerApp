@@ -6,7 +6,7 @@ Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** `t4/correction` (branch 6), after `t4/math-check` (PRs 58 to 62, `t4/schema`, `t4/second-pass`, `t4/rules`, `t4/replay` and `t4/math-check`, are merged).
+- **Next branch:** `t4/edit` (branch 7, the last of the slice), after `t4/correction` (PRs 58 to 62, `t4/schema`, `t4/second-pass`, `t4/rules`, `t4/replay` and `t4/math-check`, and PR 64, `t4/correction`, are merged).
 - **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
@@ -22,7 +22,7 @@ Paths below are from the repository root.
 | 3 | `t4/rules` | 3 | ordinary | Sonnet, High | Claude | done, PR 60 merged |
 | 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | done, PR 61 merged |
 | 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | done, PR 62 merged |
-| 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | to do |
+| 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | done, PR 64 merged |
 | 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | to do; last of the slice: its session also writes the Bilan and the status of `AGENTS.md` (no Cloud Run: it is in the pre-beta slice) |
 
 ## Slice 3
@@ -104,3 +104,11 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - Criterion 10 is measured by the kit `04 Testing/T4 mesures/math-check/` (`python run.py`, outside the repository): 0 alerts on the 20 ordered pairs of the production passes, an alert in both directions between `t0-pass-3` and each of the 17 other passes, 0 alerts on the 272 pairs of the 17 others. The fidelity fixture of the port is `supabase/functions/tests/fixtures/math-units.json` (synthetic lines; `fixture.py` in the kit writes it from `units.py`).
 - Every B2 written now costs one more read of the database (`mathCheckReadings`), on text pages too, to close the race with a switch to math: the order test of `read-page.test.ts` counts it.
 - `t4/edit` shows the alerts next to the title (`missing_line` and `math_incomplete`); the app reads `page_alerts` through its own select policy.
+
+## Notes carried from slice 4, branch 6
+
+- `t4/correction` makes the words of a page of text tappable: `src/pages/words.ts` (reads `page_tokens` and `corrections` by 1,000 rows, `placeWords`, `suggestionsFor`, `isWord`, `addCorrection`), `displayPieces` in `display.ts` (title and blocks as pieces that know their place in the text), `piece-text.tsx` and `word-editor.tsx`, `usePageWords` and `useCorrectWord`. No migration, no function, no guarded file.
+- `t4/edit` must keep `placeWords` honest: it checks the shown text against the places, so text the user adds or changes outside the positions (the planned own place for the user's text) makes the whole page not tappable unless the placement learns about it. The fixture `tests/fixtures/word-places.json` was written from the real `recompute_page_text` (kit in the session scratchpad, not kept): regenerate it the same way if that function changes.
+- The mode "Modifier" can reuse `displayPieces` and `placeWords`; the alerts (`missing_line`, `math_incomplete`) are read by the app through its own select policy on `page_alerts`, next to the title.
+- The phone check (criterion 11) must look at: the correction bar above the keyboard (header height under `KeyboardAvoidingView`), the tapped word staying visible, and VoiceOver reaching a word (nested `Text` in a selectable `Text`).
+- `pageService` gained `words` and `correct`: every test that mocks it by hand lists them.
