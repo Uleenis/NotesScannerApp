@@ -31,36 +31,70 @@ export function joinsPrevious(previous: string, line: string): boolean {
   return LOWERCASE_START.test(line.replace(OPENING_MARKS, "")) || JOINING_END.test(previous);
 }
 
-function glue(previous: string, line: string): string {
-  const spaced = /\s$/u.test(previous) || /^\s/u.test(line);
-  return spaced ? previous + line : `${previous} ${line}`;
+export type Piece = { text: string; offset: number | null };
+
+export type PieceBlock = { kind: "line"; pieces: Piece[] } | { kind: "gap" };
+
+export type DisplayPieces = { title: Piece[] | null; blocks: PieceBlock[] };
+
+type PlacedLine = { text: string; offset: number };
+
+function placedLines(text: string): PlacedLine[] {
+  const lines: PlacedLine[] = [];
+  const separator = /\r?\n/g;
+  let from = 0;
+  for (let found = separator.exec(text); found !== null; found = separator.exec(text)) {
+    lines.push({ text: text.slice(from, found.index), offset: from });
+    from = found.index + found[0].length;
+  }
+  lines.push({ text: text.slice(from), offset: from });
+  return lines;
 }
 
-export function displayDocument(text: string): DisplayDocument {
-  const lines = splitLines(text);
-  const titleIndex = lines.findIndex((line) => !isBlank(line));
+const piecesText = (pieces: Piece[]): string => pieces.map((piece) => piece.text).join("");
+
+export function displayPieces(text: string): DisplayPieces {
+  const lines = placedLines(text);
+  const titleIndex = lines.findIndex((line) => !isBlank(line.text));
   if (titleIndex === -1) {
     return { title: null, blocks: [] };
   }
 
-  const blocks: DisplayBlock[] = [];
+  const blocks: PieceBlock[] = [];
   let previousLine = "";
   for (const line of lines.slice(titleIndex + 1)) {
     const last = blocks[blocks.length - 1];
-    if (isBlank(line)) {
+    const piece: Piece = { text: line.text, offset: line.offset };
+    if (isBlank(line.text)) {
       if (last !== undefined && last.kind === "line") {
         blocks.push({ kind: "gap" });
       }
-    } else if (last !== undefined && last.kind === "line" && joinsPrevious(previousLine, line)) {
-      blocks[blocks.length - 1] = { kind: "line", text: glue(last.text, line) };
+    } else if (last !== undefined && last.kind === "line" && joinsPrevious(previousLine, line.text)) {
+      const before = piecesText(last.pieces);
+      const spaced = /\s$/u.test(before) || /^\s/u.test(line.text);
+      blocks[blocks.length - 1] = { kind: "line", pieces: spaced ? [...last.pieces, piece] : [...last.pieces, { text: " ", offset: null }, piece] };
     } else {
-      blocks.push({ kind: "line", text: line });
+      blocks.push({ kind: "line", pieces: [piece] });
     }
-    previousLine = line;
+    previousLine = line.text;
   }
   if (blocks[blocks.length - 1]?.kind === "gap") {
     blocks.pop();
   }
 
-  return { title: lines[titleIndex].trim(), blocks };
+  const first = lines[titleIndex];
+  const trimmed = first.text.trim();
+  const leading = first.text.length - first.text.trimStart().length;
+  return { title: [{ text: trimmed, offset: first.offset + leading }], blocks };
+}
+
+export function displayDocument(text: string): DisplayDocument {
+  const laid = displayPieces(text);
+  if (laid.title === null) {
+    return { title: null, blocks: [] };
+  }
+  return {
+    title: piecesText(laid.title),
+    blocks: laid.blocks.map((block): DisplayBlock => (block.kind === "gap" ? block : { kind: "line", text: piecesText(block.pieces) })),
+  };
 }

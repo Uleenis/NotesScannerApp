@@ -15,6 +15,7 @@ import {
   type StartResult,
   type SwitchableType,
 } from "./pages";
+import { addCorrection, listWords, type ChosenFrom, type CorrectResult, type PageWords } from "./words";
 
 export type PageService = {
   list: () => Promise<NumberedPage[]>;
@@ -25,6 +26,8 @@ export type PageService = {
   setPageType: (pageId: string, pageType: SwitchableType) => Promise<SetTypeResult>;
   move: (pageId: string, notebookId: string, chapterId: string | null) => Promise<MoveResult>;
   remove: (pageId: string) => Promise<DeleteResult>;
+  words: (pageId: string) => Promise<PageWords>;
+  correct: (pageId: string, tokenIndex: number, text: string, chosenFrom: ChosenFrom) => Promise<CorrectResult>;
 };
 
 export const pageService: PageService = {
@@ -36,4 +39,6 @@ export const pageService: PageService = {
   setPageType: (pageId, pageType) => setPageType(getSupabase(), pageId, pageType),
   move: (pageId, notebookId, chapterId) => movePage(getSupabase(), pageId, notebookId, chapterId),
   remove: (pageId) => deletePage(getSupabase(), pageId),
+  words: (pageId) => listWords(getSupabase(), pageId),
+  correct: (pageId, tokenIndex, text, chosenFrom) => addCorrection(getSupabase(), pageId, tokenIndex, text, chosenFrom),
 };

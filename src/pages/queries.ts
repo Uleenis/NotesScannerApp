@@ -7,6 +7,7 @@ import type { DeleteResult } from "@/notebooks/removal";
 import type { MoveResult, PageStatus, SetTypeResult, StartResult, SwitchableType } from "./pages";
 import { pageService } from "./service";
 import { LIST_POLL_MS, PAGE_POLL_MS } from "./timing";
+import type { ChosenFrom, CorrectResult } from "./words";
 
 const PHOTO_URL_STALE_MS = 50 * 60_000;
 
@@ -116,6 +117,29 @@ export function useDeletePage(pageId: string) {
       if (result.status === "deleted" || result.status === "missing") {
         void refreshPages(queryClient, userId);
       }
+    },
+  });
+}
+
+export function usePageWords(pageId: string, enabled: boolean) {
+  const { status, userId } = useAuth();
+  return useQuery({
+    queryKey: ["page-words", userId, pageId],
+    queryFn: () => pageService.words(pageId),
+    enabled: enabled && status === "ready",
+  });
+}
+
+export function useCorrectWord(pageId: string) {
+  const { userId } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation<CorrectResult, Error, { tokenIndex: number; text: string; chosenFrom: ChosenFrom }>({
+    mutationFn: ({ tokenIndex, text, chosenFrom }) => pageService.correct(pageId, tokenIndex, text, chosenFrom),
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] }),
+        queryClient.invalidateQueries({ queryKey: ["page-words", userId, pageId] }),
+      ]);
     },
   });
 }
