@@ -19,7 +19,7 @@ Paths below are from the repository root.
 
 | # | Branch | Criteria | Level | Session | Reviews | State |
 |---|---|---|---|---|---|---|
-| 1 | `t7/search-db` (full-text index, two-rank search function, bounds, excerpts, rights) | 1, 2, 3 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR to merge |
+| 1 | `t7/search-db` (full-text index, two-rank search function, bounds, excerpts, rights) | 1, 2, 3 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR 74 merged |
 | 2 | `t7/lexicon` (dictionary, `lexicon_entries`, recomputation, account transfer, suggestion) | 2, 4, 5 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | next |
 | 3 | `t7/search-measure` (recall measure, outside the repository) | 9 | ordinary | Sonnet 5.5, High | code, Sonnet | to do |
 | 4 | `t7/search-screen` (search screen, page opened with the highlight box) | 8, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | to do |
