@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 
 import { useStrings } from "@/i18n";
 import { dateParts } from "@/pages/dates";
@@ -12,6 +12,7 @@ import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
 import { useTextEdit } from "@/pages/use-text-edit";
 import { placeWords, type ChosenFrom, type PlacedWord } from "@/pages/words";
 import { colors, typography } from "@/theme";
+import { KeyboardLift } from "../keyboard-lift";
 import { Formula } from "./formula";
 import { PageTextBar, PageTextField } from "./page-text-edit";
 import { PieceText } from "./piece-text";
@@ -103,6 +104,11 @@ export function DocumentView({ page }: { page: NumberedPage }) {
   const correct = useCorrectWord(page.id);
   const [editing, setEditing] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
+  const scroller = useRef<ScrollView>(null);
+  const scrolled = useRef(0);
+  const frame = useRef<View>(null);
+  const [viewport, setViewport] = useState(0);
+  const [revealed, setRevealed] = useState<number | null>(null);
   const words = useMemo<PlacedWord[]>(
     () => (correctable && stored.data !== undefined ? (placeWords(page.text ?? "", stored.data) ?? []) : []),
     [correctable, stored.data, page.text],
@@ -114,10 +120,28 @@ export function DocumentView({ page }: { page: NumberedPage }) {
   const writing = textEdit.draft !== null;
   const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "missing_line" ? page.pageType === "text" : page.pageType === "math"));
 
-  function edit(index: number) {
+  function edit(index: number, touchedY: number | null) {
     setFailed(false);
     setEditing(index);
+    if (touchedY === null) {
+      setRevealed(null);
+      return;
+    }
+    frame.current?.measureInWindow((_x, top) => setRevealed(touchedY - top + scrolled.current));
   }
+
+  useEffect(() => {
+    if (editing === null || revealed === null || viewport === 0) {
+      return;
+    }
+    const margin = 16;
+    const half = typography.documentBody.lineHeight / 2;
+    if (revealed - half < scrolled.current + margin) {
+      scroller.current?.scrollTo({ y: Math.max(0, revealed - half - margin), animated: true });
+    } else if (revealed + half > scrolled.current + viewport - margin) {
+      scroller.current?.scrollTo({ y: revealed + half - viewport + margin, animated: true });
+    }
+  }, [editing, revealed, viewport]);
 
   async function save(placed: PlacedWord, text: string, chosenFrom: ChosenFrom) {
     if (chosenFrom === "keyboard" && text === placed.shown) {
@@ -150,29 +174,46 @@ export function DocumentView({ page }: { page: NumberedPage }) {
       </Text>
     );
 
+  const infoRow = (
+    <View style={styles.infoRow}>
+      <Text style={styles.info}>{info}</Text>
+      {editable && !writing ? (
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => {
+            setEditing(null);
+            textEdit.start();
+          }}
+          style={styles.editAction}
+        >
+          <Text style={styles.editText}>{t.document.edit}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+
   return (
-    <KeyboardAvoidingView behavior="padding" style={styles.fill}>
-      <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled">
-        <View style={styles.infoRow}>
-          <Text style={styles.info}>{info}</Text>
-          {editable && !writing ? (
-            <Pressable
-              accessibilityRole="button"
-              hitSlop={8}
-              onPress={() => {
-                setEditing(null);
-                textEdit.start();
-              }}
-              style={styles.editAction}
-            >
-              <Text style={styles.editText}>{t.document.edit}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        {textEdit.draft !== null ? (
+    <KeyboardLift style={styles.fill}>
+      {textEdit.draft !== null ? (
+        <View style={[styles.fill, styles.content]}>
+          {infoRow}
           <PageTextField value={textEdit.draft} saving={textEdit.saving} onChange={textEdit.setDraft} />
-        ) : (
-          <>
+        </View>
+      ) : (
+        <View ref={frame} collapsable={false} style={styles.fill}>
+          <ScrollView
+            ref={scroller}
+            contentContainerStyle={styles.content}
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            onLayout={(event) => setViewport(event.nativeEvent.layout.height)}
+            onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+              scrolled.current = event.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
+          >
+            {infoRow}
             {title}
             {shownAlerts.map((kind) => (
               <Text key={kind} style={[styles.secondary, styles.alert]}>
@@ -191,13 +232,21 @@ export function DocumentView({ page }: { page: NumberedPage }) {
                 block.kind === "gap" ? (
                   <View key={index} style={styles.gap} />
                 ) : (
-                  <PieceText key={index} selectable style={styles.line} pieces={block.pieces} words={words} editing={editing} onEdit={edit} />
+                  <PieceText
+                    key={index}
+                    selectable
+                    style={styles.line}
+                    pieces={block.pieces}
+                    words={words}
+                    editing={editing}
+                    onEdit={edit}
+                  />
                 ),
               )
             )}
-          </>
-        )}
-      </ScrollView>
+          </ScrollView>
+        </View>
+      )}
       {writing ? (
         <PageTextBar problem={textEdit.problem} saving={textEdit.saving} onCancel={textEdit.cancel} onSave={() => void textEdit.save()} />
       ) : current !== null ? (
@@ -210,7 +259,7 @@ export function DocumentView({ page }: { page: NumberedPage }) {
           onCancel={() => setEditing(null)}
         />
       ) : null}
-    </KeyboardAvoidingView>
+    </KeyboardLift>
   );
 }
 

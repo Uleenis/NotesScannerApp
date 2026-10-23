@@ -13,7 +13,6 @@ export function PageTextField({ value, saving, onChange }: { value: string; savi
       editable={!saving}
       multiline
       onChangeText={onChange}
-      scrollEnabled={false}
       style={styles.field}
       textAlignVertical="top"
       value={value}
@@ -52,7 +51,7 @@ const styles = StyleSheet.create({
   field: {
     ...typography.documentBody,
     color: colors.ink,
-    minHeight: 240,
+    flex: 1,
     padding: 0,
   },
   bar: {
