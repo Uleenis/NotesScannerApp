@@ -21,6 +21,9 @@ export function KeyboardLift({ children, style, testID }: KeyboardLiftProps) {
       return;
     }
     ref.current?.measureInWindow((_x, y, _width, height) => {
+      if (keyboardTop.current !== top) {
+        return;
+      }
       setLift(Math.max(0, y + height - top));
     });
   }, []);

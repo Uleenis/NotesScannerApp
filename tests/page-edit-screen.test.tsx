@@ -1,7 +1,7 @@
 import { useLocales } from "expo-localization";
 import { fireEvent, renderRouter, screen, waitFor } from "expo-router/testing-library";
 import { act } from "@testing-library/react-native";
-import { Alert, Keyboard, StyleSheet, View, type KeyboardEvent } from "react-native";
+import { Alert, Keyboard, ScrollView, StyleSheet, View, type KeyboardEvent } from "react-native";
 
 import { defaultAuthServices } from "@/auth/default-services";
 import type { Allowance } from "@/capture/allowance";
@@ -366,6 +366,45 @@ describe("above the keyboard", () => {
     await raiseKeyboard();
 
     expect(liftOf(screen.getByText(fr.document.editSave))).toBe(300);
+  });
+
+  describe("the tapped word", () => {
+    let scrollTo: jest.Mock;
+
+    beforeEach(() => {
+      scrollTo = jest.fn();
+      (ScrollView.prototype as unknown as { scrollTo: jest.Mock }).scrollTo = scrollTo;
+    });
+
+    async function tapAt(word: string, pageY: number): Promise<void> {
+      await openPage();
+      let scroller: ReturnType<typeof screen.getByText> | null = screen.getByText(word);
+      while (scroller !== null && scroller.props.scrollEventThrottle !== 16) {
+        scroller = scroller.parent;
+      }
+      if (scroller === null) {
+        throw new Error("no scroll view");
+      }
+      await act(async () => {
+        scroller.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 360, height: 400 } } });
+      });
+      await fireEvent.press(await screen.findByText(word), { nativeEvent: { pageY } });
+      await screen.findByLabelText(fr.document.wordField);
+    }
+
+    test("is scrolled above the bar when the bar and the keyboard would cover it [9]", async () => {
+      await tapAt("Portugaise", 56 + 390);
+
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+      const { y } = scrollTo.mock.calls[0][0] as { y: number };
+      expect(y).toBeGreaterThan(0);
+    });
+
+    test("is left where it is when it already shows above the bar", async () => {
+      await tapAt("Portugaise", 56 + 100);
+
+      expect(scrollTo).not.toHaveBeenCalled();
+    });
   });
 
   test("the Edit field fills the space above the bar, so the keyboard cursor stays in view [9]", async () => {

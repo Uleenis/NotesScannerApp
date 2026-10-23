@@ -123,6 +123,20 @@ describe.each(["android", "ios"] as const)("the lift on %s", (os) => {
     expect(paddingBottom()).toBe(24);
   });
 
+  test("ignores a measure that answers after the keyboard has closed", async () => {
+    let answer: (() => void) | null = null;
+    (View.prototype as unknown as { measureInWindow: Measure }).measureInWindow = (callback) => {
+      answer = () => callback(0, 0, 360, 800);
+    };
+    await renderLift();
+    await showKeyboard(500, 300);
+    await hideKeyboard();
+    await act(async () => {
+      answer?.();
+    });
+    expect(paddingBottom()).toBe(0);
+  });
+
   test("shows its children", async () => {
     place(0, 800);
     await renderLift();

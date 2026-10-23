@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 
 import { useStrings } from "@/i18n";
 import { dateParts } from "@/pages/dates";
@@ -106,9 +106,9 @@ export function DocumentView({ page }: { page: NumberedPage }) {
   const [failed, setFailed] = useState(false);
   const scroller = useRef<ScrollView>(null);
   const scrolled = useRef(0);
-  const [places] = useState(() => new Map<string, { y: number; height: number }>());
+  const frame = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
-  const [revealed, setRevealed] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<number | null>(null);
   const words = useMemo<PlacedWord[]>(
     () => (correctable && stored.data !== undefined ? (placeWords(page.text ?? "", stored.data) ?? []) : []),
     [correctable, stored.data, page.text],
@@ -120,31 +120,28 @@ export function DocumentView({ page }: { page: NumberedPage }) {
   const writing = textEdit.draft !== null;
   const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "missing_line" ? page.pageType === "text" : page.pageType === "math"));
 
-  function edit(index: number, place: string) {
+  function edit(index: number, touchedY: number | null) {
     setFailed(false);
     setEditing(index);
-    setRevealed(place);
-  }
-
-  function track(place: string) {
-    return (event: LayoutChangeEvent) => {
-      const { y, height } = event.nativeEvent.layout;
-      places.set(place, { y, height });
-    };
+    if (touchedY === null) {
+      setRevealed(null);
+      return;
+    }
+    frame.current?.measureInWindow((_x, top) => setRevealed(touchedY - top + scrolled.current));
   }
 
   useEffect(() => {
-    const rect = editing === null || revealed === null ? undefined : places.get(revealed);
-    if (rect === undefined || viewport === 0) {
+    if (editing === null || revealed === null || viewport === 0) {
       return;
     }
     const margin = 16;
-    if (rect.y < scrolled.current + margin) {
-      scroller.current?.scrollTo({ y: Math.max(0, rect.y - margin), animated: true });
-    } else if (rect.y + rect.height > scrolled.current + viewport - margin) {
-      scroller.current?.scrollTo({ y: rect.y + rect.height - viewport + margin, animated: true });
+    const half = typography.documentBody.lineHeight / 2;
+    if (revealed - half < scrolled.current + margin) {
+      scroller.current?.scrollTo({ y: Math.max(0, revealed - half - margin), animated: true });
+    } else if (revealed + half > scrolled.current + viewport - margin) {
+      scroller.current?.scrollTo({ y: revealed + half - viewport + margin, animated: true });
     }
-  }, [editing, revealed, viewport, places]);
+  }, [editing, revealed, viewport]);
 
   async function save(placed: PlacedWord, text: string, chosenFrom: ChosenFrom) {
     if (chosenFrom === "keyboard" && text === placed.shown) {
@@ -169,8 +166,7 @@ export function DocumentView({ page }: { page: NumberedPage }) {
         pieces={laid.title ?? [{ text: t.document.pageNumber(page.number), offset: null }]}
         words={words}
         editing={editing}
-        onEdit={(index) => edit(index, "title")}
-        onLayout={track("title")}
+        onEdit={edit}
       />
     ) : (
       <Text accessibilityRole="header" selectable style={styles.title}>
@@ -205,50 +201,51 @@ export function DocumentView({ page }: { page: NumberedPage }) {
           <PageTextField value={textEdit.draft} saving={textEdit.saving} onChange={textEdit.setDraft} />
         </View>
       ) : (
-        <ScrollView
-          ref={scroller}
-          contentContainerStyle={styles.content}
-          contentInsetAdjustmentBehavior="automatic"
-          keyboardShouldPersistTaps="handled"
-          onLayout={(event) => setViewport(event.nativeEvent.layout.height)}
-          onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
-            scrolled.current = event.nativeEvent.contentOffset.y;
-          }}
-          scrollEventThrottle={16}
-        >
-          {infoRow}
-          {title}
-          {shownAlerts.map((kind) => (
-            <Text key={kind} style={[styles.secondary, styles.alert]}>
-              {kind === "missing_line" ? t.document.alertMissingLine : t.document.alertMathIncomplete}
-            </Text>
-          ))}
-          {page.pageType === "unsupported_script" ? (
-            <Text style={[styles.secondary, styles.warning]}>{t.document.unsupportedScript}</Text>
-          ) : (
-            <MathSwitch page={page} mayLoseWork={mayLoseWork} />
-          )}
-          {math !== null ? (
-            <MathBody rows={math.rows} />
-          ) : (
-            laid?.blocks.map((block, index) =>
-              block.kind === "gap" ? (
-                <View key={index} style={styles.gap} />
-              ) : (
-                <PieceText
-                  key={index}
-                  selectable
-                  style={styles.line}
-                  pieces={block.pieces}
-                  words={words}
-                  editing={editing}
-                  onEdit={(word) => edit(word, `block:${index}`)}
-                  onLayout={track(`block:${index}`)}
-                />
-              ),
-            )
-          )}
-        </ScrollView>
+        <View ref={frame} collapsable={false} style={styles.fill}>
+          <ScrollView
+            ref={scroller}
+            contentContainerStyle={styles.content}
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            onLayout={(event) => setViewport(event.nativeEvent.layout.height)}
+            onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+              scrolled.current = event.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
+          >
+            {infoRow}
+            {title}
+            {shownAlerts.map((kind) => (
+              <Text key={kind} style={[styles.secondary, styles.alert]}>
+                {kind === "missing_line" ? t.document.alertMissingLine : t.document.alertMathIncomplete}
+              </Text>
+            ))}
+            {page.pageType === "unsupported_script" ? (
+              <Text style={[styles.secondary, styles.warning]}>{t.document.unsupportedScript}</Text>
+            ) : (
+              <MathSwitch page={page} mayLoseWork={mayLoseWork} />
+            )}
+            {math !== null ? (
+              <MathBody rows={math.rows} />
+            ) : (
+              laid?.blocks.map((block, index) =>
+                block.kind === "gap" ? (
+                  <View key={index} style={styles.gap} />
+                ) : (
+                  <PieceText
+                    key={index}
+                    selectable
+                    style={styles.line}
+                    pieces={block.pieces}
+                    words={words}
+                    editing={editing}
+                    onEdit={edit}
+                  />
+                ),
+              )
+            )}
+          </ScrollView>
+        </View>
       )}
       {writing ? (
         <PageTextBar problem={textEdit.problem} saving={textEdit.saving} onCancel={textEdit.cancel} onSave={() => void textEdit.save()} />

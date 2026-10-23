@@ -10,7 +10,7 @@ type PieceTextProps = TextProps & {
   pieces: Piece[];
   words: PlacedWord[];
   editing: number | null;
-  onEdit: (index: number) => void;
+  onEdit: (index: number, touchedY: number | null) => void;
 };
 
 export function PieceText({ pieces, words, editing, onEdit, ...rest }: PieceTextProps) {
@@ -43,7 +43,7 @@ export function PieceText({ pieces, words, editing, onEdit, ...rest }: PieceText
           key={`${at}:${placed.word.index}`}
           accessibilityHint={t.document.wordHint}
           accessibilityRole="button"
-          onPress={() => onEdit(placed.word.index)}
+          onPress={(event) => onEdit(placed.word.index, event?.nativeEvent?.pageY ?? null)}
           style={editing === placed.word.index ? styles.editing : undefined}
         >
           {piece.text.slice(placed.start - from, placed.end - from)}
