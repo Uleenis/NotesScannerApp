@@ -10,7 +10,7 @@ Paths below are from the repository root.
 - **Decisions from now on:** `../Tranche 4/Décisions.md`, in French, one line each; questions for the owner in its "Pour Tim" section.
 - **Guarded files:** none planned. A branch that needs one writes it in "Pour Tim" and goes on with the others.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
-- **Slice 3 is done** (PRs 46, 49 to 53 and the PR of `t3/screens`): its Bilan is `../Tranche 3/Bilan.md`, its decisions `../Tranche 3/Décisions.md`, and the phone checks of slices 2 and 3 are in `../Vérifications 1.md`, for the owner's return.
+- **Slice 3 is done** (PRs 46, 49 to 53 and the PR of `t3/screens`): its Bilan is `../Tranche 3/Bilan.md`, its decisions `../Tranche 3/Décisions.md`, and the phone checks of slices 2 to 4 are in `../Vérifications 1.md`: done on 22/10/2026 for slices 2 and 4; slice 3 waits for its menus to work on Android (`../../09 Iteration Logs/Tranches 2 à 4.md`).
 - **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 7, 9, 5, 6, 8. Cloud Run comes in the pre-beta slice (PB, after slice 8), with the paid accounts, the migrations and functions of slices 2 to 4, and Vertex AI; production stays at slice 1 until then (see the notes carried from slice 2). A slice whose document is missing or not validated: stop and ask.
 
 ## Branches
@@ -76,7 +76,6 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - `t4/schema` (migration `20261024120000_t4_schema.sql`) adds `corrections`, `page_alerts`, and to `page_tokens` `reading_b2`, `review_status` and the place of the word in B1 (`b1_start`, `b1_end`, in characters of the raw text of the B1 reading). `record_reading_a` keeps its signature and now reads `reading_b2`, `b1_start` and `b1_end` from each token object: `t4/rules` makes the service send them (the offsets must be in the raw text of B1, not in the NFC form `tokens.py` uses, if the two differ), and `t4/second-pass` writes the B2 row in `readings` (one B2 a page at most). The text a page shows is rebuilt by `private.recompute_page_text` from B1, the places and the corrections; a page whose positions have no place keeps its text, and a correction on such a position is refused.
 - The mode "Modifier" (`t4/edit`) keeps words added and line changes outside the positions: the rebuilt text is B1 plus word replacements only, so that branch needs its own place for the text of the user (and `recompute_page_text` must respect it).
 - `set_page_math` erases the corrections with the positions: `t4/correction` should ask for a confirmation before the switch when the page has corrections ("Pour Tim" of slice 4). The `math_incomplete` alert is erased on math to text (`t4/math-check`).
-- `corrections-race.sh` is not in `db:test:concurrency` until the owner applies `../Tranche 4/t4-schema package.json.patch`; run it by hand after a `db reset`.
 - A function that runs many times on a page must force custom plans (`set plan_cache_mode = 'force_custom_plan'`, as `recompute_page_text` does): PostgreSQL switches to a generic plan at the sixth call and the page-sized queries went from 2.5 ms to 145 ms.
 
 ## Notes carried from slice 4, branch 2
