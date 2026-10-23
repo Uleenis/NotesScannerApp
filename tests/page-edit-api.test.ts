@@ -2,6 +2,7 @@ import { FunctionsFetchError, FunctionsHttpError } from "@supabase/supabase-js";
 
 import { editPage } from "@/pages/edit";
 import { listAlerts } from "@/pages/alerts";
+import { readSecond } from "@/pages/second";
 import type { PagesClient } from "@/pages/pages";
 
 type Outcome = { data: unknown; error: unknown };
@@ -83,5 +84,44 @@ describe("listAlerts", () => {
     ["a row without a kind", { data: [{}], error: null }],
   ])("fails on %s", async (_, outcome) => {
     await expect(listAlerts(reader(outcome).client, "page-1")).rejects.toThrow();
+  });
+});
+
+describe("readSecond", () => {
+  function reader(outcome: Outcome) {
+    const calls: [string, unknown[]][] = [];
+    const chain: Record<string, unknown> = {};
+    for (const name of ["select", "eq", "limit"]) {
+      chain[name] = (...args: unknown[]) => {
+        calls.push([name, args]);
+        return chain;
+      };
+    }
+    chain.then = (resolve: (value: Outcome) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(outcome).then(resolve, reject);
+    const from = jest.fn((_table: string) => chain);
+    return { client: { from } as unknown as PagesClient, from, calls };
+  }
+
+  test("reads the text of the second reading of the page and nothing else", async () => {
+    const { client, from, calls } = reader({ data: [{ raw_text: "Une Deux" }], error: null });
+    expect(await readSecond(client, "page-1")).toBe("Une Deux");
+    expect(from).toHaveBeenCalledWith("readings");
+    expect(calls).toContainEqual(["select", ["raw_text"]]);
+    expect(calls).toContainEqual(["eq", ["page_id", "page-1"]]);
+    expect(calls).toContainEqual(["eq", ["label", "B2"]]);
+    expect(calls).toContainEqual(["limit", [1]]);
+  });
+
+  test("is null while the second reading has not arrived", async () => {
+    expect(await readSecond(reader({ data: [], error: null }).client, "page-1")).toBeNull();
+  });
+
+  test.each([
+    ["an error", { data: null, error: { message: "boom" } }],
+    ["a result that is not a list", { data: {}, error: null }],
+    ["a row without text", { data: [{}], error: null }],
+    ["a row whose text is not a string", { data: [{ raw_text: 3 }], error: null }],
+  ])("fails on %s", async (_, outcome) => {
+    await expect(readSecond(reader(outcome).client, "page-1")).rejects.toThrow();
   });
 });

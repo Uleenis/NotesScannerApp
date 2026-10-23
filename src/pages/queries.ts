@@ -194,3 +194,14 @@ export function usePageAlerts(pageId: string, enabled: boolean) {
     refetchInterval: (query) => (focused && query.state.dataUpdateCount < ALERTS_POLL_MAX ? ALERTS_POLL_MS : false),
   });
 }
+
+export function usePageSecond(pageId: string, enabled: boolean) {
+  const { status, userId } = useAuth();
+  const focused = useIsFocused();
+  return useQuery({
+    queryKey: ["page-second", userId, pageId],
+    queryFn: () => pageService.second(pageId),
+    enabled: enabled && status === "ready",
+    refetchInterval: (query) => (focused && query.state.data === null && query.state.dataUpdateCount < ALERTS_POLL_MAX ? ALERTS_POLL_MS : false),
+  });
+}

@@ -48,7 +48,7 @@ jest.mock("@/pages/service", () => ({
     words: jest.fn(),
     correct: jest.fn(),
     edit: jest.fn(),
-    alerts: jest.fn(async () => []),
+    alerts: jest.fn(async () => []), second: jest.fn(async () => null),
   },
 }));
 

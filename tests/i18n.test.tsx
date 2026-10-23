@@ -61,3 +61,33 @@ test("strings follow a change of the phone language", async () => {
   await rerender({});
   expect(result.current).toBe(en);
 });
+
+function sentences(node: object): string[] {
+  return Object.values(node).flatMap((value): string[] => {
+    if (typeof value === "string") {
+      return [value];
+    }
+    if (typeof value === "function") {
+      const result: unknown = (value as (...args: unknown[]) => unknown)("x", 2, 3, 4);
+      return typeof result === "string" ? [result] : [];
+    }
+    return typeof value === "object" && value !== null ? sentences(value) : [];
+  });
+}
+
+describe("the French sentences speak to one person [4]", () => {
+  const all = sentences(fr);
+
+  test("the scan covers the sentences", () => {
+    expect(all.length).toBeGreaterThan(150);
+  });
+
+  test("none says vous, votre or vos", () => {
+    expect(all.filter((sentence) => /\b(?:vous|votre|vos)\b/iu.test(sentence))).toEqual([]);
+  });
+
+  test("none gives an order to several people", () => {
+    const orders = all.flatMap((sentence) => sentence.match(/\b\p{L}+ez(?:-\p{L}+)?\b/gu) ?? []);
+    expect(orders.filter((word) => !["chez", "assez", "nez"].includes(word.toLowerCase()))).toEqual([]);
+  });
+});

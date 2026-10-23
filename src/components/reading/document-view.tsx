@@ -3,11 +3,12 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type NativeScrol
 
 import { useStrings } from "@/i18n";
 import { dateParts } from "@/pages/dates";
+import { cleanView } from "@/pages/clean";
 import { displayPieces } from "@/pages/display";
 import { mathDocument, type MathRow } from "@/pages/formulas";
 import type { NumberedPage, PageType } from "@/pages/pages";
 import { confirmDeletion } from "@/lib/action-menu";
-import { useCorrectWord, usePageAlerts, usePageWords, useSetPageType } from "@/pages/queries";
+import { useCorrectWord, usePageAlerts, usePageSecond, usePageWords, useSetPageType } from "@/pages/queries";
 import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
 import { useTextEdit } from "@/pages/use-text-edit";
 import { placeWords, type ChosenFrom, type PlacedWord } from "@/pages/words";
@@ -92,8 +93,8 @@ function MathBody({ rows }: { rows: MathRow[] }) {
 
 export function DocumentView({ page }: { page: NumberedPage }) {
   const t = useStrings();
-  const math = page.pageType === "math" ? mathDocument(page.text ?? "") : null;
-  const laid = math === null ? displayPieces(page.text ?? "") : null;
+  const isMath = page.pageType === "math";
+  const math = isMath ? mathDocument(page.text ?? "") : null;
   const parts = dateParts(page.capturedAt, new Date());
   const info = parts === null ? t.document.pageNumber(page.number) : t.document.info(page.number, t.dates.long(parts.day, parts.month, parts.year));
 
@@ -109,13 +110,18 @@ export function DocumentView({ page }: { page: NumberedPage }) {
   const frame = useRef<View>(null);
   const [viewport, setViewport] = useState(0);
   const [revealed, setRevealed] = useState<number | null>(null);
-  const words = useMemo<PlacedWord[]>(
+  const second = usePageSecond(page.id, correctable);
+  const placed = useMemo<PlacedWord[]>(
     () => (correctable && stored.data !== undefined ? (placeWords(page.text ?? "", stored.data) ?? []) : []),
     [correctable, stored.data, page.text],
   );
+  const tightened = stored.data !== undefined && stored.data.gaps.length === 0 ? (second.data ?? null) : null;
+  const clean = useMemo(() => (isMath ? null : cleanView(page.text ?? "", placed, tightened)), [isMath, page.text, placed, tightened]);
+  const words = clean === null ? placed : clean.words;
+  const laid = clean === null ? null : displayPieces(clean.text);
   const current = editing === null ? null : (words.find((placed) => placed.word.index === editing) ?? null);
   const mayLoseWork = stored.data === undefined || stored.data.corrections.length > 0 || stored.data.gaps.length > 0;
-  const textEdit = useTextEdit(page, words);
+  const textEdit = useTextEdit(page, placed, clean === null ? (page.text ?? "") : clean.text);
   const editable = read && ((page.pageType === "text" && words.length > 0) || page.pageType === "math");
   const writing = textEdit.draft !== null;
   const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "missing_line" ? page.pageType === "text" : page.pageType === "math"));
@@ -230,7 +236,7 @@ export function DocumentView({ page }: { page: NumberedPage }) {
             ) : (
               laid?.blocks.map((block, index) =>
                 block.kind === "gap" ? (
-                  <View key={index} style={styles.gap} />
+                  <View key={index} testID="page-gap" style={styles.gap} />
                 ) : (
                   <PieceText
                     key={index}

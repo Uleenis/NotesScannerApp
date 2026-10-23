@@ -21,5 +21,5 @@ export const PAGE_SERVICE_MOCK = {
   words: jest.fn(async () => ({ words: [], corrections: [], gaps: [] })),
   correct: jest.fn(),
   edit: jest.fn(),
-  alerts: jest.fn(async () => []),
+  alerts: jest.fn(async () => []), second: jest.fn(async () => null),
 };
