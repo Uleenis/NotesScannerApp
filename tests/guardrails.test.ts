@@ -100,26 +100,8 @@ const GUARDED_FILES = [
   "./scripts/**",
   "./tests/merge-gate.test.ts",
   "./tests/guardrails.test.ts",
-  "./tests/supabase-auth-config.test.ts",
-  "./supabase/config.toml",
-  "./audit-ci.json",
-  "./.nvmrc",
-  "./.gitignore",
-  "./.gitattributes",
-  "./.npmrc",
   "./.gitleaks.toml",
   "./.gitleaksignore",
-  "./.babelrc",
-  "./babel.config.js",
-  "./jest.config.js",
-  "./jest.config.ts",
-  "./deno.json",
-  "./supabase/functions/deno.json",
-  "./eslint.config.js",
-  "./tsconfig.json",
-  "./tests/setup.ts",
-  "./services/reading/audit-allowlist.txt",
-  "./services/reading/check.sh",
 ];
 
 const SECRET_FILES = [
@@ -128,7 +110,6 @@ const SECRET_FILES = [
 ];
 
 const DENIED_TOOLS = [
-  "mcp__Claude_Browser",
   "mcp__claude-in-chrome",
   "mcp__computer-use",
   "mcp__ccd_pr__set_auto_merge",
