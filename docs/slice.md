@@ -1,20 +1,32 @@
 # Current slice
 
-Correctifs 1 is done (its three pieces are merged), before slice 7. Slice 4 — Vérification is done.
+Slice 7 — Export et recherche is in progress (next branch: 1, `t7/search-db`). Correctifs 1 and slice 4 are done.
 
 Paths below are from the repository root.
 
-- **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
+- **Spec and plan:** `../../02 Design/Tranche 7.md`, one document, validated by the owner on 23/10/2026, with its decisions as proposed. Slice 7 adds `expo-print`, `expo-sharing` and a pure JavaScript ZIP library (check in Expo Go in the first branch that adds them); no guarded file; no Gemini call.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
 - **Correctifs 1:** spec and plan in `../../02 Design/Correctifs 1.md` (validated 23/10/2026), decisions in `../Correctifs 1/Décisions.md`. Pieces 1 (`fix/action-sheet`), 2 (`fix/keyboard`) and 3 (`fix/display`) are merged; its Bilan is `../Correctifs 1/Bilan.md`, its phone checks `../Correctifs 1/Vérifications.md`.
-- **Next branch after the Correctifs:** none. Slice 4 is done: its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`. The slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 7 next; no document of slice 7 is in `../../02 Design/` yet, so the next session stops and asks for it.
-- **Decisions from now on:** `../Tranche N/Décisions.md` of the current slice, in French, one line each; questions for the owner in `../Pour Tim.md`.
+- **Next branch:** 1, `t7/search-db` (Sonnet 5.5, High). The last branch of slice 7 writes `../Tranche 7/Bilan.md` and `../Tranche 7/Vérifications.md` and the status of `AGENTS.md`.
+- **Slice 4 is done:** its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`.
+- **Decisions from now on:** `../Tranche 7/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Guarded files:** only the referee (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the two guardrail tests, gitleaks). A slice that needs one prepares one patch and writes it in `../Pour Tim.md`.
-- **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
+- **Gemini:** no call in slice 7; measure 9 starts from the pinned readings. One real end-to-end reading costs two calls.
 - **Slice 3 is done** (PRs 46, 49 to 53 and the PR of `t3/screens`): its Bilan is `../Tranche 3/Bilan.md`, its decisions `../Tranche 3/Décisions.md`, and the phone checks of slices 2 to 4 are in `../Vérifications 1.md`: done on 22/10/2026 for slices 2 and 4; slice 3 waits for its menus to work on Android (`../../09 Iteration Logs/Tranches 2 à 4.md`).
-- **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 7, 9, 5, 6, 8. Cloud Run comes in the pre-beta slice (PB, after slice 8), with the paid accounts, the migrations and functions of slices 2 to 4, and Vertex AI; production stays at slice 1 until then (see the notes carried from slice 2). A slice whose document is missing or not validated: stop and ask.
+- **After this slice:** the slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 9, 5, 6, 8. Cloud Run comes in the pre-beta slice (PB, after slice 8), with the paid accounts, the migrations and functions of slices 2 to 4, and Vertex AI; production stays at slice 1 until then (see the notes carried from slice 2). A slice whose document is missing or not validated: stop and ask.
 
 ## Branches
+
+| # | Branch | Criteria | Level | Session | Reviews | State |
+|---|---|---|---|---|---|---|
+| 1 | `t7/search-db` (full-text index, two-rank search function, bounds, excerpts, rights) | 1, 2, 3 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | next |
+| 2 | `t7/lexicon` (dictionary, `lexicon_entries`, recomputation, account transfer, suggestion) | 2, 4, 5 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | to do |
+| 3 | `t7/search-measure` (recall measure, outside the repository) | 9 | ordinary | Sonnet 5.5, High | code, Sonnet | to do |
+| 4 | `t7/search-screen` (search screen, page opened with the highlight box) | 8, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | to do |
+| 5 | `t7/export` (PDF and Markdown of a page, a chapter, a notebook) | 6, 8, 11 | sensitive (hostile input in HTML) | Sonnet 5.5, High | code and security, Sonnet | to do |
+| 6 | `t7/my-data` (export of "my data" on the phone) | 7, 8, 12 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | to do |
+
+## Slice 4
 
 | # | Branch | Criteria | Level | Session | Merged by | State |
 |---|---|---|---|---|---|---|
