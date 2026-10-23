@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthProvider } from "@/auth/auth-provider";
 import { defaultAuthServices } from "@/auth/default-services";
+import { ActionSheetHost } from "@/components/action-sheet-host";
 import { ForgetOtherAccounts } from "@/components/forget-other-accounts";
 import { createQueryClient, followAppFocus } from "@/lib/query-client";
 import { stackScreenOptions } from "@/navigation-options";
@@ -81,6 +82,7 @@ export default function RootLayout() {
             <Stack.Screen name="rename" options={{ presentation: "modal" }} />
             <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />
           </Stack>
+          <ActionSheetHost />
         </QueryClientProvider>
       </AuthProvider>
     </GestureHandlerRootView>

@@ -16,6 +16,7 @@ export const colors = {
   blueTint: "#E6E8F4",
   highlight: "#F6E27A",
   danger: "#A3322A",
+  scrim: "rgba(31, 29, 26, 0.4)",
 } as const;
 
 export const fontFamilies = {

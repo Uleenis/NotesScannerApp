@@ -1,6 +1,7 @@
 import { useLocales } from "expo-localization";
+import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen, waitFor } from "expo-router/testing-library";
-import { ActionSheetIOS, Alert, type AlertButton } from "react-native";
+import { ActionSheetIOS, Alert, StyleSheet, type AlertButton } from "react-native";
 
 import { defaultAuthServices } from "@/auth/default-services";
 import type { Allowance } from "@/capture/allowance";
@@ -8,6 +9,8 @@ import { captureService } from "@/capture/service";
 import { strings } from "@/i18n";
 import { notebookService } from "@/notebooks/service";
 import { pageService } from "@/pages/service";
+import { closeMenu } from "@/lib/action-menu";
+import { colors } from "@/theme";
 import { granted, installPermission } from "./fake-camera";
 import { installFakeLibrary } from "./fake-library";
 import { localMoment, page } from "./fake-page-service";
@@ -83,7 +86,8 @@ beforeEach(() => {
   alert = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => closeMenu());
   sheet.mockRestore();
   alert.mockRestore();
 });
@@ -96,10 +100,9 @@ async function openApp(initialUrl: string): Promise<() => string> {
 
 async function chooseFromMenu(menuLabel: string, item: string): Promise<void> {
   await fireEvent.press(await screen.findByLabelText(menuLabel));
-  const [options, callback] = sheet.mock.calls[sheet.mock.calls.length - 1] as [{ options: string[] }, (index: number) => void];
-  const index = options.options.indexOf(item);
-  expect(index).toBeGreaterThanOrEqual(0);
-  await act(async () => callback(index));
+  const option = (await screen.findAllByTestId(/^action-sheet-option-/)).find((node) => node.props.accessibilityLabel === item);
+  expect(option).toBeDefined();
+  await fireEvent.press(option!);
 }
 
 function lastAlert(): { title: string; body: string | undefined; buttons: AlertButton[] } {
@@ -469,17 +472,31 @@ describe("deleting a notebook", () => {
   });
 });
 
+describe("the sheet of a menu", () => {
+  test("closes by itself when the screen changes", async () => {
+    await openApp(`/notebook/${histoire.id}`);
+    await fireEvent.press(await screen.findByLabelText(fr.notebook.menuLabel));
+    expect(screen.getAllByTestId(/^action-sheet-option-/).length).toBeGreaterThan(0);
+
+    await act(async () => router.push(`/chapter/${moyenAge.id}`));
+
+    await waitFor(() => expect(screen.queryAllByTestId(/^action-sheet-option-/)).toHaveLength(0));
+  });
+});
+
 describe("the menu of a page", () => {
   test("offers to move and to delete a page that is read, next to its photo", async () => {
     await openApp("/page/p2");
     await screen.findByText("Les Capétiens");
 
     await fireEvent.press(await screen.findByLabelText(fr.pageMenu.label));
-    const [options] = sheet.mock.calls[0] as [{ options: string[]; destructiveButtonIndex: number; cancelButtonIndex: number }];
-    expect(options.options).toEqual([fr.pageMenu.move, fr.pageMenu.delete, fr.common.cancel]);
-    expect(options.destructiveButtonIndex).toBe(1);
-    expect(options.cancelButtonIndex).toBe(2);
-    expect(screen.getByLabelText(fr.document.openPhoto)).toBeTruthy();
+    const labels = (await screen.findAllByRole("button")).map((node) => node.props.accessibilityLabel);
+    expect(labels).toEqual(expect.arrayContaining([fr.pageMenu.move, fr.pageMenu.delete, fr.common.cancel]));
+    const options = screen.getAllByTestId(/^action-sheet-option-/).map((node) => node.props.accessibilityLabel);
+    expect(options).toEqual([fr.pageMenu.move, fr.pageMenu.delete]);
+    expect(StyleSheet.flatten(screen.getByTestId("action-sheet-label-1").props.style).color).toBe(colors.danger);
+    expect(sheet).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(fr.document.openPhoto, { includeHiddenElements: true })).toBeTruthy();
   });
 
   test("moves the page to a chapter of another notebook [12]", async () => {
