@@ -1,4 +1,4 @@
-import { Alert } from "react-native";
+import { Alert, Keyboard } from "react-native";
 
 export type MenuItem = { label: string; destructive?: boolean; onPress: () => void };
 export type OpenMenu = { items: MenuItem[]; cancelLabel: string };
@@ -23,6 +23,7 @@ export function currentMenu(): OpenMenu | null {
 }
 
 export function showMenu(items: MenuItem[], cancelLabel: string): void {
+  Keyboard.dismiss();
   publish({ items, cancelLabel });
 }
 

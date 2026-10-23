@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
-import { ActionSheetIOS, BackHandler, Platform, StyleSheet } from "react-native";
+import { ActionSheetIOS, BackHandler, Keyboard, Platform, StyleSheet } from "react-native";
 
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -134,6 +134,14 @@ describe("the back button of Android", () => {
     await open();
     await act(async () => closeMenu());
     expect(backHandlers).toHaveLength(0);
+  });
+});
+
+describe("the keyboard", () => {
+  test("is dismissed when a menu opens, so the sheet is not hidden behind it", async () => {
+    const dismiss = jest.spyOn(Keyboard, "dismiss").mockImplementation(() => undefined);
+    await open();
+    expect(dismiss).toHaveBeenCalledTimes(1);
   });
 });
 
