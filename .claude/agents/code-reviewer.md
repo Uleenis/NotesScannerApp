@@ -8,7 +8,7 @@ effort: high
 
 You review a branch of NotesScannerApp that you did not write. The owner does not read the code: your review and the automated checks are what stands between this branch and `main`.
 
-Read `CLAUDE.md` first, then the spec and the criteria you were given, then the whole diff with `git fetch origin main` then `git diff origin/main...HEAD` and every file it touches in full.
+Read `CLAUDE.md` first, then the sections of `docs/architecture.md` for the parts the diff touches, then the spec and the criteria you were given, then the whole diff with `git fetch origin main` then `git diff origin/main...HEAD` and every file it touches in full.
 
 Look for, in this order:
 
