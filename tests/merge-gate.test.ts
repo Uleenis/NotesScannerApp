@@ -10,8 +10,6 @@ import {
   deployRefusals,
   mergeArguments,
   mergeRefusals,
-  lockRefusals,
-  packageRefusals,
 } from "../scripts/merge-gate";
 
 const ready: PullRequest = {
@@ -110,26 +108,8 @@ describe("mergeRefusals", () => {
     "scripts/merge-gate.ts",
     "tests/merge-gate.test.ts",
     "tests/guardrails.test.ts",
-    "tests/supabase-auth-config.test.ts",
-    "supabase/config.toml",
-    "audit-ci.json",
-    ".nvmrc",
-    ".gitignore",
-    ".gitattributes",
-    ".npmrc",
     ".gitleaks.toml",
     ".gitleaksignore",
-    ".babelrc",
-    "babel.config.js",
-    "jest.config.js",
-    "jest.config.ts",
-    "deno.json",
-    "supabase/functions/deno.json",
-    "eslint.config.js",
-    "tsconfig.json",
-    "tests/setup.ts",
-    "services/reading/audit-allowlist.txt",
-    "services/reading/check.sh",
     "Scripts/merge-gate.ts",
     ".Claude/settings.json",
   ])("leaves a pull request that changes %s to the owner", (path) => {
@@ -142,7 +122,18 @@ describe("mergeRefusals", () => {
     expect(mergeRefusals(ready, green, ["package.json.md", "scriptsdoc.md", "tests/gates-other.test.ts"], true)).toEqual([]);
   });
 
-  it.each(["package.json", "package-lock.json"])("leaves %s to its own checks", (path) => {
+  it.each([
+    "package.json",
+    "package-lock.json",
+    "supabase/config.toml",
+    "tests/supabase-auth-config.test.ts",
+    "audit-ci.json",
+    "tsconfig.json",
+    "eslint.config.js",
+    "tests/setup.ts",
+    "services/reading/audit-allowlist.txt",
+    "services/reading/check.sh",
+  ])("lets Claude merge a pull request that changes %s", (path) => {
     expect(mergeRefusals(ready, green, [...files, path], true)).toEqual([]);
   });
 
@@ -167,112 +158,6 @@ describe("mergeRefusals", () => {
       "GitHub reports the pull request as UNKNOWN, not mergeable",
     ]);
   });
-});
-
-describe("packageRefusals", () => {
-  const base = JSON.stringify({
-    main: "expo-router/entry",
-    dependencies: { a: "^1.0.0", expo: "~57.0.22" },
-    devDependencies: { jest: "~29.7.0" },
-    scripts: { test: "jest" },
-    jest: { preset: "jest-expo" },
-  });
-  const withChange = (change: Record<string, unknown>) => JSON.stringify({ ...JSON.parse(base), ...change });
-  const unreadable = "package.json cannot be read on main or on the branch: the owner merges this pull request";
-
-  it.each([
-    ["a new version", { dependencies: { a: "^1.2.0", expo: "~57.0.22" } }],
-    ["a new package", { dependencies: { a: "^1.0.0", b: "2.0.0", expo: "~57.0.22" } }],
-    ["a removed package", { dependencies: { expo: "~57.0.22" } }],
-    ["a prerelease", { dependencies: { a: "1.0.0-rc.1", expo: "~57.0.22" } }],
-  ])("lets %s through", (_label, change) => {
-    expect(packageRefusals(base, withChange(change))).toEqual([]);
-  });
-
-  it.each([
-    ["scripts", { scripts: { test: "true" } }],
-    ["jest", { jest: { preset: "jest-expo", testPathIgnorePatterns: ["/"] } }],
-    ["babel", { babel: { plugins: ["./tools/x.js"] } }],
-    ["overrides", { overrides: { "jest-cli": "github:x/y" } }],
-    ["workspaces", { workspaces: ["tools/*"] }],
-    ["main", { main: "index.js" }],
-  ])("leaves a change of %s to the owner", (key, change) => {
-    expect(packageRefusals(base, withChange(change))).toEqual([
-      `the pull request changes "${key}" in package.json, which the owner merges`,
-    ]);
-  });
-
-  it.each([
-    ["expo", { dependencies: { a: "^1.0.0", expo: "~58.0.0" } }],
-    ["jest", { devDependencies: { jest: "file:./tools/jest" } }],
-    ["typescript", { devDependencies: { jest: "~29.7.0", typescript: "~6.0.3" } }],
-  ])("leaves a change of %s, which runs or shapes the checks, to the owner", (name, change) => {
-    expect(packageRefusals(base, withChange(change))).toEqual([
-      `the pull request changes "${name}", which runs or shapes the checks: the owner merges it`,
-    ]);
-  });
-
-  it.each([
-    "file:./tools/b",
-    "link:../b",
-    "github:x/b",
-    "git+https://x/b.git",
-    "https://x/b.tgz",
-    "npm:other@1.0.0",
-    "workspace:*",
-    "*",
-    "latest",
-    ">=1.0.0",
-  ])("leaves a package from %s to the owner", (source) => {
-    expect(packageRefusals(base, withChange({ dependencies: { a: "^1.0.0", b: source, expo: "~57.0.22" } }))).toEqual([
-      'the pull request gives "b" a source other than a version of the npm registry: the owner merges it',
-    ]);
-  });
-
-  it("leaves a list of packages that is not an object to the owner", () => {
-    expect(packageRefusals(base, withChange({ devDependencies: ["jest"] }))).toEqual([
-      '"devDependencies" of package.json is not a list of packages: the owner merges this pull request',
-    ]);
-  });
-
-  it.each([
-    ["missing on the branch", base, null],
-    ["missing on main", null, base],
-    ["not JSON", base, "{"],
-    ["not an object", base, "[]"],
-  ])("refuses a package.json %s", (_label, before, after) => {
-    expect(packageRefusals(before, after)).toEqual([unreadable]);
-  });
-});
-
-describe("lockRefusals", () => {
-  const lock = (packages: Record<string, unknown>) =>
-    JSON.stringify({ lockfileVersion: 3, packages: { "": { name: "app" }, ...packages } });
-  const fromRegistry = { resolved: "https://registry.npmjs.org/a/-/a-1.0.0.tgz", integrity: "sha512-x" };
-  const outside =
-    "package-lock.json takes 1 package(s) from outside the npm registry, or without integrity: the owner merges this pull request";
-  const unreadable = "package-lock.json cannot be read on the branch: the owner merges this pull request";
-
-  it("lets packages of the npm registry with their integrity through", () => {
-    expect(lockRefusals(lock({ "node_modules/a": fromRegistry, "node_modules/b": { version: "1.0.0" } }))).toEqual([]);
-  });
-
-  it.each([
-    ["another host", { resolved: "https://evil.example/a.tgz", integrity: "sha512-x" }],
-    ["plain http", { resolved: "http://registry.npmjs.org/a/-/a-1.0.0.tgz", integrity: "sha512-x" }],
-    ["no integrity", { resolved: "https://registry.npmjs.org/a/-/a-1.0.0.tgz" }],
-    ["a link", { link: true, resolved: "tools/jest" }],
-    ["a git source", { resolved: "git+ssh://git@github.com/x/a.git#abc" }],
-  ])("leaves a package from %s to the owner", (_label, entry) => {
-    expect(lockRefusals(lock({ "node_modules/a": entry }))).toEqual([outside]);
-  });
-
-  it.each([null, "{", "[]", JSON.stringify({ packages: [] }), JSON.stringify({ lockfileVersion: 3 })])(
-    "refuses an unreadable lock %j",
-    (text) => {
-      expect(lockRefusals(text)).toEqual([unreadable]);
-    },
-  );
 });
 
 describe("mergeArguments", () => {

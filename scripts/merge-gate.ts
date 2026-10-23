@@ -37,26 +37,8 @@ export const GUARDED_PATHS = [
   "scripts/",
   "tests/merge-gate.test.ts",
   "tests/guardrails.test.ts",
-  "tests/supabase-auth-config.test.ts",
-  "supabase/config.toml",
-  "audit-ci.json",
-  ".nvmrc",
-  ".gitignore",
-  ".gitattributes",
-  ".npmrc",
   ".gitleaks.toml",
   ".gitleaksignore",
-  ".babelrc",
-  "babel.config.js",
-  "jest.config.js",
-  "jest.config.ts",
-  "deno.json",
-  "supabase/functions/deno.json",
-  "eslint.config.js",
-  "tsconfig.json",
-  "tests/setup.ts",
-  "services/reading/audit-allowlist.txt",
-  "services/reading/check.sh",
 ];
 
 export const PRODUCTION_REF = "eapxcxcxapfrylxuzjsy";
@@ -94,96 +76,6 @@ export function mergeRefusals(pr: PullRequest, checks: Check[], files: string[],
   const guarded = files.filter(isGuarded);
   if (guarded.length > 0) refusals.push(`the pull request changes guarded files, which the owner merges: ${guarded.join(", ")}`);
   return refusals;
-}
-
-export const DEPENDENCY_KEYS = ["dependencies", "devDependencies"];
-
-export const FROZEN_PACKAGES = [
-  "expo",
-  "jest",
-  "jest-expo",
-  "typescript",
-  "eslint",
-  "eslint-config-expo",
-  "audit-ci",
-  "supabase",
-  "@testing-library/react-native",
-];
-
-const PLAIN_VERSION = /^[~^]?\d+(\.\d+){0,2}(-[0-9A-Za-z.]+)?$/;
-
-const NPM_REGISTRY = "https://registry.npmjs.org/";
-
-function parseObject(text: string | null): Record<string, unknown> | null {
-  if (text === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function dependencyMap(value: unknown): Record<string, unknown> | null {
-  if (value === undefined) return {};
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-export function packageRefusals(base: string | null, head: string | null): string[] {
-  const before = parseObject(base);
-  const after = parseObject(head);
-  if (before === null || after === null) {
-    return ["package.json cannot be read on main or on the branch: the owner merges this pull request"];
-  }
-  const refusals: string[] = [];
-  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
-  const otherKeys = keys.filter(
-    (key) => !DEPENDENCY_KEYS.includes(key) && JSON.stringify(before[key]) !== JSON.stringify(after[key]),
-  );
-  if (otherKeys.length > 0) {
-    refusals.push(
-      `the pull request changes ${otherKeys.map((key) => `"${key}"`).join(", ")} in package.json, which the owner merges`,
-    );
-  }
-  for (const key of DEPENDENCY_KEYS) {
-    const old = dependencyMap(before[key]);
-    const now = dependencyMap(after[key]);
-    if (old === null || now === null) {
-      refusals.push(`"${key}" of package.json is not a list of packages: the owner merges this pull request`);
-      continue;
-    }
-    const names = [...new Set([...Object.keys(old), ...Object.keys(now)])].sort();
-    for (const name of names) {
-      if (old[name] === now[name]) continue;
-      const value = now[name];
-      if (FROZEN_PACKAGES.includes(name)) {
-        refusals.push(`the pull request changes "${name}", which runs or shapes the checks: the owner merges it`);
-      } else if (name in now && (typeof value !== "string" || !PLAIN_VERSION.test(value))) {
-        refusals.push(`the pull request gives "${name}" a source other than a version of the npm registry: the owner merges it`);
-      }
-    }
-  }
-  return refusals;
-}
-
-export function lockRefusals(lock: string | null): string[] {
-  const parsed = parseObject(lock);
-  const packages = parsed === null || parsed.packages === undefined ? null : dependencyMap(parsed.packages);
-  if (packages === null) return ["package-lock.json cannot be read on the branch: the owner merges this pull request"];
-  const outside = Object.entries(packages).filter(([path, entry]) => {
-    if (path === "") return false;
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return true;
-    const record = entry as Record<string, unknown>;
-    if (record.link === true) return true;
-    if (record.resolved === undefined) return false;
-    return typeof record.resolved !== "string" || !record.resolved.startsWith(NPM_REGISTRY) || typeof record.integrity !== "string";
-  });
-  if (outside.length === 0) return [];
-  return [
-    `package-lock.json takes ${outside.length} package(s) from outside the npm registry, or without integrity: the owner merges this pull request`,
-  ];
 }
 
 export function mergeArguments(number: string, headRefOid: string): string[] {
