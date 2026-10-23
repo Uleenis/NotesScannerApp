@@ -1,6 +1,7 @@
 import { useLocales } from "expo-localization";
 import { fireEvent, renderRouter, screen, waitFor } from "expo-router/testing-library";
-import { Alert } from "react-native";
+import { act } from "@testing-library/react-native";
+import { Alert, Keyboard, StyleSheet, View, type KeyboardEvent } from "react-native";
 
 import { defaultAuthServices } from "@/auth/default-services";
 import type { Allowance } from "@/capture/allowance";
@@ -317,5 +318,61 @@ describe("switching the type of an edited page", () => {
     await fireEvent(await screen.findByLabelText(fr.document.mathPage), "valueChange", false);
     await waitFor(() => expect(alert).toHaveBeenCalled());
     expect(pageService.setPageType).not.toHaveBeenCalled();
+  });
+});
+
+describe("above the keyboard", () => {
+  let listeners: Array<(event: KeyboardEvent) => void>;
+
+  beforeEach(() => {
+    listeners = [];
+    jest.spyOn(Keyboard, "addListener").mockImplementation(((name: string, listener: (event: KeyboardEvent) => void) => {
+      if (name === "keyboardDidShow" || name === "keyboardWillChangeFrame") {
+        listeners.push(listener);
+      }
+      return { remove: () => undefined };
+    }) as never);
+    (View.prototype as unknown as { measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void }).measureInWindow = (
+      callback,
+    ) => callback(0, 56, 360, 744);
+  });
+
+  async function raiseKeyboard(): Promise<void> {
+    await act(async () => {
+      listeners.forEach((listener) => listener({ endCoordinates: { screenY: 500, height: 300, width: 360, screenX: 0 } } as KeyboardEvent));
+    });
+  }
+
+  function liftOf(node: ReturnType<typeof screen.getByText>): number {
+    let found = 0;
+    for (let at: typeof node | null = node; at !== null; at = at.parent) {
+      const style = StyleSheet.flatten(at.props.style) as { paddingBottom?: number } | undefined;
+      found = Math.max(found, style?.paddingBottom ?? 0);
+    }
+    return found;
+  }
+
+  test("the correction bar is lifted by the keyboard under a header [9]", async () => {
+    await openPage();
+    await fireEvent.press(await screen.findByText("Portugaise"));
+    const bar = await screen.findByLabelText(fr.document.wordField);
+    await raiseKeyboard();
+
+    expect(liftOf(bar)).toBe(300);
+  });
+
+  test("the Edit bar is lifted by the keyboard under a header [9]", async () => {
+    await startEditing();
+    await raiseKeyboard();
+
+    expect(liftOf(screen.getByText(fr.document.editSave))).toBe(300);
+  });
+
+  test("the Edit field fills the space above the bar, so the keyboard cursor stays in view [9]", async () => {
+    await startEditing();
+
+    const style = StyleSheet.flatten(field().props.style) as { flex?: number };
+    expect(style.flex).toBe(1);
+    expect(field().props.scrollEnabled).not.toBe(false);
   });
 });
