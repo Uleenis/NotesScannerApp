@@ -32,7 +32,7 @@ jest.mock("@/capture/service", () => ({
   },
 }));
 jest.mock("@/pages/service", () => ({
-  pageService: { list: jest.fn(async () => []), get: jest.fn(async () => null), photoUrl: jest.fn(), startReading: jest.fn(), setPageType: jest.fn(), words: jest.fn(async () => ({ words: [], corrections: [], gaps: [] })), correct: jest.fn(), edit: jest.fn(), alerts: jest.fn(async () => []) },
+  pageService: { list: jest.fn(async () => []), get: jest.fn(async () => null), photoUrl: jest.fn(), startReading: jest.fn(), setPageType: jest.fn(), words: jest.fn(async () => ({ words: [], corrections: [], gaps: [] })), correct: jest.fn(), edit: jest.fn(), alerts: jest.fn(async () => []), second: jest.fn(async () => null) },
 }));
 
 const mockedUseLocales = jest.mocked(useLocales);

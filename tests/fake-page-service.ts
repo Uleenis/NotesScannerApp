@@ -74,6 +74,7 @@ export function installFakePages(initial: NumberedPage[] = []) {
   jest.mocked(pageService.correct).mockReset().mockResolvedValue({ status: "saved" });
   jest.mocked(pageService.edit).mockReset().mockResolvedValue({ status: "saved" });
   jest.mocked(pageService.alerts).mockReset().mockResolvedValue([]);
+  jest.mocked(pageService.second).mockReset().mockResolvedValue(null);
 
   return {
     store,

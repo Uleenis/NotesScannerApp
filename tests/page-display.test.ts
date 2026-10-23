@@ -197,3 +197,18 @@ describe("the rule on the lines of the B1 readings of the Thinking Spike (criter
     expect(totals.glued + totals.gluedWrongly + totals.keptWrongly + totals.keptRightly).toBe(breaks);
   });
 });
+
+describe("the underline tags of a page of text [2]", () => {
+  test("the title is shown without them", () => {
+    expect(pageTitle("<u>La France</u>\n\nUne ligne")).toBe("La France");
+  });
+
+  test("the blocks are shown without them", () => {
+    expect(displayDocument("Titre\n<u>Une</u> ligne <u>soulignée</u>").blocks).toEqual([{ kind: "line", text: "Une ligne soulignée" }]);
+    expect(displayDocument("<u>La France</u>").title).toBe("La France");
+  });
+
+  test("any other tag is shown as written", () => {
+    expect(pageTitle("<b>La France</b>")).toBe("<b>La France</b>");
+  });
+});

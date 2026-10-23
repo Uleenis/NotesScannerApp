@@ -1,3 +1,5 @@
+import { stripUnderline } from "./clean";
+
 export type DisplayBlock = { kind: "line"; text: string } | { kind: "gap" };
 
 export type DisplayDocument = { title: string | null; blocks: DisplayBlock[] };
@@ -17,7 +19,7 @@ function isBlank(line: string): boolean {
 }
 
 export function pageTitle(text: string): string | null {
-  const first = splitLines(text).find((line) => !isBlank(line));
+  const first = splitLines(stripUnderline(text)).find((line) => !isBlank(line));
   return first === undefined ? null : first.trim();
 }
 
@@ -89,7 +91,7 @@ export function displayPieces(text: string): DisplayPieces {
 }
 
 export function displayDocument(text: string): DisplayDocument {
-  const laid = displayPieces(text);
+  const laid = displayPieces(stripUnderline(text));
   if (laid.title === null) {
     return { title: null, blocks: [] };
   }

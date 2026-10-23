@@ -124,7 +124,7 @@ function matches(eq: (i: number, j: number) => boolean, n: number, m: number): [
   return pairs.reverse();
 }
 
-export function alignEdit(shown: string, placed: PlacedWord[], edited: string): AlignResult {
+export function alignEdit(shown: string, placed: PlacedWord[], edited: string, hidden: ReadonlySet<number> = new Set()): AlignResult {
   if (edited === shown) {
     return { status: "same" };
   }
@@ -133,7 +133,7 @@ export function alignEdit(shown: string, placed: PlacedWord[], edited: string): 
   }
 
   const count = placed.length;
-  const live = placed.map((_, at) => at).filter((at) => placed[at].shown !== "");
+  const live = placed.map((_, at) => at).filter((at) => placed[at].shown !== "" && !hidden.has(placed[at].word.index));
   const found = wordsOf(
     edited,
     live.map((at) => placed[at].shown).filter(isOdd),

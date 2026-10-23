@@ -17,6 +17,7 @@ import {
   type StartResult,
   type SwitchableType,
 } from "./pages";
+import { readSecond } from "./second";
 import { addCorrection, listWords, type ChosenFrom, type CorrectResult, type PageWords } from "./words";
 
 export type PageService = {
@@ -32,6 +33,7 @@ export type PageService = {
   correct: (pageId: string, tokenIndex: number, text: string, chosenFrom: ChosenFrom) => Promise<CorrectResult>;
   edit: (pageId: string, text: string, words: EditedWord[], gaps: EditedGap[]) => Promise<EditResult>;
   alerts: (pageId: string) => Promise<ShownAlert[]>;
+  second: (pageId: string) => Promise<string | null>;
 };
 
 export const pageService: PageService = {
@@ -47,4 +49,5 @@ export const pageService: PageService = {
   correct: (pageId, tokenIndex, text, chosenFrom) => addCorrection(getSupabase(), pageId, tokenIndex, text, chosenFrom),
   edit: (pageId, text, words, gaps) => editPage(getSupabase(), pageId, text, words, gaps),
   alerts: (pageId) => listAlerts(getSupabase(), pageId),
+  second: (pageId) => readSecond(getSupabase(), pageId),
 };

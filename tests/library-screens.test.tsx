@@ -515,7 +515,7 @@ describe("the menu of a page", () => {
 
     await waitFor(() => expect(pathname()).toBe("/page/p3"));
     expect(pageService.move).toHaveBeenCalledWith("p3", sciences.id, cellules.id);
-    await waitFor(() => expect(screen.getByLabelText(fr.common.back)).toHaveTextContent(sciences.name, { exact: false }));
+    await waitFor(() => expect(screen.getByLabelText(fr.common.back)).toHaveTextContent(cellules.name, { exact: false }));
   });
 
   test("moves the page out of its chapter by choosing the notebook", async () => {
@@ -642,5 +642,42 @@ describe("in English", () => {
     await openApp("/page/p3/move");
     expect(await screen.findByText(en.move.title)).toBeTruthy();
     expect(screen.getByText(en.move.hint)).toBeTruthy();
+  });
+});
+
+describe("the way back from a page [5]", () => {
+  test("leads to the chapter that holds the page, named in the header", async () => {
+    const pathname = await openApp("/page/p2");
+    await screen.findByText("Les Capétiens");
+
+    await fireEvent.press(await screen.findByLabelText(fr.common.back));
+    await waitFor(() => expect(pathname()).toBe(`/chapter/${moyenAge.id}`));
+  });
+
+  test("shows the name of the chapter, not of the notebook", async () => {
+    await openApp("/page/p2");
+    await screen.findByText("Les Capétiens");
+
+    expect(await screen.findByText(moyenAge.name)).toBeTruthy();
+    expect(screen.queryByText(histoire.name)).toBeNull();
+  });
+
+  test("leads to the notebook when the page is in no chapter", async () => {
+    const pathname = await openApp("/page/p3");
+    await screen.findByText("Introduction");
+
+    expect(await screen.findByText(histoire.name)).toBeTruthy();
+    await fireEvent.press(await screen.findByLabelText(fr.common.back));
+    await waitFor(() => expect(pathname()).toBe(`/notebook/${histoire.id}`));
+  });
+
+  test("leads to the chapter from the screen of a reading put off too", async () => {
+    install(undefined, [
+      titled("pq", "", 5, { chapterId: moyenAge.id, status: "queued", queueReason: "read_error", attemptedAt: localMoment(9, 6, 12, 0, 300), text: null }),
+    ]);
+    const pathname = await openApp("/page/pq");
+
+    await fireEvent.press(await screen.findByText(fr.reading.backTo(moyenAge.name)));
+    await waitFor(() => expect(pathname()).toBe(`/chapter/${moyenAge.id}`));
   });
 });

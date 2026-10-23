@@ -7,14 +7,16 @@ import type { PlacedWord } from "./words";
 
 export type EditProblem = "tooBig" | "changed" | "refused" | "failed";
 
-export function useTextEdit(page: NumberedPage, words: PlacedWord[]) {
+export function useTextEdit(page: NumberedPage, words: PlacedWord[], shown: string, hidden: ReadonlySet<number>) {
   const edit = useEditPage(page.id);
   const [draft, setDraft] = useState<string | null>(null);
+  const [base, setBase] = useState("");
   const [problem, setProblem] = useState<EditProblem | null>(null);
 
   function start() {
     setProblem(null);
-    setDraft(page.text ?? "");
+    setBase(shown);
+    setDraft(shown);
   }
 
   function cancel() {
@@ -26,7 +28,7 @@ export function useTextEdit(page: NumberedPage, words: PlacedWord[]) {
     if (draft === null || edit.isPending) {
       return;
     }
-    const aligned = alignEdit(page.text ?? "", words, draft);
+    const aligned = draft === base ? ({ status: "same" } as const) : alignEdit(page.text ?? "", words, draft, hidden);
     if (aligned.status === "same") {
       cancel();
       return;

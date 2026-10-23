@@ -17,7 +17,7 @@ import { LoadError } from "@/components/load-error";
 import { MenuButton } from "@/components/menu-button";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
-import { useNotebook } from "@/notebooks/queries";
+import { useChapters, useNotebook } from "@/notebooks/queries";
 import type { DeleteResult } from "@/notebooks/removal";
 import type { NumberedPage, StartResult } from "@/pages/pages";
 import { useDeletePage, usePage, usePhotoUrl, useStartReading } from "@/pages/queries";
@@ -38,11 +38,12 @@ function currentTime(): number {
 type LoadedPageProps = {
   page: NumberedPage;
   notebookName: string;
+  chapter: { id: string; name: string } | null;
   now: Date;
   refetchPage: () => Promise<NumberedPage | null>;
 };
 
-function LoadedPage({ page, notebookName, now, refetchPage }: LoadedPageProps) {
+function LoadedPage({ page, notebookName, chapter, now, refetchPage }: LoadedPageProps) {
   const t = useStrings();
   const { userId } = useAuth();
   const queryClient = useQueryClient();
@@ -156,10 +157,20 @@ function LoadedPage({ page, notebookName, now, refetchPage }: LoadedPageProps) {
     router.dismissTo(`/notebook/${page.notebookId}`);
   }
 
+  function goBack() {
+    if (chapter === null) {
+      backToNotebook();
+    } else {
+      router.dismissTo(`/chapter/${chapter.id}`);
+    }
+  }
+
+  const backName = chapter === null ? notebookName : chapter.name;
+
   async function remove() {
     const result = await deletion.mutateAsync().catch((): DeleteResult => ({ status: "error" }));
     if (result.status === "deleted" || result.status === "missing") {
-      backToNotebook();
+      goBack();
     } else {
       Alert.alert(result.status === "busy" ? t.pageMenu.deleteBusy : t.pageMenu.deleteFailed);
     }
@@ -184,7 +195,7 @@ function LoadedPage({ page, notebookName, now, refetchPage }: LoadedPageProps) {
     router.push({ pathname: "/page/[id]/photo", params: { id: page.id } });
   }
 
-  const back: ViewAction = { label: t.reading.backTo(notebookName), onPress: backToNotebook };
+  const back: ViewAction = { label: t.reading.backTo(backName), onPress: goBack };
   const scanNext: ViewAction = { label: t.reading.scanNext, onPress: () => void openCapture() };
   const relaunch: ViewAction = { label: t.reading.relaunch, onPress: () => void begin(true) };
 
@@ -228,7 +239,7 @@ function LoadedPage({ page, notebookName, now, refetchPage }: LoadedPageProps) {
       <Stack.Screen
         options={{
           headerBackVisible: false,
-          headerLeft: () => <BackLink name={notebookName} label={t.common.back} onPress={backToNotebook} />,
+          headerLeft: () => <BackLink name={backName} label={t.common.back} onPress={goBack} />,
           headerRight: inDocument
             ? () => (
                 <View style={styles.actions}>
@@ -260,6 +271,9 @@ export default function PageScreen() {
   const t = useStrings();
   const page = usePage(id);
   const notebook = useNotebook(page.data?.notebookId ?? null);
+  const chapters = useChapters();
+  const chapterId = page.data?.chapterId ?? null;
+  const chapterName = chapterId === null ? undefined : chapters.data?.find((candidate) => candidate.id === chapterId)?.name;
 
   if (page.data === null) {
     return <Redirect href="/" />;
@@ -278,6 +292,7 @@ export default function PageScreen() {
       key={page.data.id}
       page={page.data}
       notebookName={notebook.data?.name ?? ""}
+      chapter={chapterId === null ? null : { id: chapterId, name: chapterName ?? "" }}
       now={new Date(page.dataUpdatedAt)}
       refetchPage={refetchPage}
     />
