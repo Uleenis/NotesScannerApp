@@ -7,7 +7,7 @@ type Span = { start: number; end: number };
 
 type Cut = { text: string; at: (position: number) => number };
 
-export type CleanView = { text: string; words: PlacedWord[] };
+export type CleanView = { text: string; words: PlacedWord[]; hidden: ReadonlySet<number> };
 
 export function stripUnderline(text: string): string {
   return text.replace(UNDERLINE, "");
@@ -142,8 +142,9 @@ export function cleanView(text: string, placed: PlacedWord[], second: string | n
   const tagless = cut(text, tags);
   const blanks = second === null ? [] : blankRuns(tagless.text, stripUnderline(second));
   const tight = cut(tagless.text, blanks);
+  const born = placed.filter((word) => tags.some((tag) => word.start >= tag.start && word.end <= tag.end));
   const words = placed
-    .filter((word) => !tags.some((tag) => word.start >= tag.start && word.end <= tag.end))
+    .filter((word) => !born.includes(word))
     .map((word) => ({ ...word, start: tight.at(tagless.at(word.start)), end: tight.at(tagless.at(word.end)) }));
-  return { text: tight.text, words };
+  return { text: tight.text, words, hidden: new Set(born.map((word) => word.word.index)) };
 }

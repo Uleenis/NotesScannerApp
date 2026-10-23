@@ -152,6 +152,23 @@ describe("the underline tags [2]", () => {
     expect(pages.store[0].text).toBe("La France\n\nUne très belle ligne");
     expect(await screen.findByText("Une très belle ligne")).toBeTruthy();
   });
+
+  test("never take the edit of a word next to them: the edit goes to the word, the tags are deleted", async () => {
+    install(UNDERLINED);
+    await openPage("La France");
+    await startEditing();
+    await fireEvent.changeText(field(), "Le France\n\nUne belle lignes");
+    await save();
+    await saved();
+
+    const sent = words.edits[0].words;
+    expect(sent.filter((entry) => entry.text !== "")).toEqual([
+      { token_index: 1, text: "Le" },
+      { token_index: 8, text: "lignes" },
+    ]);
+    expect(sent.filter((entry) => entry.text === "").map((entry) => entry.token_index)).toEqual([0, 3, 5, 7]);
+    expect(pages.store[0].text).toBe("Le France\n\nUne belle lignes");
+  });
 });
 
 

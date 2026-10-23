@@ -64,6 +64,11 @@ describe("cleanView without a second reading", () => {
     expect(cleaned.words.map((entry) => entry.word.index)).toEqual([1, 2, 4, 6, 8]);
   });
 
+  test("lists the words made by the tags as hidden", () => {
+    expect([...view("<u>La France</u>\nUne <u>belle</u> ligne", null).hidden]).toEqual([0, 3, 5, 7]);
+    expect(view("Une ligne", null).hidden.size).toBe(0);
+  });
+
   test("keeps the index of the word in the stored page, so a correction still goes to the right word", () => {
     const raw = "<u>La France</u>";
     const all = placed(raw);

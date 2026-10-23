@@ -19,6 +19,8 @@ import { PageTextBar, PageTextField } from "./page-text-edit";
 import { PieceText } from "./piece-text";
 import { WordEditor } from "./word-editor";
 
+const NO_WORDS: ReadonlySet<number> = new Set();
+
 const BLOCK_SPACING = typography.documentBody.lineHeight * 0.4;
 
 function MathSwitch({ page, mayLoseWork }: { page: NumberedPage; mayLoseWork: boolean }) {
@@ -115,13 +117,14 @@ export function DocumentView({ page }: { page: NumberedPage }) {
     () => (correctable && stored.data !== undefined ? (placeWords(page.text ?? "", stored.data) ?? []) : []),
     [correctable, stored.data, page.text],
   );
-  const tightened = stored.data !== undefined && stored.data.gaps.length === 0 ? (second.data ?? null) : null;
+  const untouched = stored.data !== undefined && stored.data.gaps.length === 0 && stored.data.corrections.every((correction) => correction.text !== "");
+  const tightened = untouched ? (second.data ?? null) : null;
   const clean = useMemo(() => (isMath ? null : cleanView(page.text ?? "", placed, tightened)), [isMath, page.text, placed, tightened]);
   const words = clean === null ? placed : clean.words;
   const laid = clean === null ? null : displayPieces(clean.text);
   const current = editing === null ? null : (words.find((placed) => placed.word.index === editing) ?? null);
   const mayLoseWork = stored.data === undefined || stored.data.corrections.length > 0 || stored.data.gaps.length > 0;
-  const textEdit = useTextEdit(page, placed, clean === null ? (page.text ?? "") : clean.text);
+  const textEdit = useTextEdit(page, placed, clean === null ? (page.text ?? "") : clean.text, clean === null ? NO_WORDS : clean.hidden);
   const editable = read && ((page.pageType === "text" && words.length > 0) || page.pageType === "math");
   const writing = textEdit.draft !== null;
   const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "missing_line" ? page.pageType === "text" : page.pageType === "math"));
