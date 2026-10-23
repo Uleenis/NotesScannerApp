@@ -1,12 +1,13 @@
 # Current slice
 
-Slice 4 — Vérification (done).
+Correctifs 1 (in progress), before slice 7. Slice 4 — Vérification is done.
 
 Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 4.md`, one document, validated by the owner on 17/10/2026, with its decisions as proposed (the second pass always runs; the page alerts stay; no mock-up).
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next branch:** none. Slice 4 is done: its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`. The slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 7 next; no document of slice 7 is in `../../02 Design/` yet, so the next session stops and asks for it.
+- **Correctifs 1:** spec and plan in `../../02 Design/Correctifs 1.md` (validated 23/10/2026), decisions in `../Correctifs 1/Décisions.md`. Next piece: 2, `fix/keyboard`; then 3, `fix/display`. The last piece writes `../Correctifs 1/Bilan.md` and `Vérifications.md` and the status of `AGENTS.md`. Piece 1 (`fix/action-sheet`) is merged.
+- **Next branch after the Correctifs:** none. Slice 4 is done: its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`. The slices follow the order of `../../01 Steps/Périmètre du MVP.md`: 7 next; no document of slice 7 is in `../../02 Design/` yet, so the next session stops and asks for it.
 - **Decisions from now on:** `../Tranche N/Décisions.md` of the current slice, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Guarded files:** only the referee (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the two guardrail tests, gitleaks). A slice that needs one prepares one patch and writes it in `../Pour Tim.md`.
 - **Gemini:** the tests replace Gemini; measures 8 to 10 replay stored readings. One real end-to-end reading costs two calls.
@@ -119,3 +120,8 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - `edit-race.sh` is in `db:test:concurrency` only once the owner applies `../Tranche 4/t4-schema package.json.patch` (it now adds `corrections-race.sh` and `edit-race.sh`); run both by hand after a `db reset`.
 - The migrations of slice 4 (`20261024120000_t4_schema.sql`, `20261025120000_t4_rules.sql`, `20261026120000_t4_math_check.sql`, `20261027120000_t4_edit.sql`) go to production with those of slices 2 and 3 in the pre-beta slice, the owner's; deploy `read-page`, `relaunch-page`, `set-page-type` and `edit-page` only after them.
 - Not on the phone yet: criterion 11 (keyboard bars, VoiceOver, English then French). The points to look at are in `../Tranche 4/Décisions.md`.
+
+## Notes carried from Correctifs 1, piece 1
+
+- `fix/action-sheet`: `showMenu` publishes to a store in `src/lib/action-menu.ts` and `ActionSheetHost` (`src/components/action-sheet-host.tsx`, mounted in `_layout.tsx` after the Stack) draws the sheet as an absolute overlay, not a `Modal`. It closes on Cancel, a touch outside, the back button of Android and a change of route, and dismisses the keyboard when it opens. `ActionSheetIOS` is no longer used. No migration, function or guarded file.
+- Set aside after review: TalkBack can still reach the screen under the sheet (`accessibilityViewIsModal` is iOS only); the sheet closes on a change of path, not of params. To look at on the Samsung (criterion 8): the keyboard and TalkBack.
