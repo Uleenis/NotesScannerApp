@@ -270,5 +270,5 @@ begin
 end;
 $$;
 
-revoke all on function public.search_pages(text, uuid) from public, anon, authenticated;
+revoke all on function public.search_pages(text, uuid) from public, anon, authenticated, service_role;
 grant execute on function public.search_pages(text, uuid) to authenticated;

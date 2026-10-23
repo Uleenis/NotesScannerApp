@@ -1,6 +1,6 @@
 begin;
 
-select plan(58);
+select plan(67);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -153,6 +153,17 @@ select throws_ok($$select * from public.search_pages('un deux trois quatre cinq 
 select lives_ok($$select * from public.search_pages('un deux trois quatre cinq six sept huit')$$, 'a query of 8 words is searched');
 select lives_ok($$select * from public.search_pages('un un un un un un un un un un')$$, 'a repeated word counts once');
 
+select is((select token_index || '|' || also_read || '|' || excerpt from public.search_pages('paul magellan') where page_id = 'c0000005-0000-0000-0000-000000000000'),
+  '1|Magellan|Paul Magelan', 'with several words, rank 2 frames the first word the shown text lacks');
+
+select is((select count(*) from public.search_pages($$magellan' | secret$$)), 0::bigint, 'a quote and an OR in the query are not tsquery syntax');
+select is((select count(*) from public.search_pages('magellan | secret')), 0::bigint, 'a pipe in the query is not an OR');
+select is((select count(*) from public.search_pages('secret:*')), 0::bigint, 'a prefix mark in the query is not a prefix search');
+select is((select count(*) from public.search_pages('!zzz')), 0::bigint, 'a negation mark in the query is not a negation');
+select is((select count(*) from public.search_pages('magellan<->secret')), 0::bigint, 'a phrase mark in the query is not a phrase search');
+select is((select count(*) from public.search_pages($$'$$)), 0::bigint, 'a lone quote finds nothing');
+select is((select count(*) from public.search_pages($$magellan\$$, '33333333-3333-3333-3333-333333333333')), 1::bigint, 'a backslash after a word does not change the word');
+
 select is((select excerpt from public.search_pages('magellan', '11111111-1111-1111-1111-111111111111') where page_id = 'c0000001-0000-0000-0000-000000000000'),
   E'Magellan a traversé', 'the excerpt of rank 1 is the line of the shown text that carries the word');
 select is((select array[match_start, match_end] from public.search_pages('magellan', '11111111-1111-1111-1111-111111111111') where page_id = 'c0000001-0000-0000-0000-000000000000'),
@@ -233,6 +244,7 @@ reset role;
 
 select is(has_function_privilege('anon', 'public.search_pages(text, uuid)', 'execute'), false, 'a visitor cannot search');
 select is(has_function_privilege('authenticated', 'public.search_pages(text, uuid)', 'execute'), true, 'a signed-in user can search');
+select is(has_function_privilege('service_role', 'public.search_pages(text, uuid)', 'execute'), false, 'the server has no use of the search and cannot run it');
 select is((select prosecdef and proconfig = array['search_path=""'] from pg_proc where oid = 'public.search_pages(text, uuid)'::regprocedure), true,
   'the search runs with the rights of its owner and an empty search path, and keeps the pages of the caller by hand');
 
