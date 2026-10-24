@@ -19,6 +19,8 @@ export function useExportItem(): (plan: ExportPlan) => MenuItem {
           return t.export.nothing;
         case "tooMany":
           return t.export.tooMany(result.max);
+        case "tooLarge":
+          return t.export.tooLarge;
         case "unavailable":
           return t.export.unavailable;
         case "error":

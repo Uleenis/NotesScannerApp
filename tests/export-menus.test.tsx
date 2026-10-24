@@ -143,7 +143,7 @@ describe("the export menus", () => {
 });
 
 describe("exporting", () => {
-  test("shares the Markdown of a page, named after its title, and erases the file", async () => {
+  test("shares the Markdown of a page, named after its title", async () => {
     await openApp("/page/p1");
     await screen.findByText("Les Carolingiens");
 
@@ -152,7 +152,7 @@ describe("exporting", () => {
     await waitFor(() => expect(exportDeps.share).toHaveBeenCalled());
     expect(saved).toEqual([{ format: "markdown", name: "Les-Carolingiens", content: "# Les Carolingiens\n\nCharlemagne\n" }]);
     expect(exportDeps.share).toHaveBeenCalledWith("file:///cache/Les-Carolingiens", "markdown");
-    await waitFor(() => expect(discarded).toEqual(["Les-Carolingiens"]));
+    expect(discarded).toEqual([]);
     expect(alert).not.toHaveBeenCalled();
   });
 

@@ -2,12 +2,17 @@ import { useEffect, useSyncExternalStore } from "react";
 import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { cancelExport, currentExport, subscribeToExport } from "@/export/activity";
+import { sweepExports } from "@/export/files";
 import { useStrings } from "@/i18n";
 import { colors, radius, typography } from "@/theme";
 
 export function ExportHost() {
   const t = useStrings();
   const running = useSyncExternalStore(subscribeToExport, currentExport, currentExport) !== null;
+
+  useEffect(() => {
+    sweepExports();
+  }, []);
 
   useEffect(() => {
     if (!running) {

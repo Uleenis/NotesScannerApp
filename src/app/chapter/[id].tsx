@@ -53,7 +53,7 @@ export default function ChapterScreen() {
   function openMenu() {
     showMenu(
       [
-        exportItem(planChapter(chapterName, chapterPages)),
+        ...(pages.data === undefined ? [] : [exportItem(planChapter(chapterName, chapterPages))]),
         { label: t.chapter.rename, onPress: () => router.push({ pathname: "/rename", params: { kind: "chapter", id } }) },
         {
           label: t.chapter.delete,

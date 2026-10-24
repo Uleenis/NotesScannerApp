@@ -1,6 +1,7 @@
 import type { ExportControl } from "./run";
 
 let current: ExportControl | null = null;
+let active: ExportControl | null = null;
 const listeners = new Set<() => void>();
 
 function publish(next: ExportControl | null): void {
@@ -20,10 +21,11 @@ export function currentExport(): ExportControl | null {
 }
 
 export function beginExport(): ExportControl | null {
-  if (current !== null) {
+  if (active !== null) {
     return null;
   }
   const control: ExportControl = { cancelled: false };
+  active = control;
   publish(control);
   return control;
 }
@@ -36,6 +38,9 @@ export function cancelExport(): void {
 }
 
 export function endExport(control: ExportControl): void {
+  if (active === control) {
+    active = null;
+  }
   if (current === control) {
     publish(null);
   }

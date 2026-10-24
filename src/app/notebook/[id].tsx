@@ -57,17 +57,23 @@ export default function NotebookScreen() {
   }
 
   function openMenu() {
+    const exportEntries =
+      pages.data === undefined
+        ? []
+        : [
+            exportItem(
+              planNotebook(
+                notebookName,
+                notebookChapters,
+                pages.data.filter((page) => page.notebookId === id),
+                t.notebook.pagesHeading,
+              ),
+            ),
+          ];
     showMenu(
       [
         { label: t.search.open, onPress: () => router.push({ pathname: "/search", params: { notebook: id } }) },
-        exportItem(
-          planNotebook(
-            notebookName,
-            notebookChapters,
-            (pages.data ?? []).filter((page) => page.notebookId === id),
-            t.notebook.pagesHeading,
-          ),
-        ),
+        ...exportEntries,
         { label: t.notebook.newChapter, onPress: () => router.push({ pathname: "/new-chapter", params: { notebook: id } }) },
         { label: t.notebook.rename, onPress: () => router.push({ pathname: "/rename", params: { kind: "notebook", id } }) },
         {

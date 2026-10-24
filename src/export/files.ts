@@ -32,6 +32,16 @@ function quietly(action: () => void): void {
   }
 }
 
+export function sweepExports(): void {
+  quietly(() => {
+    for (const entry of Paths.cache.list()) {
+      if (entry instanceof Directory && entry.name.startsWith("export-")) {
+        quietly(() => entry.delete());
+      }
+    }
+  });
+}
+
 function discarding(folder: Directory): () => void {
   return () => quietly(() => folder.delete());
 }
@@ -53,6 +63,7 @@ async function printPdf(content: string, target: File): Promise<void> {
 }
 
 export async function saveExport(file: ExportFile): Promise<SavedExport> {
+  sweepExports();
   const folder = freshFolder();
   const discard = discarding(folder);
   const target = new File(folder, `${file.name}.${KINDS[file.format].extension}`);

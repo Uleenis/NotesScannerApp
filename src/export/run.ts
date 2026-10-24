@@ -10,13 +10,15 @@ export type { ExportFormat } from "./files";
 export const MAX_PDF_PAGES = 100;
 export const MAX_MARKDOWN_PAGES = 500;
 export const MAX_EXPORT_FORMULAS = 300;
+export const MAX_PDF_CHARS = 12_000_000;
+export const MAX_MARKDOWN_CHARS = 20_000_000;
 
 export type ExportLabels = { pageNumber: (number: number) => string; fallbackName: string; language: "en" | "fr" };
 
 export type ExportControl = { cancelled: boolean };
 
 export type ExportDeps = {
-  sources: (ids: string[]) => Promise<Map<string, ExportSource>>;
+  sources: (ids: string[], control: ExportControl) => Promise<Map<string, ExportSource>>;
   draw: (tex: string, display: boolean) => Promise<DrawnTex | null>;
   save: (file: ExportFile) => Promise<SavedExport>;
   share: (uri: string, format: ExportFormat) => Promise<boolean>;
@@ -26,6 +28,7 @@ export type ExportResult =
   | { status: "shared" }
   | { status: "empty" }
   | { status: "tooMany"; max: number }
+  | { status: "tooLarge" }
   | { status: "cancelled" }
   | { status: "unavailable" }
   | { status: "error" };
@@ -127,7 +130,7 @@ async function prepare(
   if (ids.length > max) {
     return { status: "tooMany", max };
   }
-  const sources = await deps.sources(ids);
+  const sources = await deps.sources(ids, control);
   if (control.cancelled) {
     return { status: "cancelled" };
   }
@@ -136,11 +139,15 @@ async function prepare(
   if (text === null || control.cancelled) {
     return { status: "cancelled" };
   }
+  if (text.length > (format === "pdf" ? MAX_PDF_CHARS : MAX_MARKDOWN_CHARS)) {
+    return { status: "tooLarge" };
+  }
   return { status: "ready", file: { format, name: exportFileName(plan.name, labels.fallbackName), content: text } };
 }
 
 export async function runExport(plan: ExportPlan, format: ExportFormat, labels: ExportLabels, control: ExportControl, deps: ExportDeps): Promise<ExportResult> {
   let saved: SavedExport | null = null;
+  let shared = false;
   try {
     const prepared = await prepare(plan, format, labels, control, deps);
     if (prepared.status !== "ready") {
@@ -150,10 +157,13 @@ export async function runExport(plan: ExportPlan, format: ExportFormat, labels: 
     if (control.cancelled) {
       return { status: "cancelled" };
     }
-    return (await deps.share(saved.uri, format)) ? { status: "shared" } : { status: "unavailable" };
+    shared = await deps.share(saved.uri, format);
+    return shared ? { status: "shared" } : { status: "unavailable" };
   } catch {
-    return { status: "error" };
+    return control.cancelled ? { status: "cancelled" } : { status: "error" };
   } finally {
-    saved?.discard();
+    if (!shared) {
+      saved?.discard();
+    }
   }
 }

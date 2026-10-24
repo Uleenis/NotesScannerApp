@@ -1,9 +1,10 @@
-import { saveExport, shareExport } from "@/export/files";
+import { saveExport, shareExport, sweepExports } from "@/export/files";
 
 type Operation = { kind: string; uri: string; content?: string; to?: string };
 
 const mockOperations: Operation[] = [];
 const mockFailures = { move: false, delete: false, print: false };
+const mockListing: { name: string; directory: boolean }[] = [];
 
 jest.mock("expo-file-system", () => {
   const join = (parts: unknown[]) =>
@@ -35,6 +36,12 @@ jest.mock("expo-file-system", () => {
     }
   }
   class Directory extends Entry {
+    get name() {
+      return this.uri.split("/").pop() ?? "";
+    }
+    list() {
+      return mockListing.map((entry) => (entry.directory ? new Directory(`file:///cache/${entry.name}`) : new File(`file:///cache/${entry.name}`)));
+    }
     create() {
       mockOperations.push({ kind: "create", uri: this.uri });
     }
@@ -66,6 +73,7 @@ jest.mock("expo-sharing", () => ({
 
 beforeEach(() => {
   mockOperations.length = 0;
+  mockListing.length = 0;
   mockFailures.move = false;
   mockFailures.delete = false;
   mockFailures.print = false;
@@ -136,5 +144,39 @@ describe("shareExport", () => {
     mockSharing.available = false;
     expect(await shareExport("file:///x.pdf", "pdf")).toBe(false);
     expect(mockSharing.shareAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("sweepExports", () => {
+  test("erases the export folders left in the cache and nothing else", () => {
+    mockListing.push(
+      { name: "export-abc", directory: true },
+      { name: "export-def", directory: true },
+      { name: "Print", directory: true },
+      { name: "export-file", directory: false },
+      { name: "photo.jpg", directory: false },
+    );
+
+    sweepExports();
+
+    expect(mockOperations.filter((operation) => operation.kind === "delete").map((operation) => operation.uri)).toEqual([
+      "file:///cache/export-abc",
+      "file:///cache/export-def",
+    ]);
+    expect(mockOperations.some((operation) => operation.kind === "delete-file")).toBe(false);
+  });
+
+  test("goes on when a folder cannot be erased", () => {
+    mockListing.push({ name: "export-abc", directory: true }, { name: "export-def", directory: true });
+    mockFailures.delete = true;
+    expect(() => sweepExports()).not.toThrow();
+    expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(2);
+  });
+
+  test("runs before a new export is written", async () => {
+    mockListing.push({ name: "export-old", directory: true });
+    await saveExport({ format: "markdown", name: "A", content: "a" });
+    const kinds = mockOperations.map((operation) => operation.kind);
+    expect(kinds.indexOf("delete")).toBeLessThan(kinds.indexOf("create"));
   });
 });

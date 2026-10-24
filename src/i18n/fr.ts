@@ -289,6 +289,7 @@ export const fr: Strings = {
     fileName: "notes",
     nothing: "Il n'y a encore rien à exporter.",
     tooMany: (max: number) => `Trop de pages pour un seul export (${max} au plus). Exporte plutôt un chapitre.`,
+    tooLarge: "Cet export est trop volumineux pour être fait d'un coup. Exporte plutôt un chapitre.",
     unavailable: "Le partage n'est pas disponible sur ce téléphone.",
     failed: "L'export n'a pas abouti. Réessaie.",
   },

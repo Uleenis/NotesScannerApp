@@ -1,5 +1,5 @@
 import { planChapter, planNotebook, planPage, type ExportSource } from "@/export/document";
-import { MAX_EXPORT_FORMULAS, MAX_MARKDOWN_PAGES, MAX_PDF_PAGES, runExport, type ExportControl, type ExportDeps, type ExportLabels } from "@/export/run";
+import { MAX_EXPORT_FORMULAS, MAX_MARKDOWN_CHARS, MAX_MARKDOWN_PAGES, MAX_PDF_CHARS, MAX_PDF_PAGES, runExport, type ExportControl, type ExportDeps, type ExportLabels } from "@/export/run";
 import type { NumberedPage } from "@/pages/pages";
 import type { DrawnTex } from "@/pages/tex";
 import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
@@ -44,17 +44,17 @@ function makeDeps(overrides: Partial<ExportDeps> = {}) {
 const live = (): ExportControl => ({ cancelled: false });
 
 describe("runExport", () => {
-  test("makes the Markdown of a chapter, shares it and erases it", async () => {
+  test("makes the Markdown of a chapter and shares it, leaving the file to the share target", async () => {
     const { deps, saved, discarded } = makeDeps();
     const plan = planChapter("Histoire de France", [page(1, "Un\nligne"), page(2, "Deux")]);
 
     const result = await runExport(plan, "markdown", labels, live(), deps);
 
     expect(result).toEqual({ status: "shared" });
-    expect(deps.sources).toHaveBeenCalledWith(["page-2", "page-1"]);
+    expect(deps.sources).toHaveBeenCalledWith(["page-2", "page-1"], expect.anything());
     expect(saved).toEqual([{ format: "markdown", name: "Histoire-de-France", content: "# Histoire de France\n\n## Deux\n\n## Un\n\nligne\n" }]);
     expect(deps.share).toHaveBeenCalledWith("file:///cache/Histoire-de-France", "markdown");
-    expect(discarded).toEqual(["Histoire-de-France"]);
+    expect(discarded).toEqual([]);
     expect(deps.draw).not.toHaveBeenCalled();
   });
 
@@ -202,6 +202,44 @@ describe("runExport", () => {
       }),
     });
     expect(await runExport(planPage("N", page(1, "T\n$x$", { pageType: "math" })), "pdf", labels, live(), deps)).toEqual({ status: "error" });
+  });
+
+  test("an error that comes after a Cancel is a cancel, not a failure", async () => {
+    const control = live();
+    const { deps } = makeDeps({
+      sources: jest.fn(async () => {
+        control.cancelled = true;
+        throw new Error("network dropped");
+      }),
+    });
+    expect(await runExport(planPage("N", page(1, "T")), "markdown", labels, control, deps)).toEqual({ status: "cancelled" });
+  });
+
+  test("gives the control to the reading of the sources", async () => {
+    const { deps } = makeDeps();
+    const control = live();
+    await runExport(planPage("N", page(1, "T")), "markdown", labels, control, deps);
+    expect(deps.sources).toHaveBeenCalledWith(["page-1"], control);
+  });
+
+  test("refuses a Markdown file that is too large before writing it", async () => {
+    const { deps } = makeDeps();
+    const text = `T
+${"x".repeat(100_000)}`;
+    const pages = Array.from({ length: 201 }, (_, index) => page(index + 1, text));
+    expect(MAX_MARKDOWN_CHARS).toBeLessThan(201 * 100_000);
+    expect(await runExport(planChapter("N", pages), "markdown", labels, live(), deps)).toEqual({ status: "tooLarge" });
+    expect(deps.save).not.toHaveBeenCalled();
+  });
+
+  test("refuses a PDF that is too large before printing it", async () => {
+    const { deps } = makeDeps();
+    const text = `T
+${"'".repeat(100_000)}`;
+    const pages = Array.from({ length: 100 }, (_, index) => page(index + 1, text));
+    expect(MAX_PDF_CHARS).toBeLessThan(100 * 100_000 * 5);
+    expect(await runExport(planChapter("N", pages), "pdf", labels, live(), deps)).toEqual({ status: "tooLarge" });
+    expect(deps.save).not.toHaveBeenCalled();
   });
 
   test("a page without a row in the sources is exported as it is", async () => {

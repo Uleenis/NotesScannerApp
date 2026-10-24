@@ -4,6 +4,8 @@ import { escapeHtml } from "./text";
 
 export type Drawings = ReadonlyMap<string, DrawnTex | null>;
 
+export const MAX_EMBEDDED_CHARS = 8_000_000;
+
 const POLICY = "default-src 'none'; img-src data:; style-src 'unsafe-inline'";
 
 const STYLE = [
@@ -25,53 +27,76 @@ export function formulaKey(tex: string, display: boolean): string {
   return `${display ? "display" : "inline"}:${tex}`;
 }
 
-function encodeSvg(svg: string): string {
-  return encodeURIComponent(svg).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+function encodeSvg(svg: string): string | null {
+  try {
+    return encodeURIComponent(svg).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+  } catch {
+    return null;
+  }
 }
 
 function measure(value: number): string {
   return String(Number(value.toFixed(3)));
 }
 
-function image(drawn: DrawnTex | null | undefined): string | null {
-  if (drawn === null || drawn === undefined) {
-    return null;
-  }
-  const { width, height, shift } = drawn;
-  if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(shift) || width <= 0 || height <= 0) {
-    return null;
-  }
-  const style = `width: ${measure(width)}ex; height: ${measure(height)}ex; vertical-align: ${measure(shift)}ex`;
-  return `<img alt="" src="data:image/svg+xml;utf8,${encodeSvg(drawn.svg)}" style="${style}">`;
+type Embedder = (drawn: DrawnTex | null | undefined) => string | null;
+
+function makeEmbedder(): Embedder {
+  const encoded = new Map<string, string | null>();
+  let total = 0;
+  return (drawn) => {
+    if (drawn === null || drawn === undefined) {
+      return null;
+    }
+    const { width, height, shift } = drawn;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(shift) || width <= 0 || height <= 0) {
+      return null;
+    }
+    let data = encoded.get(drawn.svg);
+    if (data === undefined) {
+      data = encodeSvg(drawn.svg);
+      encoded.set(drawn.svg, data);
+    }
+    if (data === null) {
+      return null;
+    }
+    total += data.length;
+    if (total > MAX_EMBEDDED_CHARS) {
+      return null;
+    }
+    const style = `width: ${measure(width)}ex; height: ${measure(height)}ex; vertical-align: ${measure(shift)}ex`;
+    return `<img alt="" src="data:image/svg+xml;utf8,${data}" style="${style}">`;
+  };
 }
 
-function formula(tex: string, source: string, display: boolean, drawings: Drawings): string {
-  return image(drawings.get(formulaKey(tex, display))) ?? `<code>${escapeHtml(source)}</code>`;
+function formula(tex: string, source: string, display: boolean, drawings: Drawings, embed: Embedder): string {
+  return embed(drawings.get(formulaKey(tex, display))) ?? `<code>${escapeHtml(source)}</code>`;
 }
 
-function partHtml(part: Part, drawings: Drawings): string {
-  return part.kind === "text" ? escapeHtml(part.text) : formula(part.tex, part.source, false, drawings);
+function partHtml(part: Part, drawings: Drawings, embed: Embedder): string {
+  return part.kind === "text" ? escapeHtml(part.text) : formula(part.tex, part.source, false, drawings, embed);
 }
 
-function blockHtml(block: Block, drawings: Drawings): string {
+function blockHtml(block: Block, drawings: Drawings, embed: Embedder): string {
   if (block.kind === "gap") {
     return '<div class="gap"></div>';
   }
   if (block.kind === "display") {
-    return `<div class="display">${formula(block.tex, block.source, true, drawings)}</div>`;
+    return `<div class="display">${formula(block.tex, block.source, true, drawings, embed)}</div>`;
   }
-  return `<p>${block.parts.map((part) => partHtml(part, drawings)).join("")}</p>`;
+  return `<p>${block.parts.map((part) => partHtml(part, drawings, embed)).join("")}</p>`;
 }
 
-function pageHtml(page: ExportedPage, heading: string | null, drawings: Drawings): string {
+function pageHtml(page: ExportedPage, heading: string | null, drawings: Drawings, embed: Embedder): string {
   const kicker = heading === null ? "" : `<h2 class="section">${escapeHtml(heading)}</h2>`;
-  return `<section class="page">${kicker}<h1>${escapeHtml(page.title)}</h1>${page.blocks.map((block) => blockHtml(block, drawings)).join("\n")}</section>`;
+  return `<section class="page">${kicker}<h1>${escapeHtml(page.title)}</h1>${page.blocks.map((block) => blockHtml(block, drawings, embed)).join("\n")}</section>`;
 }
 
 export function toHtml(document: ExportDocument, drawings: Drawings, language: "en" | "fr"): string {
   const lang = language === "fr" ? "fr" : "en";
+  const embed = makeEmbedder();
   const sections = document.sections.flatMap((section) =>
-    section.pages.map((page, index) => pageHtml(page, index === 0 ? section.heading : null, drawings)),
+    section.pages.map((page, index) => pageHtml(page, index === 0 ? section.heading : null, drawings, embed)),
   );
   return [
     "<!doctype html>",

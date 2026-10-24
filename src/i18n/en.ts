@@ -287,6 +287,7 @@ export const en = {
     fileName: "notes",
     nothing: "There is nothing to export yet.",
     tooMany: (max: number) => `Too many pages to export at once (${max} at most). Export a chapter instead.`,
+    tooLarge: "This export is too large to be made at once. Export a chapter instead.",
     unavailable: "Sharing is not available on this phone.",
     failed: "The export did not work. Try again.",
   },

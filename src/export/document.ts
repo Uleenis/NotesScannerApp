@@ -1,4 +1,4 @@
-import { cleanView } from "@/pages/clean";
+import { cleanView, stripUnderline } from "@/pages/clean";
 import { displayDocument } from "@/pages/display";
 import { mathDocument, type MathRow } from "@/pages/formulas";
 import type { NumberedPage } from "@/pages/pages";
@@ -22,7 +22,7 @@ export type PlanSection = { heading: string | null; pages: NumberedPage[] };
 export type ExportPlan = { kind: ExportKind; name: string; sections: PlanSection[] };
 
 export function isExportable(page: NumberedPage): boolean {
-  return page.status === "read" && page.pageType !== "unsupported_script" && page.text !== null && page.text.trim() !== "";
+  return page.status === "read" && page.pageType !== "unsupported_script" && page.text !== null && stripUnderline(page.text).trim() !== "";
 }
 
 function newestFirst(pages: NumberedPage[]): NumberedPage[] {
@@ -74,6 +74,10 @@ function exportedPage(page: NumberedPage, source: ExportSource | undefined, page
     title: laid.title ?? pageNumber(page.number),
     blocks: laid.blocks.map((block): Block => (block.kind === "gap" ? block : { kind: "line", parts: [{ kind: "text", text: block.text }] })),
   };
+}
+
+export function pageName(page: NumberedPage, pageNumber: (number: number) => string): string {
+  return exportedPage(page, undefined, pageNumber).title;
 }
 
 export function buildDocument(plan: ExportPlan, sources: ReadonlyMap<string, ExportSource>, pageNumber: (number: number) => string): ExportDocument {

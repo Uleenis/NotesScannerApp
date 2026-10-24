@@ -1,24 +1,25 @@
 import { acceptable } from "@/pages/tex";
 import type { Block, ExportDocument, ExportedPage, Part } from "./document";
-import { escapeLineStart, escapeMarkdownInline } from "./text";
+import { escapeLineStart, escapeMarkdownInline, oneLine } from "./text";
 
-const BARE_DOLLAR = /(?:^|[^\\])(?:\\\\)*\$/;
-const BLANK_LINE = /\n\s*\n/;
-const NEWLINES = /\s*[\r\n]+\s*/g;
-
-function oneLine(text: string): string {
-  return text.replace(NEWLINES, " ").trim();
-}
+const TEX_ALPHABET = /^[\p{L}\p{N} \\{}^_=+\-*/().,|:;!?'<>&]*$/u;
+const URL_START = /:\/|\bwww\./i;
+const TRAILING_BACKSLASHES = /\\+$/;
 
 function heading(level: number, text: string): string {
   return `${"#".repeat(level)} ${escapeMarkdownInline(oneLine(text))}`;
 }
 
 function keptTex(tex: string): string | null {
-  if (!acceptable(tex) || tex.includes("`") || BARE_DOLLAR.test(tex)) {
+  if (!acceptable(tex)) {
     return null;
   }
-  return tex.trim().replace(/</g, "\\lt ").replace(/>/g, "\\gt ");
+  const flat = tex.replace(/\s+/g, " ").trim();
+  const trailing = TRAILING_BACKSLASHES.exec(flat)?.[0].length ?? 0;
+  if (flat === "" || !TEX_ALPHABET.test(flat) || URL_START.test(flat) || trailing % 2 === 1) {
+    return null;
+  }
+  return flat.replace(/</g, "\\lt ").replace(/>/g, "\\gt ");
 }
 
 function sourceText(source: string): string {
@@ -26,12 +27,12 @@ function sourceText(source: string): string {
 }
 
 function inlineFormula(tex: string, source: string): string {
-  const kept = tex.includes("\n") ? null : keptTex(tex);
+  const kept = keptTex(tex);
   return kept === null ? sourceText(source) : `$${kept}$`;
 }
 
 function displayFormula(tex: string, source: string): string {
-  const kept = BLANK_LINE.test(tex) ? null : keptTex(tex);
+  const kept = keptTex(tex);
   return kept === null ? sourceText(source) : `$$\n${kept}\n$$`;
 }
 

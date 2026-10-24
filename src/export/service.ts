@@ -17,7 +17,7 @@ async function drawFormula(tex: string, display: boolean): Promise<DrawnTex | nu
 }
 
 export const exportDeps: ExportDeps = {
-  sources: (ids) => readExportSources(getSupabase(), ids),
+  sources: (ids, control) => readExportSources(getSupabase(), ids, control),
   draw: drawFormula,
   save: saveExport,
   share: shareExport,

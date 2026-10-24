@@ -3,14 +3,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { field } from "@/capture/api";
 import type { ExportSource } from "./document";
 
+type Control = { cancelled: boolean };
+
 export type SourcesClient = Pick<SupabaseClient, "from">;
 
 const GROUP = 50;
 const PARALLEL = 6;
 
-async function secondReadings(client: SourcesClient, ids: string[]): Promise<Map<string, string>> {
+async function secondReadings(client: SourcesClient, ids: string[], control: Control): Promise<Map<string, string>> {
   const found = new Map<string, string>();
-  for (let from = 0; from < ids.length; from += GROUP) {
+  for (let from = 0; from < ids.length && !control.cancelled; from += GROUP) {
     const { data, error } = await client
       .from("readings")
       .select("page_id, raw_text")
@@ -45,14 +47,14 @@ async function wasEdited(client: SourcesClient, pageId: string): Promise<boolean
   return gaps || deletions;
 }
 
-export async function readExportSources(client: SourcesClient, ids: string[]): Promise<Map<string, ExportSource>> {
+export async function readExportSources(client: SourcesClient, ids: string[], control: Control = { cancelled: false }): Promise<Map<string, ExportSource>> {
   const sources = new Map<string, ExportSource>();
   if (ids.length === 0) {
     return sources;
   }
-  const seconds = await secondReadings(client, ids);
+  const seconds = await secondReadings(client, ids, control);
   const edited = new Map<string, boolean>();
-  for (let from = 0; from < ids.length; from += PARALLEL) {
+  for (let from = 0; from < ids.length && !control.cancelled; from += PARALLEL) {
     const group = ids.slice(from, from + PARALLEL);
     const answers = await Promise.all(group.map((id) => wasEdited(client, id)));
     group.forEach((id, index) => edited.set(id, answers[index]));
