@@ -7,6 +7,8 @@ import { LoadError } from "@/components/load-error";
 import { MenuButton } from "@/components/menu-button";
 import { PageRow } from "@/components/reading/page-row";
 import { ScanButton } from "@/components/scan-button";
+import { planChapter } from "@/export/document";
+import { useExportItem } from "@/export/use-export";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
 import { useChapters, useDeleteChapter, useNotebook } from "@/notebooks/queries";
@@ -22,6 +24,7 @@ export default function ChapterScreen() {
   const chapter = chapters.data?.find((candidate) => candidate.id === id);
   const notebook = useNotebook(chapter?.notebookId ?? null);
   const deletion = useDeleteChapter();
+  const exportItem = useExportItem();
 
   if (chapters.data === undefined) {
     return chapters.isError ? <LoadError message={t.chapter.loadFailed} onRetry={() => chapters.refetch()} /> : null;
@@ -31,6 +34,7 @@ export default function ChapterScreen() {
   }
 
   const notebookId = chapter.notebookId;
+  const chapterName = chapter.name;
   const chapterPages = (pages.data ?? []).filter((page) => page.chapterId === id).sort((a, b) => b.number - a.number);
 
   function backToNotebook() {
@@ -49,6 +53,7 @@ export default function ChapterScreen() {
   function openMenu() {
     showMenu(
       [
+        exportItem(planChapter(chapterName, chapterPages)),
         { label: t.chapter.rename, onPress: () => router.push({ pathname: "/rename", params: { kind: "chapter", id } }) },
         {
           label: t.chapter.delete,

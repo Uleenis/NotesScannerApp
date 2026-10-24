@@ -491,10 +491,10 @@ describe("the menu of a page", () => {
 
     await fireEvent.press(await screen.findByLabelText(fr.pageMenu.label));
     const labels = (await screen.findAllByRole("button")).map((node) => node.props.accessibilityLabel);
-    expect(labels).toEqual(expect.arrayContaining([fr.pageMenu.move, fr.pageMenu.delete, fr.common.cancel]));
+    expect(labels).toEqual(expect.arrayContaining([fr.export.label, fr.pageMenu.move, fr.pageMenu.delete, fr.common.cancel]));
     const options = screen.getAllByTestId(/^action-sheet-option-/).map((node) => node.props.accessibilityLabel);
-    expect(options).toEqual([fr.pageMenu.move, fr.pageMenu.delete]);
-    expect(StyleSheet.flatten(screen.getByTestId("action-sheet-label-1").props.style).color).toBe(colors.danger);
+    expect(options).toEqual([fr.export.label, fr.pageMenu.move, fr.pageMenu.delete]);
+    expect(StyleSheet.flatten(screen.getByTestId("action-sheet-label-2").props.style).color).toBe(colors.danger);
     expect(sheet).not.toHaveBeenCalled();
     expect(screen.getByLabelText(fr.document.openPhoto, { includeHiddenElements: true })).toBeTruthy();
   });

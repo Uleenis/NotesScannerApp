@@ -15,12 +15,15 @@ import { PageThumbnail } from "@/components/reading/page-thumbnail";
 import { WaitingView, type ViewAction } from "@/components/reading/waiting-view";
 import { LoadError } from "@/components/load-error";
 import { MenuButton } from "@/components/menu-button";
+import { planPage } from "@/export/document";
+import { useExportItem } from "@/export/use-export";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
 import { useChapters, useNotebook } from "@/notebooks/queries";
 import type { DeleteResult } from "@/notebooks/removal";
 import type { NumberedPage, StartResult } from "@/pages/pages";
 import { useDeletePage, usePage, usePhotoUrl, useStartReading } from "@/pages/queries";
+import { pageTitle } from "@/pages/display";
 import { fadeDelay, readingView, startReadingDelay, type ReadingView } from "@/pages/reading-state";
 import { FADE_MS } from "@/pages/timing";
 import { parseFound } from "@/search/found";
@@ -53,6 +56,7 @@ function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: Lo
   const deletion = useDeletePage(page.id);
   const photo = usePhotoUrl(page.id);
   const start = useStartReading();
+  const exportItem = useExportItem();
   const focused = useIsFocused();
 
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -181,6 +185,7 @@ function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: Lo
   function openMenu() {
     showMenu(
       [
+        exportItem(planPage(pageTitle(page.text ?? "") ?? t.document.pageNumber(page.number), page)),
         { label: t.pageMenu.move, onPress: () => router.push({ pathname: "/page/[id]/move", params: { id: page.id } }) },
         {
           label: t.pageMenu.delete,

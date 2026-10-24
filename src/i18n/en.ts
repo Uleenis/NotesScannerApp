@@ -279,6 +279,17 @@ export const en = {
     deleteOffline: "No connection. The account was not deleted.",
     signOutFailed: "You could not be signed out. Try again.",
   },
+  export: {
+    label: "Export",
+    pdf: "PDF",
+    markdown: "Markdown",
+    preparing: "Preparing the export…",
+    fileName: "notes",
+    nothing: "There is nothing to export yet.",
+    tooMany: (max: number) => `Too many pages to export at once (${max} at most). Export a chapter instead.`,
+    unavailable: "Sharing is not available on this phone.",
+    failed: "The export did not work. Try again.",
+  },
 };
 
 export type Strings = typeof en;

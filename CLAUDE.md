@@ -20,6 +20,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/capture/`: usage limits before the camera, preparing and sending a page.
 - `src/pages/`: what a user sees of a page: lists, text, photo, title, formulas (`formulas.ts`, `tex.ts` with MathJax), words and corrections (`words.ts`), the edit mode (`edit.ts`), alerts.
 - `src/search/`: the search: the calls to `search_pages` and `suggest_words`, the box of a position, the excerpt and the suggestion text helpers; the screen is `src/app/search.tsx`.
+- `src/export/`: the PDF and Markdown export of a page, a chapter or a notebook: the plan and document, the Markdown and HTML writers, the files and the share sheet, the wait; the menu item is `useExportItem`.
 - `src/theme.ts`: colors, fonts and type sizes of the design direction.
 - `tests/`: Jest tests and their fixtures. No text of a page may enter the repository.
 - `supabase/migrations/`: the only way the schema changes.
@@ -106,6 +107,7 @@ The owner does not read the code. What protects `main` is the spec, the tests, t
 - The client writes `corrections` (insert only, never empty, the columns `private.prepare_correction` checks). Page alerts, `page_gaps`, `edit_page` and the text a page shows are written by the server only.
 - `pages.page_type`, `pages.language` and `notebooks.correction_level` are written by the server only.
 - `lexicon_entries` is read by its owner and written by `private.refresh_lexicon` alone; `private.dictionary_words` is unreachable by the client. `suggest_words` keeps `user_id = auth.uid()` by hand.
+- Exports: every text goes through `escapeHtml` or `escapeMarkdown` before it enters a file; the PDF's HTML is fixed templates plus escaped text, with a content security policy that forbids scripts and outside resources, and formulas as `data:` images; a file name is reduced to an allow-list; the export file lives in a folder of its own in the cache and is erased after the share, whatever happens.
 - No secret in the repository. Secrets live in Supabase Edge Function secrets or Google Secret Manager; locally, in `supabase/functions/.env` and `services/reading/.env`, both ignored by git and never copied into the image (`.dockerignore` lets only the listed files in).
 - The reading service is never public: it refuses every call without the shared secret, and locally it is published on `127.0.0.1` only, never on the local network. The app only holds the Supabase URL and publishable key. The app reaches production through `.env.development.local`, ignored by git, holding only the production URL and publishable key; renamed `.env.development.local.off`, the app is back on the local stack.
 - Logs never contain page text or images.
