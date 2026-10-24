@@ -1,6 +1,6 @@
 begin;
 
-select plan(57);
+select plan(59);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -290,6 +290,21 @@ select throws_ok($$select * from public.lexicon_entries$$, '42501', null, 'a vis
 select throws_ok($$select * from public.suggest_words('zorblaz')$$, '42501', null, 'a visitor without an account cannot ask for a suggestion');
 
 reset role;
+
+select lives_ok(
+  $$
+    select pg_temp.add_page('d0000003-0000-0000-0000-000000000000', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '22222222-2222-2222-2222-222222222222', 'a ' || repeat(U&'\FB03', 40));
+    select pg_temp.add_page('d0000004-0000-0000-0000-000000000000', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '22222222-2222-2222-2222-222222222222', 'a ' || repeat(U&'\FB03', 40));
+  $$,
+  'a text whose words grow when the accents and ligatures are removed does not stop the operation'
+);
+
+select performs_within(
+  $$select count(*) from private.lexicon_words(repeat('a-', 100000) || ' ' || repeat('Ab''', 20000))$$,
+  300,
+  300,
+  'a text made of one huge hyphenated or elided word is read in bounded time'
+);
 
 delete from public.notebooks where id = '33333333-3333-3333-3333-333333333333';
 

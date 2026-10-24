@@ -40,6 +40,7 @@ as $$
       '([^[:alnum:]]*)([[:alnum:]]+(?:[''’-][[:alnum:]]+)*)',
       'g'
     ) with ordinality as x(g, n)
+    where char_length(x.g[2]) <= 40
   ),
   context as (
     select
@@ -83,6 +84,7 @@ as $$
     )
   from judged j
   where char_length(j.part) between 2 and 40
+    and char_length(lower(extensions.unaccent(j.part))) <= 40
     and j.part ~ '[[:alpha:]]'
     and lower(j.part) !~ '^[0-9]+(er|ere|ère|re|e|eme|ème|es|nd|rd|th|st)$'
     and not (j.part_count > 1 and j.whole_known);
@@ -369,7 +371,7 @@ begin
     raise exception 'target_anonymous';
   end if;
 
-  perform 1 from public.notebooks n where n.user_id = p_from order by n.id for update;
+  perform 1 from public.notebooks n where n.user_id = p_from order by n.id for no key update;
   perform 1 from public.chapters c where c.user_id = p_from order by c.id for update;
   perform 1 from public.pages p where p.user_id = p_from order by p.id for update;
   if exists (select 1 from public.pages p where p.user_id = p_from and p.status = 'processing') then
@@ -445,6 +447,14 @@ begin
   update public.corrections x set user_id = p_to where x.user_id = p_from;
   update public.page_alerts a set user_id = p_to where a.user_id = p_from;
   update public.page_gaps g set user_id = p_to where g.user_id = p_from;
+  perform pg_advisory_xact_lock(hashtextextended('lexicon:' || m.id::text, 0))
+  from (
+    select n.id
+    from public.notebooks n
+    where n.user_id = p_to
+      and exists (select 1 from public.lexicon_entries e where e.notebook_id = n.id and e.user_id = p_from)
+    order by n.id
+  ) m;
   update public.lexicon_entries e
   set user_id = p_to
   from public.notebooks n
@@ -457,3 +467,49 @@ begin
   return query select v_pages, v_merged;
 end;
 $$;
+
+insert into private.lexicon_pending (notebook_id)
+select distinct p.notebook_id
+from public.pages p
+join public.page_texts t on t.page_id = p.id;
+
+drop function public.delete_notebook(uuid, uuid);
+
+create function public.delete_notebook(p_notebook_id uuid, p_user_id uuid)
+returns table (outcome text, page_ids uuid[])
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_ids uuid[];
+begin
+  if p_user_id is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 0));
+  end if;
+
+  perform 1 from public.notebooks n
+  where n.id = p_notebook_id and p_user_id is not null and n.user_id = p_user_id
+  for no key update;
+  if not found then
+    return query select 'notebook_not_found'::text, '{}'::uuid[];
+    return;
+  end if;
+
+  perform 1 from public.pages p where p.notebook_id = p_notebook_id order by p.id for update;
+  if exists (select 1 from public.pages p where p.notebook_id = p_notebook_id and p.status = 'processing') then
+    return query select 'page_processing'::text, '{}'::uuid[];
+    return;
+  end if;
+
+  select coalesce(array_agg(p.id order by p.id), '{}'::uuid[]) into v_ids
+  from public.pages p where p.notebook_id = p_notebook_id;
+
+  delete from public.notebooks n where n.id = p_notebook_id;
+
+  return query select 'deleted'::text, v_ids;
+end;
+$$;
+
+revoke all on function public.delete_notebook(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.delete_notebook(uuid, uuid) to service_role;

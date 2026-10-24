@@ -6,6 +6,8 @@ export MSYS_NO_PATHCONV=1
 DB_CONTAINER="${DB_CONTAINER:-supabase_db_NotesScannerApp}"
 USER_ID="e2e2e2e2-0000-0000-0000-000000000001"
 NOTEBOOK_ID="e2e2e2e2-0000-0000-0000-000000000002"
+DELETED_ID="e2e2e2e2-0000-0000-0000-000000000003"
+DELETED_PAGE_ID="e2e2e2e2-0000-0000-0000-000000000004"
 CLIENTS=12
 ROUNDS=6
 failures=0
@@ -72,5 +74,40 @@ differences="$(sql -c "
 
 check "the lexicon of the notebook equals a full recomputation after parallel writes" "0" "$differences"
 check "the shared form counts every page that carries it" "$(sql -c "select count(*) from public.page_texts where user_id = '${USER_ID}' and text like '%zorblax%'")" "$(sql -c "select occurrences from public.lexicon_entries where notebook_id = '${NOTEBOOK_ID}' and form_key = 'zorblax'")"
+
+sql -c "
+  insert into public.notebooks (id, user_id, name) values ('${DELETED_ID}', '${USER_ID}', 'Deleted');
+  insert into public.pages (id, user_id, notebook_id, status, page_type) values ('${DELETED_PAGE_ID}', '${USER_ID}', '${DELETED_ID}', 'read', 'text');
+  insert into public.readings (user_id, page_id, label, raw_text, model, model_version, prompt_version, thinking_budget, input_tokens, output_tokens, duration_ms)
+  values ('${USER_ID}', '${DELETED_PAGE_ID}', 'B1', 'le mot', 'gemini-3.6-flash', 'v', 'V0', 0, 1, 1, 1);
+  insert into public.page_texts (user_id, page_id, text, pipeline_version) values ('${USER_ID}', '${DELETED_PAGE_ID}', 'le mot', 'b1-raw');
+  insert into public.page_tokens (user_id, page_id, token_index, line_index, text, reading_b1, b1_start, b1_end) values
+    ('${USER_ID}', '${DELETED_PAGE_ID}', 0, 0, 'le', 'le', 0, 2),
+    ('${USER_ID}', '${DELETED_PAGE_ID}', 1, 0, 'mot', 'mot', 3, 6);
+" > /dev/null
+
+docker exec -i "$DB_CONTAINER" sh -c "cat > /tmp/lexicon-correct.sql" <<EOS
+begin;
+insert into public.corrections (user_id, page_id, token_index, corrected_text, chosen_from)
+values ('${USER_ID}', '${DELETED_PAGE_ID}', 1, 'zorblaxy', 'keyboard');
+select pg_sleep(1.5);
+commit;
+EOS
+
+docker exec -i "$DB_CONTAINER" sh -c "cat > /tmp/lexicon-delete.sql" <<EOS
+select pg_sleep(0.5);
+select outcome from public.delete_notebook('${DELETED_ID}', '${USER_ID}');
+EOS
+
+correct_status=0
+delete_status=0
+docker exec "$DB_CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/lexicon-correct.sql > /dev/null 2>&1 &
+correct_pid=$!
+delete_outcome="$(docker exec "$DB_CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -tA -f /tmp/lexicon-delete.sql 2>/dev/null | tr -d '
+')" || delete_status=$?
+wait "$correct_pid" || correct_status=$?
+
+check "a correction that adds a form and the deletion of its notebook both go through" "0,0,deleted" "${correct_status},${delete_status},${delete_outcome}"
+check "the deleted notebook leaves no form" "0" "$(sql -c "select count(*) from public.lexicon_entries where notebook_id = '${DELETED_ID}'")"
 
 exit "$failures"
