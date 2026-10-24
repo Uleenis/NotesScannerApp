@@ -17,14 +17,14 @@ const KINDS: Record<ExportFormat, { extension: string; mimeType: string; uti: st
   markdown: { extension: "md", mimeType: "text/markdown", uti: "net.daringfireball.markdown" },
 };
 
-function freshFolder(): Directory {
+export function freshFolder(prefix: string = "export"): Directory {
   const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  const folder = new Directory(Paths.cache, `export-${suffix}`);
+  const folder = new Directory(Paths.cache, `${prefix}-${suffix}`);
   folder.create();
   return folder;
 }
 
-function quietly(action: () => void): void {
+export function quietly(action: () => void): void {
   try {
     action();
   } catch {
@@ -42,7 +42,7 @@ export function sweepExports(): void {
   });
 }
 
-function discarding(folder: Directory): () => void {
+export function discarding(folder: Directory): () => void {
   return () => quietly(() => folder.delete());
 }
 

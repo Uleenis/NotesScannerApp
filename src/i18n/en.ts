@@ -291,6 +291,29 @@ export const en = {
     unavailable: "Sharing is not available on this phone.",
     failed: "The export did not work. Try again.",
   },
+  myData: {
+    label: "Export my data",
+    note: "Builds a ZIP archive on this phone with your notebooks, pages, photos, readings and corrections.",
+    fileName: "notes-data",
+    preparing: "Preparing the archive…",
+    progress: (done: number, total: number) => `Writing the archive: ${done} of ${total} ${total === 1 ? "page" : "pages"}…`,
+    confirmTitle: "Export all your data?",
+    confirmBody: (pages: number, size: string) =>
+      `The archive holds ${pages === 0 ? "no pages" : pages === 1 ? "1 page" : `${pages} pages`} and weighs about ${size}. It is built on this phone: keep the app open until it is done.`,
+    confirm: "Export",
+    smallSize: "less than 1 MB",
+    megabytes: (count: number) => `${count} MB`,
+    tooMany: (max: number) => `Your account holds too many pages to be exported at once (${max} at most).`,
+    tooLarge: "The archive would be too large to be made on this phone.",
+    noSpace: "There is not enough free space on this phone for the archive.",
+    failed: "The export did not work. Try again.",
+    readme: [
+      "Notes Scanner: export of your data",
+      "This archive was built on your phone from your account. It holds what the app keeps for you, except the files only the servers use.",
+      "- README.txt: this file.\n- export.json: the date of the export, the version of the format and the counts of notebooks, chapters, pages and photos. A photo that is no longer stored is counted as missing.\n- profile.json: your account identifier, e-mail address, interface language and plan.\n- usage.json: your page allowance and the list of the pages that were charged, with their dates.\n- notebooks.json: your notebooks, your chapters and the lexicon of each notebook (the unusual words found in its pages).\n- pages/<id>/page.json: one page. Its row (status, type, language, dates, notebook and chapter), its raw readings (B1, B2 and A) with the model, its version and the version of the instructions, its words with their positions (a box [left, top, right, bottom] in pixels of the page image), your corrections, the text you added by hand in edit mode, and its alerts. \"images\" says which photo files exist.\n- pages/<id>/text.txt: the text the page shows.\n- pages/<id>/original.jpg and prepared.jpg: the photo you took and the version prepared for reading.",
+      "Every file is UTF-8 text, except the photos. The .json files are JSON.",
+    ],
+  },
 };
 
 export type Strings = typeof en;
