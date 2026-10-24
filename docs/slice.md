@@ -1,13 +1,13 @@
 # Current slice
 
-Slice 7 — Export et recherche is in progress (next branch: 3, `t7/search-measure`). Correctifs 1 and slice 4 are done.
+Slice 7 — Export et recherche is in progress (next branch: 4, `t7/search-screen`). Correctifs 1 and slice 4 are done.
 
 Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 7.md`, one document, validated by the owner on 23/10/2026, with its decisions as proposed. Slice 7 adds `expo-print`, `expo-sharing` and a pure JavaScript ZIP library (check in Expo Go in the first branch that adds them); no guarded file; no Gemini call.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
 - **Correctifs 1:** spec and plan in `../../02 Design/Correctifs 1.md` (validated 23/10/2026), decisions in `../Correctifs 1/Décisions.md`. Pieces 1 (`fix/action-sheet`), 2 (`fix/keyboard`) and 3 (`fix/display`) are merged; its Bilan is `../Correctifs 1/Bilan.md`, its phone checks `../Correctifs 1/Vérifications.md`.
-- **Next branch:** 3, `t7/search-measure` (Sonnet 5.5, High). The last branch of slice 7 writes `../Tranche 7/Bilan.md` and `../Tranche 7/Vérifications.md` and the status of `AGENTS.md`.
+- **Next branch:** 4, `t7/search-screen` (Sonnet 5.5, High). The last branch of slice 7 writes `../Tranche 7/Bilan.md` and `../Tranche 7/Vérifications.md` and the status of `AGENTS.md`.
 - **Slice 4 is done:** its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`.
 - **Decisions from now on:** `../Tranche 7/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Guarded files:** only the referee (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the two guardrail tests, gitleaks). A slice that needs one prepares one patch and writes it in `../Pour Tim.md`.
@@ -21,8 +21,8 @@ Paths below are from the repository root.
 |---|---|---|---|---|---|---|
 | 1 | `t7/search-db` (full-text index, two-rank search function, bounds, excerpts, rights) | 1, 2, 3 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR 74 merged |
 | 2 | `t7/lexicon` (dictionary, `lexicon_entries`, recomputation, account transfer, suggestion) | 2, 4, 5 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR 77 |
-| 3 | `t7/search-measure` (recall measure, outside the repository) | 9 | ordinary | Sonnet 5.5, High | code, Sonnet | next |
-| 4 | `t7/search-screen` (search screen, page opened with the highlight box) | 8, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | to do |
+| 3 | `t7/search-measure` (recall measure, outside the repository) | 9 | ordinary | Sonnet 5.5, High | code, Sonnet | done, PR 78 |
+| 4 | `t7/search-screen` (search screen, page opened with the highlight box) | 8, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | next |
 | 5 | `t7/export` (PDF and Markdown of a page, a chapter, a notebook) | 6, 8, 11 | sensitive (hostile input in HTML) | Sonnet 5.5, High | code and security, Sonnet | to do |
 | 6 | `t7/my-data` (export of "my data" on the phone) | 7, 8, 12 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | to do |
 
@@ -163,3 +163,8 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - Lock order: the recomputation runs at the end of the operation under `lexicon:<notebook id>` and takes a key-share lock on the notebook row; any new function that locks a notebook row must use `for no key update`.
 - Branch 3 (recall measure): the lexicon needs no part of it. Known parser limits from branch 1 still apply.
 - Branch 4: `suggest_words` accepts the same bounds as `search_pages` (`22023` for `query_too_long` and `query_too_many_words`); the lexicon is empty for a notebook with fewer than two pages that carry a form.
+
+## Notes carried from slice 7, branch 3
+
+- `t7/search-measure` changes nothing in the repository but this file: criterion 9 is the kit `04 Testing/T7 mesures/recall/` (`sh run.sh`, results in `Résultats.md`), outside the repository. On the 18 linear pages, loaded into the local stack through `record_reading_a` from the pinned readings, 68 of the 100 wrong words of the shown text are found by searching the right word (34 at rank 1, 34 at rank 2); an independent oracle in Python gives the same 68, word by word: the index loses nothing. 53 of the 100 have the right word in a competing reading of their own position; the other 15 are found because the page carries the word elsewhere.
+- For branch 4: the search finds a page, not a position. For a hit carried by the position itself at rank 2, `token_index` is that position in 31 of 32 cases (the exception is a word that the page carries at two positions: the function returns the first). 13 of the 100 wrong words are found at rank 1 only because the page already writes the right word elsewhere.
