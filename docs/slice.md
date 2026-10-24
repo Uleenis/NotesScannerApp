@@ -36,7 +36,7 @@ Paths below are from the repository root.
 | 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | done, PR 61 merged |
 | 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | done, PR 62 merged |
 | 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | done, PR 64 merged |
-| 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | done, PR 81; last of the slice: Bilan and status of `AGENTS.md` written |
+| 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | done, PR to merge; last of the slice: Bilan and status of `AGENTS.md` written |
 
 ## Slice 3
 
