@@ -104,6 +104,7 @@ The owner does not read the code. What protects `main` is the spec, the tests, t
 - Reading A, its positions, the language of the page and its `missing_line` alert are written only by `record_reading_a` (server only), in one transaction, the page row locked.
 - The client writes `corrections` (insert only, never empty, the columns `private.prepare_correction` checks). Page alerts, `page_gaps`, `edit_page` and the text a page shows are written by the server only.
 - `pages.page_type`, `pages.language` and `notebooks.correction_level` are written by the server only.
+- `lexicon_entries` is read by its owner and written by `private.refresh_lexicon` alone; `private.dictionary_words` is unreachable by the client. `suggest_words` keeps `user_id = auth.uid()` by hand.
 - No secret in the repository. Secrets live in Supabase Edge Function secrets or Google Secret Manager; locally, in `supabase/functions/.env` and `services/reading/.env`, both ignored by git and never copied into the image (`.dockerignore` lets only the listed files in).
 - The reading service is never public: it refuses every call without the shared secret, and locally it is published on `127.0.0.1` only, never on the local network. The app only holds the Supabase URL and publishable key. The app reaches production through `.env.development.local`, ignored by git, holding only the production URL and publishable key; renamed `.env.development.local.off`, the app is back on the local stack.
 - Logs never contain page text or images.
