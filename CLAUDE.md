@@ -116,10 +116,10 @@ The owner does not read the code. What protects `main` is the spec, the tests, t
 
 ## Dependency audit allowlist
 
-`audit-ci.json` allows two high advisories with no patched release, both in development tooling that never ships in the app. Remove an entry as soon as a fix is released.
+`audit-ci.json` allows two high advisories, both in development tooling that never ships in the app. Remove an entry as soon as a fix can be taken.
 
-- `GHSA-vfj7-8cjw-p6xm`: `braces` 3.0.3 via Jest, stack exhaustion on crafted glob patterns.
 - `GHSA-86w9-cpqp-85rv`: `node-forge` 1.4.0 via `@expo/cli` code signing, lax RSA signature parsing.
+- `GHSA-mrhx-c7xc-m3w5`: `zod` 3.25.76 via `@expo/cli` and `eslint-plugin-react-hooks` (fixed in zod 4.6.6, a major version those tools do not take yet), memory exhaustion when validating oversized collections. Allowed on 24/10/2026 at the owner's choice; retry the upgrade with the next Expo SDK patch.
 
 `services/reading/audit-allowlist.txt` allows one advisory to pip-audit, in the reading service:
 
