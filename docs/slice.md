@@ -24,7 +24,7 @@ Paths below are from the repository root.
 | 3 | `t7/search-measure` (recall measure, outside the repository) | 9 | ordinary | Sonnet 5.5, High | code, Sonnet | done, PR 78 |
 | 4 | `t7/search-screen` (search screen, page opened with the highlight box) | 8, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | done, PR 79 merged |
 | 5 | `t7/export` (PDF and Markdown of a page, a chapter, a notebook) | 6, 8, 11 | sensitive (hostile input in HTML) | Sonnet 5.5, High | code and security, Sonnet | done, PR 80 merged |
-| 6 | `t7/my-data` (export of "my data" on the phone) | 7, 8, 12 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | done, PR to merge; last of the slice: Bilan and status of `AGENTS.md` written |
+| 6 | `t7/my-data` (export of "my data" on the phone) | 7, 8, 12 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | done, PR 81; last of the slice: Bilan and status of `AGENTS.md` written |
 
 ## Slice 4
 
@@ -36,7 +36,7 @@ Paths below are from the repository root.
 | 4 | `t4/replay` | 8, 9 | ordinary | Sonnet, High | Claude | done, PR 61 merged |
 | 5 | `t4/math-check` | 10 | ordinary | Sonnet, High | Claude | done, PR 62 merged |
 | 6 | `t4/correction` | 4, 7, 11 | ordinary | Sonnet, High | Claude | done, PR 64 merged |
-| 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | done, PR to merge; last of the slice: Bilan and status of `AGENTS.md` written |
+| 7 | `t4/edit` | 6, 7, 11 | ordinary | Sonnet, High | Claude | done, PR 81; last of the slice: Bilan and status of `AGENTS.md` written |
 
 ## Slice 3
 
