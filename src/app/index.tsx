@@ -15,7 +15,7 @@ import { useNotebooks } from "@/notebooks/queries";
 import { dateParts } from "@/pages/dates";
 import { newestFirst } from "@/pages/pages";
 import { usePages } from "@/pages/queries";
-import { colors, typography } from "@/theme";
+import { colors, radius, typography } from "@/theme";
 
 const LATEST_PAGES = 10;
 
@@ -53,6 +53,10 @@ function LibraryBody() {
   return (
     <>
       <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic">
+        <Pressable accessibilityRole="button" onPress={() => router.push("/search")} style={styles.search}>
+          <Ionicons name="search" size={20} color={colors.inkSecondary} />
+          <Text style={styles.searchLabel}>{t.search.open}</Text>
+        </Pressable>
         {showReminder ? <Text style={styles.reminder}>{t.library.anonymousReminder}</Text> : null}
         {latest.length === 0 ? null : (
           <>
@@ -109,6 +113,22 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: 140,
     paddingHorizontal: 20,
+  },
+  search: {
+    alignItems: "center",
+    backgroundColor: colors.sheet,
+    borderColor: colors.rule,
+    borderRadius: radius.control,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  searchLabel: {
+    ...typography.interfaceBody,
+    color: colors.inkSecondary,
   },
   reminder: {
     ...typography.interfaceSecondary,

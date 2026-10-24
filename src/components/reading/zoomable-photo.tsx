@@ -3,7 +3,9 @@ import { Image, PixelRatio, ScrollView, StyleSheet, View, type LayoutChangeEvent
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
+import { frameOf } from "@/pages/frame";
 import { colors } from "@/theme";
+import { FrameOverlay } from "./frame-overlay";
 
 const MIN_MAX_SCALE = 2;
 const MAX_MAX_SCALE = 8;
@@ -28,14 +30,15 @@ export function displayedSize(photo: Size, box: Size): Size {
   return { width: photo.width * fit, height: photo.height * fit };
 }
 
-type Props = { uri: string; label: string };
+type Props = { uri: string; label: string; found?: readonly number[] | null; foundLabel?: string };
 
-export function ZoomablePhoto({ uri, label }: Props) {
+export function ZoomablePhoto({ uri, label, found = null, foundLabel = "" }: Props) {
   const [box, setBox] = useState<Size>({ width: 0, height: 0 });
   const [photo, setPhoto] = useState<Size>({ width: 0, height: 0 });
 
   const displayed = displayedSize(photo, box);
   const maxScale = maxScaleFor(photo, displayed, PixelRatio.get());
+  const frame = found === null ? null : frameOf(found, photo);
 
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -149,6 +152,7 @@ export function ZoomablePhoto({ uri, label }: Props) {
               onLoad={(event) => setPhoto({ width: event.nativeEvent.source.width, height: event.nativeEvent.source.height })}
               style={styles.image}
             />
+            {frame === null ? null : <FrameOverlay frame={frame} label={foundLabel} />}
           </Animated.View>
         </GestureDetector>
       </ScrollView>

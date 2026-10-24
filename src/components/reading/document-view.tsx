@@ -15,6 +15,7 @@ import { placeWords, type ChosenFrom, type PlacedWord } from "@/pages/words";
 import { colors, typography } from "@/theme";
 import { KeyboardLift } from "../keyboard-lift";
 import { Formula } from "./formula";
+import { FoundPhoto } from "./found-photo";
 import { PageTextBar, PageTextField } from "./page-text-edit";
 import { PieceText } from "./piece-text";
 import { WordEditor } from "./word-editor";
@@ -93,7 +94,7 @@ function MathBody({ rows }: { rows: MathRow[] }) {
   });
 }
 
-export function DocumentView({ page }: { page: NumberedPage }) {
+export function DocumentView({ page, found = null }: { page: NumberedPage; found?: number | null }) {
   const t = useStrings();
   const isMath = page.pageType === "math";
   const math = isMath ? mathDocument(page.text ?? "") : null;
@@ -223,6 +224,7 @@ export function DocumentView({ page }: { page: NumberedPage }) {
             scrollEventThrottle={16}
           >
             {infoRow}
+            {found !== null && correctable ? <FoundPhoto pageId={page.id} tokenIndex={found} /> : null}
             {title}
             {shownAlerts.map((kind) => (
               <Text key={kind} style={[styles.secondary, styles.alert]}>

@@ -23,6 +23,7 @@ import type { NumberedPage, StartResult } from "@/pages/pages";
 import { useDeletePage, usePage, usePhotoUrl, useStartReading } from "@/pages/queries";
 import { fadeDelay, readingView, startReadingDelay, type ReadingView } from "@/pages/reading-state";
 import { FADE_MS } from "@/pages/timing";
+import { parseFound } from "@/search/found";
 import { colors } from "@/theme";
 
 type Problem = "held" | "unreadable";
@@ -40,10 +41,11 @@ type LoadedPageProps = {
   notebookName: string;
   chapter: { id: string; name: string } | null;
   now: Date;
+  found: number | null;
   refetchPage: () => Promise<NumberedPage | null>;
 };
 
-function LoadedPage({ page, notebookName, chapter, now, refetchPage }: LoadedPageProps) {
+function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: LoadedPageProps) {
   const t = useStrings();
   const { userId } = useAuth();
   const queryClient = useQueryClient();
@@ -251,13 +253,13 @@ function LoadedPage({ page, notebookName, chapter, now, refetchPage }: LoadedPag
         }}
       />
       {inDocument ? (
-        <DocumentView page={page} />
+        <DocumentView page={page} found={found} />
       ) : (
         <View style={styles.fill}>
           {reading()}
           {phase === "fading" ? (
             <Animated.View entering={FadeIn.duration(FADE_MS)} style={[StyleSheet.absoluteFill, styles.document]}>
-              <DocumentView page={page} />
+              <DocumentView page={page} found={found} />
             </Animated.View>
           ) : null}
         </View>
@@ -267,7 +269,7 @@ function LoadedPage({ page, notebookName, chapter, now, refetchPage }: LoadedPag
 }
 
 export default function PageScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, found } = useLocalSearchParams<{ id: string; found?: string }>();
   const t = useStrings();
   const page = usePage(id);
   const notebook = useNotebook(page.data?.notebookId ?? null);
@@ -294,6 +296,7 @@ export default function PageScreen() {
       notebookName={notebook.data?.name ?? ""}
       chapter={chapterId === null ? null : { id: chapterId, name: chapterName ?? "" }}
       now={new Date(page.dataUpdatedAt)}
+      found={parseFound(found)}
       refetchPage={refetchPage}
     />
   );

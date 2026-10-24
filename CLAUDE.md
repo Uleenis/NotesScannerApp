@@ -19,6 +19,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/notebooks/`: reading, creating and caching notebooks.
 - `src/capture/`: usage limits before the camera, preparing and sending a page.
 - `src/pages/`: what a user sees of a page: lists, text, photo, title, formulas (`formulas.ts`, `tex.ts` with MathJax), words and corrections (`words.ts`), the edit mode (`edit.ts`), alerts.
+- `src/search/`: the search: the calls to `search_pages` and `suggest_words`, the box of a position, the excerpt and the suggestion text helpers; the screen is `src/app/search.tsx`.
 - `src/theme.ts`: colors, fonts and type sizes of the design direction.
 - `tests/`: Jest tests and their fixtures. No text of a page may enter the repository.
 - `supabase/migrations/`: the only way the schema changes.
