@@ -164,21 +164,19 @@ async function writePhotos(
     }
     tick(control);
     counts.photos += 1;
-    const path = image.storage_path;
-    const expected = `${identity.userId}/${pageId}/`;
-    const source = typeof path === "string" && path.startsWith(expected) ? await deps.photo(path) : null;
-    tick(control);
-    if (source === null) {
-      counts.missing += 1;
-      listed.push({ kind, file: null });
-      continue;
+    const source = image.storage_path === `${identity.userId}/${pageId}/${kind}.jpg` ? await deps.photo(image.storage_path) : null;
+    try {
+      tick(control);
+      if (source === null) {
+        counts.missing += 1;
+        listed.push({ kind, file: null });
+        continue;
+      }
+      sink.addBinary(`pages/${pageId}/${kind}.jpg`, source.chunks());
+    } finally {
+      source?.dispose();
     }
     const file = `${kind}.jpg`;
-    try {
-      sink.addBinary(`pages/${pageId}/${file}`, source.chunks());
-    } finally {
-      source.dispose();
-    }
     listed.push({ kind, file });
   }
   return listed;
@@ -278,12 +276,12 @@ export async function writeMyData(
   control: ExportControl,
   progress: (done: number, total: number) => void,
 ): Promise<MyDataResult> {
-  if (deps.freeSpace() < plan.estimate * 1.2 + SPACE_MARGIN_BYTES) {
-    return { status: "noSpace" };
-  }
   let saved: SavedArchive | null = null;
   let shared = false;
   try {
+    if (deps.freeSpace() < plan.estimate * 1.2 + SPACE_MARGIN_BYTES) {
+      return { status: "noSpace" };
+    }
     saved = deps.open(deps.fileName);
     await writeContents(saved.sink, deps, plan, control, progress);
     tick(control);

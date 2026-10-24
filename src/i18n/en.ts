@@ -299,10 +299,10 @@ export const en = {
     progress: (done: number, total: number) => `Writing the archive: ${done} of ${total} ${total === 1 ? "page" : "pages"}…`,
     confirmTitle: "Export all your data?",
     confirmBody: (pages: number, size: string) =>
-      `The archive holds ${pages === 0 ? "no pages" : pages === 1 ? "1 page" : `${pages} pages`} and weighs about ${size}. It is built on this phone: keep the app open until it is done.`,
+      `The archive holds ${pages === 0 ? "no pages" : pages === 1 ? "1 page" : `${pages} pages`} and weighs ${size}. It is built on this phone: keep the app open until it is done.`,
     confirm: "Export",
     smallSize: "less than 1 MB",
-    megabytes: (count: number) => `${count} MB`,
+    megabytes: (count: number) => `about ${count} MB`,
     tooMany: (max: number) => `Your account holds too many pages to be exported at once (${max} at most).`,
     tooLarge: "The archive would be too large to be made on this phone.",
     noSpace: "There is not enough free space on this phone for the archive.",

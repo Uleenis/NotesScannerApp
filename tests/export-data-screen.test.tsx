@@ -108,7 +108,7 @@ describe("the export of my data", () => {
     await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
     expect(myDataService.plan).toHaveBeenCalledWith(identity, expect.objectContaining({ cancelled: false }));
     expect(alert.mock.calls[0][0]).toBe(fr.myData.confirmTitle);
-    expect(alert.mock.calls[0][1]).toBe(fr.myData.confirmBody(2, "12 Mo"));
+    expect(alert.mock.calls[0][1]).toBe(fr.myData.confirmBody(2, fr.myData.megabytes(12)));
     expect(myDataService.write).not.toHaveBeenCalled();
   });
 
@@ -209,6 +209,6 @@ describe("the export of my data", () => {
 
     await fireEvent.press(screen.getByText(en.myData.label));
 
-    await waitFor(() => expect(alert).toHaveBeenCalledWith(en.myData.confirmTitle, en.myData.confirmBody(2, "12 MB"), expect.anything(), expect.anything()));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith(en.myData.confirmTitle, en.myData.confirmBody(2, en.myData.megabytes(12)), expect.anything(), expect.anything()));
   });
 });

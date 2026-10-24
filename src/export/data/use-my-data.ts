@@ -99,6 +99,8 @@ export function useMyDataExport(): () => void {
         if (shown !== null) {
           Alert.alert(shown);
         }
+      } catch {
+        Alert.alert(t.myData.failed);
       } finally {
         endExport(writing);
       }
