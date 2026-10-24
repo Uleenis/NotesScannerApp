@@ -8,6 +8,8 @@ import { MenuButton } from "@/components/menu-button";
 import { NotebookRow } from "@/components/notebook-row";
 import { PageRow } from "@/components/reading/page-row";
 import { ScanButton } from "@/components/scan-button";
+import { planNotebook } from "@/export/document";
+import { useExportItem } from "@/export/use-export";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
 import { useChapters, useDeleteNotebook, useNotebook } from "@/notebooks/queries";
@@ -22,6 +24,7 @@ export default function NotebookScreen() {
   const pages = usePages();
   const chapters = useChapters();
   const deletion = useDeleteNotebook();
+  const exportItem = useExportItem();
 
   if (notebook.data === null) {
     return <Redirect href="/" />;
@@ -37,6 +40,7 @@ export default function NotebookScreen() {
   }
 
   const pageCount = notebook.data.pageCount;
+  const notebookName = notebook.data.name;
   const notebookChapters = chapters.data.filter((chapter) => chapter.notebookId === id);
   const hasChapters = notebookChapters.length > 0;
   const outsideChapters = (pages.data ?? [])
@@ -53,9 +57,23 @@ export default function NotebookScreen() {
   }
 
   function openMenu() {
+    const exportEntries =
+      pages.data === undefined
+        ? []
+        : [
+            exportItem(
+              planNotebook(
+                notebookName,
+                notebookChapters,
+                pages.data.filter((page) => page.notebookId === id),
+                t.notebook.pagesHeading,
+              ),
+            ),
+          ];
     showMenu(
       [
         { label: t.search.open, onPress: () => router.push({ pathname: "/search", params: { notebook: id } }) },
+        ...exportEntries,
         { label: t.notebook.newChapter, onPress: () => router.push({ pathname: "/new-chapter", params: { notebook: id } }) },
         { label: t.notebook.rename, onPress: () => router.push({ pathname: "/rename", params: { kind: "notebook", id } }) },
         {
