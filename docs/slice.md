@@ -1,13 +1,13 @@
 # Current slice
 
-Slice 7 — Export et recherche is in progress (next branch: 1, `t7/search-db`). Correctifs 1 and slice 4 are done.
+Slice 7 — Export et recherche is in progress (next branch: 2, `t7/lexicon`). Correctifs 1 and slice 4 are done.
 
 Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 7.md`, one document, validated by the owner on 23/10/2026, with its decisions as proposed. Slice 7 adds `expo-print`, `expo-sharing` and a pure JavaScript ZIP library (check in Expo Go in the first branch that adds them); no guarded file; no Gemini call.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
 - **Correctifs 1:** spec and plan in `../../02 Design/Correctifs 1.md` (validated 23/10/2026), decisions in `../Correctifs 1/Décisions.md`. Pieces 1 (`fix/action-sheet`), 2 (`fix/keyboard`) and 3 (`fix/display`) are merged; its Bilan is `../Correctifs 1/Bilan.md`, its phone checks `../Correctifs 1/Vérifications.md`.
-- **Next branch:** 1, `t7/search-db` (Sonnet 5.5, High). The last branch of slice 7 writes `../Tranche 7/Bilan.md` and `../Tranche 7/Vérifications.md` and the status of `AGENTS.md`.
+- **Next branch:** 2, `t7/lexicon` (Sonnet 5.5, High). The last branch of slice 7 writes `../Tranche 7/Bilan.md` and `../Tranche 7/Vérifications.md` and the status of `AGENTS.md`.
 - **Slice 4 is done:** its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`.
 - **Decisions from now on:** `../Tranche 7/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Guarded files:** only the referee (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the two guardrail tests, gitleaks). A slice that needs one prepares one patch and writes it in `../Pour Tim.md`.
@@ -19,8 +19,8 @@ Paths below are from the repository root.
 
 | # | Branch | Criteria | Level | Session | Reviews | State |
 |---|---|---|---|---|---|---|
-| 1 | `t7/search-db` (full-text index, two-rank search function, bounds, excerpts, rights) | 1, 2, 3 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | next |
-| 2 | `t7/lexicon` (dictionary, `lexicon_entries`, recomputation, account transfer, suggestion) | 2, 4, 5 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | to do |
+| 1 | `t7/search-db` (full-text index, two-rank search function, bounds, excerpts, rights) | 1, 2, 3 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR 74 merged |
+| 2 | `t7/lexicon` (dictionary, `lexicon_entries`, recomputation, account transfer, suggestion) | 2, 4, 5 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | next |
 | 3 | `t7/search-measure` (recall measure, outside the repository) | 9 | ordinary | Sonnet 5.5, High | code, Sonnet | to do |
 | 4 | `t7/search-screen` (search screen, page opened with the highlight box) | 8, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | to do |
 | 5 | `t7/export` (PDF and Markdown of a page, a chapter, a notebook) | 6, 8, 11 | sensitive (hostile input in HTML) | Sonnet 5.5, High | code and security, Sonnet | to do |
@@ -132,6 +132,12 @@ Done: 13 branches, PRs 24, 27 to 31 and 38 to 43, and the PR of branch 12; what 
 - `edit-race.sh` is in `db:test:concurrency` only once the owner applies `../Tranche 4/t4-schema package.json.patch` (it now adds `corrections-race.sh` and `edit-race.sh`); run both by hand after a `db reset`.
 - The migrations of slice 4 (`20261024120000_t4_schema.sql`, `20261025120000_t4_rules.sql`, `20261026120000_t4_math_check.sql`, `20261027120000_t4_edit.sql`) go to production with those of slices 2 and 3 in the pre-beta slice, the owner's; deploy `read-page`, `relaunch-page`, `set-page-type` and `edit-page` only after them.
 - Not on the phone yet: criterion 11 (keyboard bars, VoiceOver, English then French). The points to look at are in `../Tranche 4/Décisions.md`.
+
+## Notes carried from slice 7, branch 1
+
+- `t7/search-db` (migration `20261028120000_t7_search.sql`) adds the extension `unaccent`, the text search configuration `public.search_simple`, three full-text indexes and `public.search_pages(p_query, p_notebook_id)` (the one function of `public` besides `my_page_allowance` that `authenticated` may run). Its contract (bounds, ranks, columns) is in `docs/architecture.md`. It returns `token_index` for the frame, `excerpt`, `match_start` and `match_end` (in code points, `match_end` excluded) and `also_read`; the label « lu aussi : » and the bold are the screen's (branch 4), which converts the offsets to UTF-16. Refusals are `22023` with `query_too_long` or `query_too_many_words`.
+- For `t7/lexicon`: the suggestion is a second function over `lexicon_entries` and `pg_trgm`; the dictionary is loaded by a migration. `search_pages` is not involved in the lexicon recomputation.
+- The migration goes to production with the others (the deploy workflow), and `unaccent` must be allowed there.
 
 ## Notes carried from Correctifs 1, piece 1
 
