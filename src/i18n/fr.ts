@@ -203,7 +203,6 @@ export const fr: Strings = {
     fieldLabel: "Rechercher dans tes pages",
     placeholder: "Un mot de tes notes",
     allNotebooks: "Tous les carnets",
-    filterLabel: "Carnet où chercher",
     filterOption: (name: string) => `Chercher dans : ${name}`,
     hint: "Tape un mot pour trouver les pages qui le portent.",
     searching: "Recherche en cours…",

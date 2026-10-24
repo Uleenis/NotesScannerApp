@@ -201,7 +201,6 @@ export const en = {
     fieldLabel: "Search your pages",
     placeholder: "A word from your notes",
     allNotebooks: "All notebooks",
-    filterLabel: "Notebook to search",
     filterOption: (name: string) => `Search in: ${name}`,
     hint: "Type a word to find the pages that hold it.",
     searching: "Searching…",

@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/auth/auth-provider";
 import { searchService } from "./service";
@@ -10,7 +10,6 @@ export function useSearch(query: string, notebookId: string | null) {
     queryKey: ["search", userId, notebookId, trimmed],
     queryFn: () => searchService.search(trimmed, notebookId),
     enabled: status === "ready" && trimmed !== "",
-    placeholderData: keepPreviousData,
     gcTime: 60_000,
   });
 }

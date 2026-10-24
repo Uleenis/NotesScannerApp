@@ -12,7 +12,7 @@ export function frameOf(box: readonly number[], photo: PhotoSize): Frame | null 
   if (x1 >= x2 || y1 >= y2) {
     return null;
   }
-  if (x1 < 0 || y1 < 0 || x2 > photo.width + EDGE_TOLERANCE || y2 > photo.height + EDGE_TOLERANCE) {
+  if (x1 < 0 || y1 < 0 || x1 >= photo.width || y1 >= photo.height || x2 > photo.width + EDGE_TOLERANCE || y2 > photo.height + EDGE_TOLERANCE) {
     return null;
   }
   const right = Math.min(x2, photo.width);
