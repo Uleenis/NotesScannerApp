@@ -3,7 +3,7 @@ name = "reading"
 version = "0.1.0"
 requires-python = "==3.13.*"
 dependencies = [
-    "fastapi>=0.149.0",
+    "fastapi>=0.156.4",
     "espeakng-loader==0.2.4",
     "httpx2>=2.15.1",
     "kraken==7.1.1",
@@ -30,7 +30,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.13.1,<0.14"]
+requires = ["uv_build>=0.13.4,<0.14"]
 build-backend = "uv_build"
 
 [tool.uv]
