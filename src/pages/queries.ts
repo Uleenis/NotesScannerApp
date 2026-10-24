@@ -24,6 +24,7 @@ export function refreshPages(queryClient: QueryClient, userId: string | null): P
     queryClient.invalidateQueries({ queryKey: ["chapters", userId] }),
     queryClient.invalidateQueries({ queryKey: ["allowance", userId] }),
     queryClient.invalidateQueries({ queryKey: ["latest-notebook", userId] }),
+    queryClient.invalidateQueries({ queryKey: ["search", userId] }),
   ]);
 }
 

@@ -55,6 +55,7 @@ export default function NotebookScreen() {
   function openMenu() {
     showMenu(
       [
+        { label: t.search.open, onPress: () => router.push({ pathname: "/search", params: { notebook: id } }) },
         { label: t.notebook.newChapter, onPress: () => router.push({ pathname: "/new-chapter", params: { notebook: id } }) },
         { label: t.notebook.rename, onPress: () => router.push({ pathname: "/rename", params: { kind: "notebook", id } }) },
         {
