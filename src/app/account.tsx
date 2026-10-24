@@ -6,6 +6,8 @@ import { accountService } from "@/auth/account-service";
 import type { AccountFailure } from "@/auth/account-errors";
 import { useAuth } from "@/auth/auth-provider";
 import { useAllowance } from "@/capture/queries";
+import { useMyDataExport } from "@/export/data/use-my-data";
+import { ExportHost } from "@/components/export-host";
 import { AccountGroup } from "@/components/account/account-group";
 import { AccountRow } from "@/components/account/account-row";
 import { HeaderTextButton } from "@/components/header-text-button";
@@ -23,6 +25,7 @@ export default function AccountScreen() {
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
   const busy = useRef(false);
+  const exportData = useMyDataExport();
 
   const registered = auth.status === "ready" && !auth.isAnonymous;
   const email = auth.status === "ready" ? auth.email : null;
@@ -94,6 +97,10 @@ export default function AccountScreen() {
           <AccountRow label={t.account.privacy} onPress={() => openLink(legalLinks.privacy)} last />
         </AccountGroup>
         <AccountGroup>
+          <AccountRow label={t.myData.label} onPress={exportData} disabled={working} last />
+        </AccountGroup>
+        <Text style={styles.note}>{t.myData.note}</Text>
+        <AccountGroup>
           {registered ? (
             <AccountRow label={t.account.signOut} onPress={signOut} disabled={working} last />
           ) : (
@@ -106,6 +113,7 @@ export default function AccountScreen() {
         <Text style={styles.note}>{t.account.deleteNote}</Text>
         {message === null ? null : <Text style={styles.error}>{message}</Text>}
       </ScrollView>
+      <ExportHost embedded />
     </>
   );
 }

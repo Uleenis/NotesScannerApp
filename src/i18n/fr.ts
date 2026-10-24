@@ -293,4 +293,27 @@ export const fr: Strings = {
     unavailable: "Le partage n'est pas disponible sur ce téléphone.",
     failed: "L'export n'a pas abouti. Réessaie.",
   },
+  myData: {
+    label: "Exporter mes données",
+    note: "Fabrique sur ce téléphone une archive ZIP de tes carnets, pages, photos, lectures et corrections.",
+    fileName: "donnees-notes",
+    preparing: "Préparation de l'archive…",
+    progress: (done: number, total: number) => `Écriture de l'archive : ${done} page${done > 1 ? "s" : ""} sur ${total}…`,
+    confirmTitle: "Exporter toutes tes données ?",
+    confirmBody: (pages: number, size: string) =>
+      `L'archive contient ${pages === 0 ? "aucune page" : pages === 1 ? "1 page" : `${pages} pages`} et pèse ${size}. Elle est fabriquée sur ce téléphone : garde l'app ouverte jusqu'à la fin.`,
+    confirm: "Exporter",
+    smallSize: "moins de 1 Mo",
+    megabytes: (count: number) => `environ ${count} Mo`,
+    tooMany: (max: number) => `Ton compte contient trop de pages pour un seul export (${max} au plus).`,
+    tooLarge: "L'archive serait trop volumineuse pour être faite sur ce téléphone.",
+    noSpace: "Il n'y a pas assez de place libre sur ce téléphone pour l'archive.",
+    failed: "L'export n'a pas abouti. Réessaie.",
+    readme: [
+      "Notes Scanner : export de tes données",
+      "Cette archive a été fabriquée sur ton téléphone à partir de ton compte. Elle contient ce que l'app garde pour toi, sauf les fichiers que seuls les serveurs utilisent.",
+      "- README.txt : ce fichier.\n- export.json : la date de l'export, la version du format et le nombre de carnets, de chapitres, de pages et de photos. Une photo qui n'est plus conservée est comptée comme manquante.\n- profile.json : l'identifiant de ton compte, ton adresse e-mail, la langue de l'interface et ta formule.\n- usage.json : ton décompte de pages et la liste des pages décomptées, avec leurs dates.\n- notebooks.json : tes carnets, tes chapitres et le lexique de chaque carnet (les mots inhabituels trouvés dans ses pages).\n- pages/<id>/page.json : une page. Sa ligne (état, type, langue, dates, carnet et chapitre), ses lectures brutes (B1, B2 et A) avec le modèle, sa version et la version des consignes, ses mots avec leurs positions (une boîte [gauche, haut, droite, bas] en pixels de l'image de la page), tes corrections, le texte ajouté à la main en mode Modifier, et ses alertes. « images » dit quels fichiers de photo existent.\n- pages/<id>/text.txt : le texte que la page affiche.\n- pages/<id>/original.jpg et prepared.jpg : la photo que tu as prise et la version préparée pour la lecture.",
+      "Tous les fichiers sont du texte UTF-8, sauf les photos. Les fichiers .json sont du JSON.",
+    ],
+  },
 };

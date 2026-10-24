@@ -1,13 +1,13 @@
 # Current slice
 
-Slice 7 — Export et recherche is in progress (next branch: 6, `t7/my-data`). Correctifs 1 and slice 4 are done.
+Slice 7 — Export et recherche is done (6 branches). Correctifs 1 and slice 4 are done.
 
 Paths below are from the repository root.
 
 - **Spec and plan:** `../../02 Design/Tranche 7.md`, one document, validated by the owner on 23/10/2026, with its decisions as proposed. Slice 7 adds `expo-print`, `expo-sharing` and a pure JavaScript ZIP library (check in Expo Go in the first branch that adds them); no guarded file; no Gemini call.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
 - **Correctifs 1:** spec and plan in `../../02 Design/Correctifs 1.md` (validated 23/10/2026), decisions in `../Correctifs 1/Décisions.md`. Pieces 1 (`fix/action-sheet`), 2 (`fix/keyboard`) and 3 (`fix/display`) are merged; its Bilan is `../Correctifs 1/Bilan.md`, its phone checks `../Correctifs 1/Vérifications.md`.
-- **Next branch:** 6, `t7/my-data` (Sonnet 5.5, High). The last branch of slice 7 writes `../Tranche 7/Bilan.md` and `../Tranche 7/Vérifications.md` and the status of `AGENTS.md`.
+- **Next branch:** none in slice 7; its Bilan is `../Tranche 7/Bilan.md` and its phone checks `../Tranche 7/Vérifications.md`. Next slice: 9 (`../../02 Design/Tranche 9.md`), then 5, 6, 8, pre-beta, 11.
 - **Slice 4 is done:** its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`.
 - **Decisions from now on:** `../Tranche 7/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Guarded files:** only the referee (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the two guardrail tests, gitleaks). A slice that needs one prepares one patch and writes it in `../Pour Tim.md`.
@@ -23,8 +23,8 @@ Paths below are from the repository root.
 | 2 | `t7/lexicon` (dictionary, `lexicon_entries`, recomputation, account transfer, suggestion) | 2, 4, 5 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR 77 |
 | 3 | `t7/search-measure` (recall measure, outside the repository) | 9 | ordinary | Sonnet 5.5, High | code, Sonnet | done, PR 78 |
 | 4 | `t7/search-screen` (search screen, page opened with the highlight box) | 8, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | done, PR 79 merged |
-| 5 | `t7/export` (PDF and Markdown of a page, a chapter, a notebook) | 6, 8, 11 | sensitive (hostile input in HTML) | Sonnet 5.5, High | code and security, Sonnet | done, PR to merge |
-| 6 | `t7/my-data` (export of "my data" on the phone) | 7, 8, 12 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | to do |
+| 5 | `t7/export` (PDF and Markdown of a page, a chapter, a notebook) | 6, 8, 11 | sensitive (hostile input in HTML) | Sonnet 5.5, High | code and security, Sonnet | done, PR 80 merged |
+| 6 | `t7/my-data` (export of "my data" on the phone) | 7, 8, 12 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | done, PR 81; last of the slice: Bilan and status of `AGENTS.md` written |
 
 ## Slice 4
 
