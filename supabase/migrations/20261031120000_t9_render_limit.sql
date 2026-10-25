@@ -1,5 +1,3 @@
-lock table public.render_daily_counts in access exclusive mode;
-
 update public.render_daily_counts set renders = least(renders, 5) where renders > 5;
 
 alter table public.render_daily_counts drop constraint render_daily_counts_renders_check;
