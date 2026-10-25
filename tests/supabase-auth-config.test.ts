@@ -71,7 +71,7 @@ test("the delete-account function checks the token of the caller", () => {
   expect(section("functions.delete-account").verify_jwt).toBe("true");
 });
 
-test.each(["prepare-page", "read-page", "transfer-account", "set-page-type", "delete-page", "delete-notebook", "delete-chapter", "move-page", "edit-page"])(
+test.each(["prepare-page", "read-page", "transfer-account", "set-page-type", "delete-page", "delete-notebook", "delete-chapter", "move-page", "edit-page", "render-page"])(
   "the %s function checks the token of the caller",
   (name) => {
     expect(section(`functions.${name}`).verify_jwt).toBe("true");

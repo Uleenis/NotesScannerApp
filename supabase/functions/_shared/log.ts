@@ -30,6 +30,11 @@ export type LogEvent =
   | "page_edited"
   | "files_left"
   | "alto_swept"
+  | "render_done"
+  | "render_cached"
+  | "render_discarded"
+  | "render_failed"
+  | "render_limit"
   | "reading_service_misconfigured"
   | "unexpected_error";
 

@@ -1,4 +1,5 @@
 import type { GeminiReading } from "./gemini.ts";
+import type { GeminiRenderer } from "./gemini-render.ts";
 import type { Logger } from "./log.ts";
 import type { PageType } from "./page-type.ts";
 import type { ReadingService } from "./reading-service.ts";
@@ -215,5 +216,28 @@ export type EditStore = {
 export type EditDeps = {
   auth: Auth;
   edits: EditStore;
+  log: Logger;
+};
+
+export type RenderablePage = {
+  status: PageStatus;
+  pageType: PageType;
+  text: string | null;
+  rendering: { text: string; basedOn: string } | null;
+};
+
+export type StoredRendering = { text: string; basedOn: string; model: string; promptVersion: string };
+
+export type RenderStore = {
+  page: (userId: string, pageId: string) => Promise<RenderablePage | null>;
+  charge: (userId: string) => Promise<{ allowed: boolean; used: number }>;
+  save: (userId: string, pageId: string, rendering: StoredRendering) => Promise<void>;
+};
+
+export type RenderDeps = {
+  auth: Auth;
+  renders: RenderStore;
+  gemini: GeminiRenderer;
+  clock: { now: () => number };
   log: Logger;
 };

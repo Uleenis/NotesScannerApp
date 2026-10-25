@@ -1,6 +1,7 @@
 import { createClient, isAuthRetryableFetchError } from "npm:@supabase/supabase-js@2";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { UUID } from "./http.ts";
+import type { PageType } from "./page-type.ts";
 import type {
   AccountStore,
   Allowance,
@@ -24,6 +25,7 @@ import type {
   PageTypeStore,
   PhotoInfo,
   QueueReason,
+  RenderStore,
   ServerStore,
   SwitchOutcome,
   SweepStore,
@@ -526,6 +528,53 @@ export function createSweepStore(keys: Keys, fetchImpl?: typeof fetch): SweepSto
         removed += data.length;
       }
       return removed;
+    },
+  };
+}
+const PAGE_TYPES: readonly string[] = ["text", "math", "unsupported_script"];
+
+export function createRenderStore(keys: Keys, fetchImpl?: typeof fetch): RenderStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    page: async (userId, pageId) => {
+      const page = await client.from("pages").select("status, page_type").eq("id", pageId).eq("user_id", userId).maybeSingle();
+      if (page.error) throw new StoreError("renderPage");
+      const found = row(page.data);
+      if (!found) return null;
+      if (!PAGE_STATUSES.includes(String(found.status)) || !PAGE_TYPES.includes(String(found.page_type))) throw new StoreError("renderPage");
+      const [texts, renderings] = await Promise.all([
+        client.from("page_texts").select("text").eq("page_id", pageId).eq("user_id", userId).maybeSingle(),
+        client.from("page_renderings").select("text, based_on").eq("page_id", pageId).eq("user_id", userId).maybeSingle(),
+      ]);
+      if (texts.error || renderings.error) throw new StoreError("renderPage");
+      const stored = row(texts.data);
+      const rendering = row(renderings.data);
+      if (stored && typeof stored.text !== "string") throw new StoreError("renderPage");
+      if (rendering && (typeof rendering.text !== "string" || typeof rendering.based_on !== "string")) throw new StoreError("renderPage");
+      return {
+        status: found.status as PageStatus,
+        pageType: found.page_type as PageType,
+        text: stored ? stored.text as string : null,
+        rendering: rendering ? { text: rendering.text as string, basedOn: rendering.based_on as string } : null,
+      };
+    },
+    charge: async (userId) => {
+      const { data, error } = await client.rpc("charge_render", { p_user_id: userId });
+      const found = first(data);
+      if (error || !found || typeof found.allowed !== "boolean" || !Number.isInteger(found.used)) throw new StoreError("chargeRender");
+      return { allowed: found.allowed, used: found.used as number };
+    },
+    save: async (userId, pageId, rendering) => {
+      const { error } = await client.from("page_renderings").upsert({
+        page_id: pageId,
+        user_id: userId,
+        text: rendering.text,
+        based_on: rendering.basedOn,
+        model: rendering.model,
+        prompt_version: rendering.promptVersion,
+        created_at: new Date().toISOString(),
+      }, { onConflict: "page_id" });
+      if (error) throw new StoreError("saveRendering");
     },
   };
 }
