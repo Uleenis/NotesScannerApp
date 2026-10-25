@@ -20,7 +20,7 @@ Paths below are from the repository root.
 
 | # | Branch | Criteria | Level | Session | Reviews | State |
 |---|---|---|---|---|---|---|
-| 1 | `t9/schema` (`page_renderings`, count of the day, rights, deletion and transfer) | 1 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR to merge |
+| 1 | `t9/schema` (`page_renderings`, count of the day, rights, deletion and transfer) | 1 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR 82 |
 | 2 | `t9/render` (`render-page`, prompt, bounds, fidelity check) | 2, 3, 4 | sensitive (model call, hostile input) | Sonnet 5.5, High | code and security, Sonnet | next |
 | 3 | `t9/measure` (30 renderings of the corpus, outside the repository) | 9, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | |
 | 4 | `t9/screen` (Markdown parser, switch, wait, fallback, export in enriched mode) | 5 to 8, 11 | sensitive (model output displayed) | Sonnet 5.5, High | code and security, Sonnet | last of the slice: Bilan, Vérifications and status of `AGENTS.md` |
