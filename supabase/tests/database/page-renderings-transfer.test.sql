@@ -27,9 +27,9 @@ insert into public.page_renderings (page_id, user_id, text, based_on, model, pro
   ('b3000000-0000-0000-0000-000000000001', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Third', repeat('3', 64), 'm', 'R1');
 
 insert into public.render_daily_counts (user_id, day, renders) values
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', (now() at time zone 'Europe/Paris')::date, 20),
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', (now() at time zone 'Europe/Paris')::date - 1, 5),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', (now() at time zone 'Europe/Paris')::date, 15);
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', (now() at time zone 'Europe/Paris')::date, 3),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', (now() at time zone 'Europe/Paris')::date - 1, 2),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', (now() at time zone 'Europe/Paris')::date, 4);
 
 select is(
   (select count(*) from public.page_renderings where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
@@ -60,13 +60,13 @@ select is(
 
 select is(
   (select r.renders from public.render_daily_counts r where r.user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and r.day = (now() at time zone 'Europe/Paris')::date),
-  30,
+  5,
   'the renderings of the day add up and stop at the limit'
 );
 
 select is(
   (select r.renders from public.render_daily_counts r where r.user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' and r.day = (now() at time zone 'Europe/Paris')::date - 1),
-  5,
+  2,
   'the count of an earlier day moves as it is'
 );
 

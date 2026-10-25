@@ -20,7 +20,7 @@ class Fixture {
   readonly charged: string[] = [];
   readonly looked: { userId: string; pageId: string }[] = [];
   pages = new Map<string, RenderablePage>();
-  allowed = 30;
+  allowed = 5;
   answers: (string | Error)[] = [GOOD];
   wait: Promise<void> | null = null;
 
@@ -36,9 +36,9 @@ class Fixture {
       },
       charge: (userId) => {
         this.charged.push(userId);
-        if (this.allowed <= 0) return Promise.resolve({ allowed: false, used: 30 });
+        if (this.allowed <= 0) return Promise.resolve({ allowed: false, used: 5 });
         this.allowed -= 1;
-        return Promise.resolve({ allowed: true, used: 30 - this.allowed });
+        return Promise.resolve({ allowed: true, used: 5 - this.allowed });
       },
       save: (userId, pageId, rendering) => {
         this.saved.push({ userId, pageId, rendering });
@@ -195,7 +195,7 @@ Deno.test("two simultaneous calls on two pages make two calls [2]", async () => 
   assertEquals(fixture.sent.length, 2);
 });
 
-Deno.test("the 31st rendering of the day answers limit with no call, and the stored rendering is still served [2]", async () => {
+Deno.test("the rendering past the limit of the day answers limit with no call, and the stored rendering is still served [2]", async () => {
   const fixture = new Fixture();
   fixture.allowed = 0;
   const response = await fixture.ask();
@@ -300,4 +300,14 @@ Deno.test("a rendering made for a text that changed meanwhile is discarded and d
   assertEquals(fixture.saved, []);
   assertEquals(page.rendering.text, "# Plus récent");
   assertEquals(fixture.world.logs.find((entry) => entry.event === "render_discarded")?.fields.code, "page_changed");
+});
+
+Deno.test("a 429 of Gemini is not tried again and answers failed [2]", async () => {
+  const fixture = new Fixture();
+  fixture.answers = [new GeminiFailure("http_error", 429), GOOD];
+  assertEquals(await readJson(await fixture.ask()), { status: "failed" });
+  assertEquals(fixture.sent.length, 1);
+  assertEquals(fixture.saved, []);
+  assertEquals(fixture.charged.length, 1);
+  assertEquals(fixture.world.logs.filter((entry) => entry.event === "gemini_attempt_failed").map((entry) => entry.fields.status), [429]);
 });
