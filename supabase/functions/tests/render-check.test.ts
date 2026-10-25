@@ -64,7 +64,7 @@ Deno.test("a rendering that touches a formula is discarded, one that keeps it is
 
 Deno.test("a mark that stays in the input as written does not count as a mark [3]", () => {
   accepted("- a\n- b", "- a\n- b");
-  accepted("- a\n- b", "a\nb");
+  discarded("- a\n- b", "a\nb");
   accepted("2 * 3 * 4", "2 * 3 * 4");
   accepted("a_1 + b_2", "a_1 + b_2");
   accepted("#hashtag", "#hashtag");
@@ -119,4 +119,37 @@ Deno.test("an output longer than the bound is discarded whatever it holds [3]", 
 Deno.test("a rendering with only whitespace differences is accepted, with a letter more it is not [3]", () => {
   accepted("un\ndeux\ntrois", "un deux\r\ntrois");
   discarded("un\ndeux\ntrois", "un deuxx trois");
+});
+
+Deno.test("a mark inside a formula is part of the formula and cannot be dropped [3]", () => {
+  discarded("$x^*$ et $y^*$", "$x^$ et $y^$");
+  discarded("$(x)_{1} (y)_{2}$", "$(x){1} (y){2}$");
+  discarded("$$a_1 * b_2$$", "$$a1 * b2$$");
+  discarded("\(a_1 + b_1\)", "\(a1 + b1\)");
+  discarded("\begin{align}a_1 &= b_1\end{align}", "\begin{align}a1 &= b1\end{align}");
+  accepted("$x^*$ et $y^*$", "## $x^*$ et **$y^*$**");
+  accepted("$$a_1 * b_2$$", "$$a_1 * b_2$$");
+});
+
+Deno.test("a list keeps its numbers: renumbering is discarded, a new list counting from 1 is accepted [3]", () => {
+  discarded("3. foo\n4. bar", "1. foo\n1. bar");
+  discarded("un\ndeux", "2. un\n1. deux");
+  discarded("un\ndeux", "1. un\n3. deux");
+  discarded("un\ndeux", "0. un\n1. deux");
+  accepted("3. foo\n4. bar", "3. foo\n4. bar");
+  accepted("a\nb\nc\nd", "1. a\n2. b\n\n1. c\n2. d");
+});
+
+Deno.test("an operator or a sign of the input that looks like a mark cannot be dropped [3]", () => {
+  discarded("x**2 + y**2", "x2 + y2");
+  discarded("(a)*(b)*(c)", "(a)(b)(c)");
+  discarded("- 3 + 2", "3 + 2");
+  discarded("+ 3 - 2", "3 - 2");
+  discarded("a *b* c", "a b c");
+  discarded("# 3", "3");
+  accepted("x**2 + y**2", "x**2 + y**2");
+  accepted("- 3 + 2", "- 3 + 2");
+  accepted("a *b* c", "a *b* c");
+
+  accepted("x**2 + y", "- x**2 + y");
 });

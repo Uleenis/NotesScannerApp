@@ -55,6 +55,11 @@ async function produce(deps: RenderDeps, userId: string, pageId: string, input: 
     deps.log.event("render_discarded", { pageId, code: verdict.reason, inputTokens: reading.inputTokens, outputTokens: reading.outputTokens, durationMs });
     return { status: "discarded" };
   }
+  const current = await deps.renders.page(userId, pageId);
+  if (!current || (await fingerprint(renderInput(current.text ?? ""))) !== basedOn) {
+    deps.log.event("render_discarded", { pageId, code: "page_changed" });
+    return { status: "discarded" };
+  }
   await deps.renders.save(userId, pageId, { text: reading.text, basedOn, model: GEMINI_MODEL, promptVersion: RENDER_PROMPT_VERSION });
   deps.log.event("render_done", { pageId, inputTokens: reading.inputTokens, outputTokens: reading.outputTokens, durationMs });
   return { status: "ready", text: reading.text };

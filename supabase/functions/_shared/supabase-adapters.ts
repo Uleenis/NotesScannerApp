@@ -531,6 +531,7 @@ export function createSweepStore(keys: Keys, fetchImpl?: typeof fetch): SweepSto
     },
   };
 }
+
 const PAGE_TYPES: readonly string[] = ["text", "math", "unsupported_script"];
 
 export function createRenderStore(keys: Keys, fetchImpl?: typeof fetch): RenderStore {

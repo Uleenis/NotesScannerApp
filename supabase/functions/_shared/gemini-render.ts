@@ -2,7 +2,7 @@ import { callGemini } from "./gemini.ts";
 import type { GeminiOptions, GeminiReading } from "./gemini.ts";
 import { RENDER_PROMPT_R1 } from "./render-prompt.ts";
 
-export const MAX_RENDER_OUTPUT_TOKENS = 16_384;
+export const MAX_RENDER_OUTPUT_TOKENS = 32_768;
 
 export type GeminiRenderer = (input: string) => Promise<GeminiReading>;
 

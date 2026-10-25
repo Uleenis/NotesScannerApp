@@ -162,7 +162,6 @@ Deno.test("a rendering is made once, reused until the text changes, then made ag
   await fixture.ask();
   assertEquals(fixture.sent.length, 1);
   fixture.pages.get(`${ALICE}:${PAGE_ID}`)!.text = `${TEXT} corrigé`;
-  assertEquals(fixture.sent.length, 1);
   fixture.answers = [`${GOOD} corrigé`];
   await fixture.ask();
   await fixture.ask();
@@ -283,4 +282,22 @@ Deno.test("the logs hold no text of the page nor of the rendering [2]", async ()
   const logged = JSON.stringify(fixture.world.logs);
   assertEquals(logged.includes(CANARY_PAGE_TEXT), false);
   assertEquals(logged.includes("bornée"), false);
+});
+
+Deno.test("a rendering made for a text that changed meanwhile is discarded and does not replace a newer one [4]", async () => {
+  const fixture = new Fixture();
+  let release: () => void = () => {};
+  fixture.wait = new Promise((resolve) => {
+    release = resolve;
+  });
+  const slow = fixture.ask();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const page = fixture.pages.get(`${ALICE}:${PAGE_ID}`)!;
+  page.text = `${TEXT} corrigé`;
+  page.rendering = { text: "# Plus récent", basedOn: await fingerprint(`${TEXT} corrigé`) };
+  release();
+  assertEquals(await readJson(await slow), { status: "discarded" });
+  assertEquals(fixture.saved, []);
+  assertEquals(page.rendering.text, "# Plus récent");
+  assertEquals(fixture.world.logs.find((entry) => entry.event === "render_discarded")?.fields.code, "page_changed");
 });
