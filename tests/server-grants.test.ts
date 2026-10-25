@@ -41,6 +41,10 @@ test("the migrations create the tables of slice 4", () => {
   expect(publicTables(migrations().join("\n"))).toEqual(expect.arrayContaining(["corrections", "page_alerts"]));
 });
 
+test("the migrations create the tables of slice 9", () => {
+  expect(publicTables(migrations().join("\n"))).toEqual(expect.arrayContaining(["page_renderings", "render_daily_counts"]));
+});
+
 test("every table in public gives its rights to the server explicitly, as the production project requires", () => {
   const sql = migrations().join("\n");
   const rights = serverRights(sql);
