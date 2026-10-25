@@ -33,6 +33,7 @@ async function generate(deps: RenderDeps, pageId: string, input: string) {
     } catch (error) {
       if (!(error instanceof GeminiFailure)) throw error;
       deps.log.event("gemini_attempt_failed", { pageId, attempt, kind: error.kind, status: error.status });
+      if (error.status === 429) break;
     }
   }
   return null;

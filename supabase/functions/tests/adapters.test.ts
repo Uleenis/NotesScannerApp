@@ -778,8 +778,8 @@ Deno.test("a value of the wrong shape is an error, never a page [2]", async () =
 });
 
 Deno.test("charge_render is called with the user alone, as the service, and its answer is read back [2]", async () => {
-  const { fetch, calls } = stub(() => [{ allowed: false, used: 30 }]);
-  assertEquals(await createRenderStore(KEYS, fetch).charge(ALICE), { allowed: false, used: 30 });
+  const { fetch, calls } = stub(() => [{ allowed: false, used: 5 }]);
+  assertEquals(await createRenderStore(KEYS, fetch).charge(ALICE), { allowed: false, used: 5 });
   assertEquals(calls[0].url.pathname, "/rest/v1/rpc/charge_render");
   assertEquals(calls[0].body, { p_user_id: ALICE });
   assertEquals(calls[0].headers.get("apikey"), "secret-key");

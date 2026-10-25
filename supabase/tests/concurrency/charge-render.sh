@@ -50,13 +50,13 @@ results() {
 }
 
 bench charge_render 40 1
-check "40 simultaneous renderings of one user stop at 30" 30 "$(sql -c "select renders from public.render_daily_counts where user_id = '${ID}'")"
-check "30 of them were allowed" 30 "$(results 1)"
-check "10 of them were refused without an error" 10 "$(results 0)"
+check "40 simultaneous renderings of one user stop at 5" 5 "$(sql -c "select renders from public.render_daily_counts where user_id = '${ID}'")"
+check "5 of them were allowed" 5 "$(results 1)"
+check "35 of them were refused without an error" 35 "$(results 0)"
 
 bench charge_render 8 10
-check "80 more renderings leave the count at 30" 30 "$(sql -c "select renders from public.render_daily_counts where user_id = '${ID}'")"
-check "the 80 more were refused without an error, 90 refusals in all" 90 "$(results 0)"
+check "80 more renderings leave the count at 5" 5 "$(sql -c "select renders from public.render_daily_counts where user_id = '${ID}'")"
+check "the 80 more were refused without an error, 115 refusals in all" 115 "$(results 0)"
 check "the user has one row of count for the day" 1 "$(sql -c "select count(*) from public.render_daily_counts where user_id = '${ID}'")"
 
 exit "$failures"

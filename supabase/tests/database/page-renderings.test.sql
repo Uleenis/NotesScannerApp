@@ -1,6 +1,6 @@
 begin;
 
-select plan(33);
+select plan(34);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -162,14 +162,19 @@ select lives_ok(
 select is(pg_temp.charge('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 'true:1', 'the first rendering of the day is allowed');
 
 select lives_ok(
-  $$select public.charge_render('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') from generate_series(1, 28)$$,
+  $$select public.charge_render('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') from generate_series(1, 3)$$,
   'the server takes the following renderings of the day'
 );
 
-select is(pg_temp.charge('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 'true:30', 'the thirtieth rendering of the day is allowed');
-select is(pg_temp.charge('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 'false:30', 'the thirty-first is refused');
-select is(pg_temp.charge('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 'false:30', 'a refusal does not count');
+select is(pg_temp.charge('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 'true:5', 'the fifth rendering of the day is allowed');
+select is(pg_temp.charge('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 'false:5', 'the sixth is refused');
+select is(pg_temp.charge('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 'false:5', 'a refusal does not count');
 select is(pg_temp.charge('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'), 'true:1', 'the count of one user does not touch another');
+
+select throws_ok(
+  $$update public.render_daily_counts set renders = 6 where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'$$,
+  '23514', null, 'a count above the limit is refused by the table'
+);
 
 select throws_ok(
   $$select * from public.charge_render('99999999-9999-9999-9999-999999999999')$$,
