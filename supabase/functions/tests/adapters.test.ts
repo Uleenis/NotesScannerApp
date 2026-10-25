@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createRenderStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -742,4 +742,72 @@ Deno.test("an outcome the alert does not know is an error, never a pass [10]", a
   for (const odd of ["something_new", null, 3, ["recorded"]]) {
     assertEquals(await thrownBy(() => createServerStore(KEYS, stub(() => odd).fetch).recordMathAlert(ALICE, PAGE_ID, 1, 1)) instanceof StoreError, true);
   }
+});
+
+Deno.test("the page for a rendering is read for its owner alone, with its text and its stored rendering, as the service [2]", async () => {
+  const { fetch, calls } = stub((call) => {
+    if (call.url.pathname === "/rest/v1/pages") return { status: "read", page_type: "math" };
+    if (call.url.pathname === "/rest/v1/page_texts") return { text: "Bonjour" };
+    return { text: "# Bonjour", based_on: "a".repeat(64) };
+  });
+  const page = await createRenderStore(KEYS, fetch).page(ALICE, PAGE_ID);
+  assertEquals(page, { status: "read", pageType: "math", text: "Bonjour", rendering: { text: "# Bonjour", basedOn: "a".repeat(64) } });
+  assertEquals(calls.map((call) => call.url.pathname).sort(), ["/rest/v1/page_renderings", "/rest/v1/page_texts", "/rest/v1/pages"]);
+  for (const call of calls) {
+    assertEquals(call.method, "GET");
+    assertEquals(call.url.searchParams.get("user_id"), `eq.${ALICE}`);
+    assertEquals(call.headers.get("apikey"), "secret-key");
+  }
+  assertEquals(calls.find((call) => call.url.pathname === "/rest/v1/pages")?.url.searchParams.get("id"), `eq.${PAGE_ID}`);
+  assertEquals(calls.find((call) => call.url.pathname === "/rest/v1/page_texts")?.url.searchParams.get("page_id"), `eq.${PAGE_ID}`);
+});
+
+Deno.test("a page with no text and no rendering gives nulls, and a missing page gives null with no other read [2]", async () => {
+  const { fetch } = stub((call) => (call.url.pathname === "/rest/v1/pages" ? { status: "read", page_type: "text" } : null));
+  assertEquals(await createRenderStore(KEYS, fetch).page(ALICE, PAGE_ID), { status: "read", pageType: "text", text: null, rendering: null });
+  const missing = stub(() => null);
+  assertEquals(await createRenderStore(KEYS, missing.fetch).page(ALICE, PAGE_ID), null);
+  assertEquals(missing.calls.length, 1);
+});
+
+Deno.test("a value of the wrong shape is an error, never a page [2]", async () => {
+  const badStatus = stub(() => ({ status: "other", page_type: "text" }));
+  assertEquals(await storeError(() => createRenderStore(KEYS, badStatus.fetch).page(ALICE, PAGE_ID)), true);
+  const badText = stub((call) => (call.url.pathname === "/rest/v1/pages" ? { status: "read", page_type: "text" } : { text: 4 }));
+  assertEquals(await storeError(() => createRenderStore(KEYS, badText.fetch).page(ALICE, PAGE_ID)), true);
+});
+
+Deno.test("charge_render is called with the user alone, as the service, and its answer is read back [2]", async () => {
+  const { fetch, calls } = stub(() => [{ allowed: false, used: 30 }]);
+  assertEquals(await createRenderStore(KEYS, fetch).charge(ALICE), { allowed: false, used: 30 });
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/charge_render");
+  assertEquals(calls[0].body, { p_user_id: ALICE });
+  assertEquals(calls[0].headers.get("apikey"), "secret-key");
+  const bad = stub(() => [{ allowed: "yes", used: 1 }]);
+  assertEquals(await storeError(() => createRenderStore(KEYS, bad.fetch).charge(ALICE)), true);
+});
+
+Deno.test("a rendering is written as one row per page, for the owner given, as the service [2]", async () => {
+  const { fetch, calls } = stub(() => []);
+  await createRenderStore(KEYS, fetch).save(ALICE, PAGE_ID, { text: "# Bonjour", basedOn: "b".repeat(64), model: "gemini-3.6-flash", promptVersion: "r1" });
+  assertEquals(calls[0].method, "POST");
+  assertEquals(calls[0].url.pathname, "/rest/v1/page_renderings");
+  assertEquals(calls[0].url.searchParams.get("on_conflict"), "page_id");
+  assertEquals(calls[0].headers.get("apikey"), "secret-key");
+  assertEquals(calls[0].headers.get("prefer")?.includes("resolution=merge-duplicates"), true);
+  const body = calls[0].body as Record<string, unknown>;
+  assertEquals({ ...body, created_at: typeof body.created_at }, {
+    page_id: PAGE_ID,
+    user_id: ALICE,
+    text: "# Bonjour",
+    based_on: "b".repeat(64),
+    model: "gemini-3.6-flash",
+    prompt_version: "r1",
+    created_at: "string",
+  });
+});
+
+Deno.test("a refused write of a rendering is an error [2]", async () => {
+  const refusing = (() => Promise.resolve(new Response(JSON.stringify({ message: "boom" }), { status: 500, headers: { "content-type": "application/json" } }))) as typeof fetch;
+  assertEquals(await storeError(() => createRenderStore(KEYS, refusing).save(ALICE, PAGE_ID, { text: "t", basedOn: "b".repeat(64), model: "m", promptVersion: "r1" })), true);
 });

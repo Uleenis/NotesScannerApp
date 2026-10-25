@@ -38,7 +38,7 @@ export type GeminiReading = {
   thoughtsTokens: number;
 };
 
-type GeminiOptions = { apiKey: string; fetch?: typeof fetch; timeoutMs?: number };
+export type GeminiOptions = { apiKey: string; fetch?: typeof fetch; timeoutMs?: number };
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -84,32 +84,33 @@ function readResponse(body: unknown): GeminiReading {
   };
 }
 
-export function createGeminiReader(options: GeminiOptions): (image: Uint8Array) => Promise<GeminiReading> {
+export async function callGemini(options: GeminiOptions, body: string): Promise<GeminiReading> {
   const send = options.fetch ?? globalThis.fetch;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  return async (image) => {
-    const signal = AbortSignal.timeout(timeoutMs);
-    let response: Response;
-    try {
-      response = await send(ENDPOINT, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-goog-api-key": options.apiKey },
-        body: requestBody(image),
-        signal,
-      });
-    } catch {
-      throw new GeminiFailure(signal.aborted ? "timeout" : "network");
-    }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new GeminiFailure("http_error", response.status);
-    }
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      throw new GeminiFailure(signal.aborted ? "timeout" : "bad_response");
-    }
-    return readResponse(body);
-  };
+  const signal = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await send(ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": options.apiKey },
+      body,
+      signal,
+    });
+  } catch {
+    throw new GeminiFailure(signal.aborted ? "timeout" : "network");
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new GeminiFailure("http_error", response.status);
+  }
+  let parsed: unknown;
+  try {
+    parsed = await response.json();
+  } catch {
+    throw new GeminiFailure(signal.aborted ? "timeout" : "bad_response");
+  }
+  return readResponse(parsed);
+}
+
+export function createGeminiReader(options: GeminiOptions): (image: Uint8Array) => Promise<GeminiReading> {
+  return (image) => callGemini(options, requestBody(image));
 }

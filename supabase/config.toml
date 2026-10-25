@@ -454,5 +454,8 @@ verify_jwt = true
 [functions.edit-page]
 verify_jwt = true
 
+[functions.render-page]
+verify_jwt = true
+
 [functions.sweep-alto]
 verify_jwt = false
