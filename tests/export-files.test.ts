@@ -146,6 +146,13 @@ describe("saveExport", () => {
     expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
   });
 
+  test("names the failure a print when the print gives empty data, and writes nothing", async () => {
+    mockPrint.mockResolvedValueOnce({ uri: "file:///root-cache/Print/abc.pdf", numberOfPages: 1, base64: "" });
+    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "PrintFailed" });
+    expect(mockOperations.some((operation) => operation.kind === "write")).toBe(false);
+    expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
+  });
+
   test("erases the folder when the print fails twice, and names the failure a print [4]", async () => {
     mockFailures.print = true;
     await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "PrintFailed" });
