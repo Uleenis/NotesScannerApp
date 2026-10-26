@@ -34,6 +34,11 @@ describe("parseRendering", () => {
     ]);
   });
 
+  it("reads a nested item that has no item before it as a first level one", () => {
+    expect(parse("  - a\n- b\n  - c").map((block) => (block.kind === "item" ? block.depth : -1))).toEqual([0, 0, 1]);
+    expect(parse("texte\n\n  - a").map((block) => (block.kind === "item" ? block.depth : -1))).toEqual([-1, 0]);
+  });
+
   it("joins the lines of a paragraph and of a list item, and splits at a blank line", () => {
     const blocks = parse("un deux\ntrois\n\nquatre\n- cinq\nsix\n\n\nsept");
     expect(texts(blocks)).toEqual(["un deux trois", "quatre", "cinq six", "sept"]);

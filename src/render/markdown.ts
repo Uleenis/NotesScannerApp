@@ -19,30 +19,40 @@ type Formula = { display: boolean; tex: string; source: string };
 
 type Piece = RichSpan | { kind: "display"; tex: string; source: string };
 
-const OPEN = "\uE000";
-const CLOSE = "\uE001";
-const PRIVATE = /[\uE000\uE001]/g;
-const PLACEHOLDER = /\uE000(\d+)\uE001/g;
+type Styled = { text: string; bold: boolean; italic: boolean };
+
+type Marks = { open: string; close: string; placeholder: RegExp };
+
+const FIRST_PRIVATE = 0xe000;
+const LAST_PRIVATE = 0xf8fe;
+const BOLD = 1;
+const ITALIC = 2;
 const LINE_MARK = /^( {0,4})(?:(#{1,3})|([-*+])|(\d{1,3})\.)[ \t]+/;
-const BOTH = /\*\*\*(?=[^\s*])(.{1,500}?)(?<=[^\s*])\*\*\*/;
-const BOLD = /\*\*(?=[^\s*])(.{1,500}?)(?<=[^\s*])\*\*/;
-const STAR = /(?<![\p{L}\p{N}*])\*(?=[^\s*])(.{1,500}?)(?<=[^\s*])\*(?![\p{L}\p{N}*])/u;
-const UNDERSCORE = /(?<![\p{L}\p{N}_])_(?=[^\s_])(.{1,500}?)(?<=[^\s_])_(?![\p{L}\p{N}_])/u;
-const EMPHASES = [
-  { pattern: BOTH, bold: true, italic: true },
-  { pattern: BOLD, bold: true, italic: false },
-  { pattern: STAR, bold: false, italic: true },
-  { pattern: UNDERSCORE, bold: false, italic: true },
+const PASSES = [
+  { pattern: /\*\*(?=[^\s*])(.{1,500}?)(?<=[^\s*])\*\*/g, length: 2, flag: BOLD },
+  { pattern: /(?<![\p{L}\p{N}*])\*(?=[^\s*])(.{1,500}?)(?<=[^\s*])\*(?![\p{L}\p{N}*])/gu, length: 1, flag: ITALIC },
+  { pattern: /(?<![\p{L}\p{N}_])_(?=[^\s_])(.{1,500}?)(?<=[^\s_])_(?![\p{L}\p{N}_])/gu, length: 1, flag: ITALIC },
 ] as const;
 
-function masked(text: string): { text: string; formulas: Formula[] } {
+function freeMarks(text: string): Marks | null {
+  for (let code = FIRST_PRIVATE; code <= LAST_PRIVATE; code += 2) {
+    const open = String.fromCharCode(code);
+    const close = String.fromCharCode(code + 1);
+    if (!text.includes(open) && !text.includes(close)) {
+      return { open, close, placeholder: new RegExp(`${open}(\\d+)${close}`, "g") };
+    }
+  }
+  return null;
+}
+
+function masked(text: string, marks: Marks): { text: string; formulas: Formula[] } {
   const formulas: Formula[] = [];
   let result = "";
   for (const piece of mathPieces(text)) {
     if (piece.kind === "text") {
-      result += piece.text.replace(PRIVATE, "\uFFFD");
+      result += piece.text;
     } else {
-      result += `${OPEN}${formulas.push({ display: piece.kind === "display", tex: piece.tex, source: piece.source }) - 1}${CLOSE}`;
+      result += `${marks.open}${formulas.push({ display: piece.kind === "display", tex: piece.tex, source: piece.source }) - 1}${marks.close}`;
     }
   }
   return { text: result, formulas };
@@ -82,42 +92,60 @@ function unitsOf(text: string): Unit[] {
   return units;
 }
 
-function emphasize(text: string, bold: boolean, italic: boolean, out: Piece[], formulas: Formula[]): void {
-  let rest = text;
-  while (rest !== "") {
-    let best: { index: number; length: number; inner: string; bold: boolean; italic: boolean } | null = null;
-    for (const emphasis of EMPHASES) {
-      const found = emphasis.pattern.exec(rest);
-      if (found !== null && (best === null || found.index < best.index)) {
-        best = { index: found.index, length: found[0].length, inner: found[1], bold: emphasis.bold, italic: emphasis.italic };
+function styledRuns(text: string): Styled[] {
+  let characters = text.split("");
+  let flags: number[] = new Array<number>(characters.length).fill(0);
+  for (const pass of PASSES) {
+    const current = characters.join("");
+    const nextCharacters: string[] = [];
+    const nextFlags: number[] = [];
+    const keep = (from: number, to: number, flag: number) => {
+      for (let at = from; at < to; at += 1) {
+        nextCharacters.push(characters[at]);
+        nextFlags.push(flags[at] | flag);
       }
+    };
+    let at = 0;
+    for (const found of current.matchAll(pass.pattern)) {
+      const inner = found.index + pass.length;
+      keep(at, found.index, 0);
+      keep(inner, inner + found[1].length, pass.flag);
+      at = found.index + found[0].length;
     }
-    if (best === null) {
-      pushText(rest, bold, italic, out, formulas);
-      return;
-    }
-    pushText(rest.slice(0, best.index), bold, italic, out, formulas);
-    emphasize(best.inner, bold || best.bold, italic || best.italic, out, formulas);
-    rest = rest.slice(best.index + best.length);
+    keep(at, characters.length, 0);
+    characters = nextCharacters;
+    flags = nextFlags;
   }
+  const runs: Styled[] = [];
+  characters.forEach((character, at) => {
+    const last = runs[runs.length - 1];
+    const bold = (flags[at] & BOLD) !== 0;
+    const italic = (flags[at] & ITALIC) !== 0;
+    if (last !== undefined && last.bold === bold && last.italic === italic) {
+      last.text += character;
+    } else {
+      runs.push({ text: character, bold, italic });
+    }
+  });
+  return runs;
 }
 
-function pushText(text: string, bold: boolean, italic: boolean, out: Piece[], formulas: Formula[]): void {
+function pushText(run: Styled, marks: Marks, out: Piece[], formulas: Formula[]): void {
   let at = 0;
   const push = (plain: string) => {
     if (plain !== "") {
-      out.push({ kind: "text", text: plain, bold, italic });
+      out.push({ kind: "text", text: plain, bold: run.bold, italic: run.italic });
     }
   };
-  for (const found of text.matchAll(PLACEHOLDER)) {
-    push(text.slice(at, found.index));
+  for (const found of run.text.matchAll(marks.placeholder)) {
+    push(run.text.slice(at, found.index));
     at = found.index + found[0].length;
     const formula = formulas[Number(found[1])];
     if (formula !== undefined) {
       out.push(formula.display ? { kind: "display", tex: formula.tex, source: formula.source } : { kind: "formula", tex: formula.tex, source: formula.source });
     }
   }
-  push(text.slice(at));
+  push(run.text.slice(at));
 }
 
 function tidy(spans: RichSpan[]): RichSpan[] {
@@ -133,9 +161,11 @@ function tidy(spans: RichSpan[]): RichSpan[] {
   return cleaned.filter((span) => span.kind !== "text" || span.text !== "");
 }
 
-function blocksOf(unit: Unit, formulas: Formula[]): RichBlock[] {
+function blocksOf(unit: Unit, marks: Marks, formulas: Formula[]): RichBlock[] {
   const pieces: Piece[] = [];
-  emphasize(unit.text, false, false, pieces, formulas);
+  for (const run of styledRuns(unit.text)) {
+    pushText(run, marks, pieces, formulas);
+  }
   const blocks: RichBlock[] = [];
   let spans: RichSpan[] = [];
   let leading = true;
@@ -171,6 +201,12 @@ export function parseRendering(markdown: string): RichBlock[] | null {
   if (markdown.length > MAX_RENDERING_LENGTH) {
     return null;
   }
-  const { text, formulas } = masked(markdown.replace(/\r\n?/g, "\n"));
-  return unitsOf(text).flatMap((unit) => blocksOf(unit, formulas));
+  const normalized = markdown.replace(/\r\n?/g, "\n");
+  const marks = freeMarks(normalized);
+  if (marks === null) {
+    return null;
+  }
+  const { text, formulas } = masked(normalized, marks);
+  const blocks = unitsOf(text).flatMap((unit) => blocksOf(unit, marks, formulas));
+  return blocks.map((block, at): RichBlock => (block.kind === "item" && block.depth === 1 && blocks[at - 1]?.kind !== "item" ? { ...block, depth: 0 } : block));
 }

@@ -20,6 +20,6 @@ describe("sha256", () => {
   });
 
   it("gives the same digest for a lone surrogate as for the replacement character", () => {
-    expect(sha256("a�b")).toBe(sha256("a�b"));
+    expect(sha256("a\uD800b")).toBe("05087813392efc16fe8ff448920c6328e53af865df39419436659d9ffda90f7b");
   });
 });

@@ -62,6 +62,7 @@ describe("renderingFingerprint", () => {
   it("is the SHA-256 of the stored text without the underline tags", () => {
     expect(renderingFingerprint("<u>La</u> France\n\nfin")).toBe(sha256("La France\n\nfin"));
     expect(renderingFingerprint("a <b> c")).toBe(sha256("a <b> c"));
+    expect(renderingFingerprint("<u>La</u> France\n\nfin")).toBe("aecdca09dd4eaf5d22f3d6261a949f7974797523dc52b2df56ff53a7b97822b8");
   });
 });
 

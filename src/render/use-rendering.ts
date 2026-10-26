@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useReducer } from "react";
+import { useEffect, useMemo, useReducer } from "react";
 
 import { useAuth } from "@/auth/auth-provider";
 import type { NumberedPage } from "@/pages/pages";
@@ -8,7 +8,7 @@ import { renderService } from "./service";
 
 export type RenderingView = { status: "off" } | { status: "loading" } | { status: "waiting" } | { status: "ready"; text: string } | { status: "fallback" };
 
-type Attempt = { state: "pending"; done: Promise<void> } | { state: "failed" };
+type Attempt = { state: "pending"; done: Promise<void> } | { state: "failed"; retry: boolean };
 
 const attempts = new Map<string, Attempt>();
 
@@ -18,7 +18,7 @@ export function resetRenderAttempts(): void {
 
 export function forgetRenderFailure(pageId: string): void {
   for (const [key, attempt] of attempts) {
-    if (attempt.state === "failed" && key.split(":")[1] === pageId) {
+    if (attempt.state === "failed" && attempt.retry && key.split(":")[1] === pageId) {
       attempts.delete(key);
     }
   }
@@ -29,7 +29,7 @@ export function useRendering(page: NumberedPage, active: boolean): RenderingView
   const queryClient = useQueryClient();
   const [, refresh] = useReducer((count: number) => count + 1, 0);
   const text = page.text ?? "";
-  const fingerprint = active ? renderingFingerprint(text) : "";
+  const fingerprint = useMemo(() => (active ? renderingFingerprint(text) : ""), [active, text]);
   const queryKey = ["page-rendering", userId, page.id];
   const stored = useQuery({
     queryKey,
@@ -56,7 +56,7 @@ export function useRendering(page: NumberedPage, active: boolean): RenderingView
             attempts.delete(key);
             queryClient.setQueryData<StoredRendering>(["page-rendering", userId, page.id], { text: outcome.text, basedOn: fingerprint });
           } else {
-            attempts.set(key, { state: "failed" });
+            attempts.set(key, { state: "failed", retry: outcome.status !== "discarded" });
           }
         });
       known = { state: "pending", done };

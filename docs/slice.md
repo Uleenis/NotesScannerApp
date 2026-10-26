@@ -1,6 +1,6 @@
 # Current slice
 
-Slice 9 — Rendu enrichi is in progress (4 branches). Slice 7, Correctifs 1 and slice 4 are done.
+Slice 9 — Rendu enrichi is done (4 branches); its Bilan is `../Tranche 9/Bilan.md`. Slices 7 and 4 and Correctifs 1 are done.
 
 Paths below are from the repository root.
 
@@ -8,7 +8,7 @@ Paths below are from the repository root.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
 - **Correctifs 1:** spec and plan in `../../02 Design/Correctifs 1.md` (validated 23/10/2026), decisions in `../Correctifs 1/Décisions.md`. Pieces 1 (`fix/action-sheet`), 2 (`fix/keyboard`) and 3 (`fix/display`) are merged; its Bilan is `../Correctifs 1/Bilan.md`, its phone checks `../Correctifs 1/Vérifications.md`.
 - **Spec and plan of slice 9:** `../../02 Design/Tranche 9.md`, validated by the owner on 23/10/2026 with its decisions as proposed. Decisions in `../Tranche 9/Décisions.md`, in French, one line each. No guarded file; Gemini is simulated in tests, measure 9 costs 30 calls over two days.
-- **Next branch:** `t9/screen` (branch 4 of slice 9, the last). Branch 3, `t9/measure`, is done: 26 renderings accepted out of 30 (86.7 %), criterion 10 met, results in `../../04 Testing/T9 mesures/Résultats.md`. One of the four discarded renderings is a false rejection: an emphasis opened on one line and closed on the next is not removed by the fidelity check, which strips marks line by line; `t9/screen` fixes the check (or the prompt) and gives the client parser multi-line emphasis. Branch 2, `t9/render`, is done (PR 83). The daily limit of renderings was lowered from 30 to 5 and a 429 is no longer retried (PR 84), while the Gemini key is free. Slice 7 is done: its Bilan is `../Tranche 7/Bilan.md`, its phone checks `../Tranche 7/Vérifications.md`. After slice 9: 5, 6, 8, pre-beta, 11.
+- **Next:** slice 5, then 6, 8, pre-beta, 11 (`../../01 Steps/Périmètre du MVP.md`). Slice 9 is done: branches `t9/schema` (PR 82), `t9/render` (83), `t9/render-limits` (84), `t9/measure` (85: 26 renderings accepted out of 30, 86.7 %, criterion 10 met) and `t9/screen`. Its decisions are `../Tranche 9/Décisions.md`, its phone checks `../Tranche 9/Vérifications.md`. A slice whose document is missing or not validated: stop and ask.
 - **Slice 4 is done:** its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`.
 - **Decisions from now on:** `../Tranche 9/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Guarded files:** only the referee (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the two guardrail tests, gitleaks). A slice that needs one prepares one patch and writes it in `../Pour Tim.md`.
@@ -23,7 +23,13 @@ Paths below are from the repository root.
 | 1 | `t9/schema` (`page_renderings`, count of the day, rights, deletion and transfer) | 1 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR 82 |
 | 2 | `t9/render` (`render-page`, prompt, bounds, fidelity check) | 2, 3, 4 | sensitive (model call, hostile input) | Sonnet 5.5, High | code and security, Sonnet | done, PR 83 |
 | 3 | `t9/measure` (30 renderings of the corpus, outside the repository) | 9, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | done, 26 of 30 accepted |
-| 4 | `t9/screen` (Markdown parser, switch, wait, fallback, export in enriched mode) | 5 to 8, 11 | sensitive (model output displayed) | Sonnet 5.5, High | code and security, Sonnet | next; last of the slice: Bilan, Vérifications and status of `AGENTS.md` |
+| 4 | `t9/screen` (Markdown parser, switch, wait, fallback, export in enriched mode) | 5 to 8, 11 | sensitive (model output displayed) | Sonnet 5.5, High | code and security, Sonnet | done, last of the slice |
+
+## Notes carried from slice 9, branch 4
+
+- `t9/screen` adds `src/render/`, the switch and body in `src/components/reading/`, and the enriched export. No migration, no guarded file, no dependency. The fidelity check of `render-page` now removes the emphasis marks per unit (paragraph, list item, heading) instead of per line; it takes effect with the next deploy of the function. Contract in `docs/architecture.md` (`src/render/`, `render-page`).
+- Not checked on a device (criterion 11): `../Tranche 9/Vérifications.md`. Points to look at: `Text selectable` with `onPress` on the body of a rendering, formulas inside text, the switch above the keyboard, French then English.
+- Set aside after review: the client formula scanner (`mathPieces`) and the server `FORMULA` expression differ on rare inputs (escaped dollar signs, a display formula holding only spaces, `begin` and `end` of different names), so emphasis can be removed differently around such a formula, which can show a stray mark and never changes a word; a stored rendering that cannot be read shows the sentence for a refused rendering; a failure is remembered in memory only, so after a restart a page whose rendering is always discarded costs one more of the 5 renderings of the day.
 
 ## Slice 7 branches
 

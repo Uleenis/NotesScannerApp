@@ -5,6 +5,7 @@ import { act, fireEvent, renderRouter, screen, waitFor } from "expo-router/testi
 import { defaultAuthServices } from "@/auth/default-services";
 import type { Allowance } from "@/capture/allowance";
 import { captureService } from "@/capture/service";
+import { pageService } from "@/pages/service";
 import { strings } from "@/i18n";
 import { renderingFingerprint, type RenderOutcome, type StoredRendering } from "@/render/api";
 import { resetRenderMode } from "@/render/mode";
@@ -225,8 +226,8 @@ describe("when the rendering cannot be shown", () => {
     expect(render).toHaveBeenCalledTimes(1);
   });
 
-  test("does not ask again on a new opening of the same text, but does after an explicit choice", async () => {
-    render.mockResolvedValue({ status: "discarded" });
+  test.each(["failed", "network", "error", "limit"] as const)("does not ask again on a new opening of the same text after %s, but does after an explicit choice", async (status) => {
+    render.mockResolvedValue({ status });
     await openPage();
     await choose(fr.rendering.enriched);
     await screen.findByText(fr.rendering.fallback);
@@ -239,6 +240,19 @@ describe("when the rendering cannot be shown", () => {
     await choose(fr.rendering.enriched);
     await screen.findByText("•");
     expect(render).toHaveBeenCalledTimes(2);
+  });
+
+  test("never asks again for a text whose rendering was discarded, whatever the choice", async () => {
+    render.mockResolvedValue({ status: "discarded" });
+    await openPage();
+    await choose(fr.rendering.enriched);
+    await screen.findByText(fr.rendering.fallback);
+
+    await choose(fr.rendering.faithful);
+    await choose(fr.rendering.enriched);
+    expect(await screen.findByText(fr.rendering.fallback)).toBeTruthy();
+    await act(async () => {});
+    expect(render).toHaveBeenCalledTimes(1);
   });
 
   test("a stored rendering that cannot be read keeps the faithful text and calls nothing", async () => {
@@ -256,6 +270,30 @@ describe("when the rendering cannot be shown", () => {
     await choose(fr.rendering.enriched);
 
     expect(await screen.findByText(fr.rendering.fallback)).toBeTruthy();
+  });
+});
+
+describe("when to ask [4]", () => {
+  test("waits for the words of the page to be placed, so a text that is still changing is not rendered", async () => {
+    await openPage();
+    jest.mocked(pageService.words).mockResolvedValue({ words: [], corrections: [], gaps: [] });
+    await choose(fr.rendering.enriched);
+    await act(async () => {});
+    expect(render).not.toHaveBeenCalled();
+
+    jest.mocked(pageService.words).mockResolvedValue({ words: regexWordsOf(RAW), corrections: [], gaps: [] });
+    await screen.findByText("•");
+    expect(render).toHaveBeenCalledTimes(1);
+  });
+
+  test("goes back to the faithful text and asks nothing when the page type is switched", async () => {
+    await openPage();
+    await showEnriched();
+    await fireEvent(screen.getByLabelText(fr.document.mathPage), "valueChange", true);
+
+    await waitFor(() => expect(screen.queryByText("•")).toBeNull());
+    await act(async () => {});
+    expect(render).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -36,13 +36,16 @@ function displayFormula(tex: string, source: string): string {
   return kept === null ? sourceText(source) : `$$\n${kept}\n$$`;
 }
 
-const OUTER_SPACES = /^(\s*)([\s\S]*?)(\s*)$/;
-
 function emphasized(text: string, bold: boolean, italic: boolean): string {
-  const [, lead, core, trail] = OUTER_SPACES.exec(text) ?? ["", "", text, ""];
-  if (core === "" || (!bold && !italic)) {
+  if (!bold && !italic) {
     return text;
   }
+  const core = text.trim();
+  if (core === "") {
+    return text;
+  }
+  const lead = text.slice(0, text.length - text.trimStart().length);
+  const trail = text.slice(text.trimEnd().length);
   const mark = bold && italic ? "***" : bold ? "**" : "*";
   return `${lead}${mark}${core}${mark}${trail}`;
 }

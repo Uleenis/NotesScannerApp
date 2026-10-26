@@ -29,7 +29,7 @@ const NO_WORDS: ReadonlySet<number> = new Set();
 
 const BLOCK_SPACING = typography.documentBody.lineHeight * 0.4;
 
-function MathSwitch({ page, mayLoseWork }: { page: NumberedPage; mayLoseWork: boolean }) {
+function MathSwitch({ page, mayLoseWork, onSwitch }: { page: NumberedPage; mayLoseWork: boolean; onSwitch: () => void }) {
   const t = useStrings();
   const change = useSetPageType(page.id);
   const stored = page.pageType === "math";
@@ -39,6 +39,7 @@ function MathSwitch({ page, mayLoseWork }: { page: NumberedPage; mayLoseWork: bo
 
   async function toggle(math: boolean) {
     setFailed(false);
+    onSwitch();
     setWanted({ math, from: page.pageType });
     const result = await change.mutateAsync(math ? "math" : "text").catch(() => ({ status: "error" }) as const);
     setWanted(null);
@@ -136,11 +137,13 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
   const renderMode = useRenderMode();
   const [suspended, setSuspended] = useState(false);
   const renderable = read && (page.pageType === "text" || page.pageType === "math") && stripUnderline(page.text ?? "").trim() !== "";
-  const wantsRich = renderable && renderMode === "enriched" && !suspended && !writing;
+  const wordsReady = page.pageType === "math" ? stored.data !== undefined : placed.length > 0;
+  const wantsRich = renderable && renderMode === "enriched" && !suspended && !writing && wordsReady;
   const rendering = useRendering(page, wantsRich);
-  const rich = useMemo(() => (rendering.status === "ready" ? parseRendering(rendering.text) : null), [rendering]);
+  const richText = rendering.status === "ready" ? rendering.text : null;
+  const rich = useMemo(() => (richText === null ? null : parseRendering(richText)), [richText]);
   const showRich = rich !== null && rich.length > 0;
-  const waitingForRich = wantsRich && rendering.status === "waiting";
+  const waitingForRich = wantsRich && (rendering.status === "waiting" || rendering.status === "loading");
   const fellBack = wantsRich && (rendering.status === "fallback" || (rendering.status === "ready" && !showRich));
   const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "missing_line" ? page.pageType === "text" : page.pageType === "math"));
 
@@ -266,7 +269,7 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
             {page.pageType === "unsupported_script" ? (
               <Text style={[styles.secondary, styles.warning]}>{t.document.unsupportedScript}</Text>
             ) : (
-              <MathSwitch page={page} mayLoseWork={mayLoseWork} />
+              <MathSwitch page={page} mayLoseWork={mayLoseWork} onSwitch={() => setSuspended(true)} />
             )}
             {showRich ? (
               <RichBody blocks={rich} onTouch={() => setSuspended(true)} />

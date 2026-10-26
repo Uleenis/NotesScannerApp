@@ -22,6 +22,7 @@ Deno.test("the input drops the underline tags of the model and nothing else [3]"
 Deno.test("the fingerprint is the SHA-256 of the input in 64 lowercase hexadecimal characters [4]", async () => {
   assertEquals(await fingerprint("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   assertEquals((await fingerprint("é")).length, 64);
+  assertEquals(await fingerprint(renderInput("<u>La</u> France\n\nfin")), "aecdca09dd4eaf5d22f3d6261a949f7974797523dc52b2df56ff53a7b97822b8");
   assert((await fingerprint("a")) !== (await fingerprint("b")));
 });
 
