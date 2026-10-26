@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type NativeScrol
 
 import { useStrings } from "@/i18n";
 import { dateParts } from "@/pages/dates";
-import { cleanView } from "@/pages/clean";
+import { cleanView, stripUnderline } from "@/pages/clean";
 import { displayPieces } from "@/pages/display";
 import { mathDocument, type MathRow } from "@/pages/formulas";
 import type { NumberedPage, PageType } from "@/pages/pages";
@@ -12,12 +12,17 @@ import { useCorrectWord, usePageAlerts, usePageSecond, usePageWords, useSetPageT
 import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
 import { useTextEdit } from "@/pages/use-text-edit";
 import { placeWords, type ChosenFrom, type PlacedWord } from "@/pages/words";
+import { parseRendering } from "@/render/markdown";
+import { setRenderMode, useRenderMode } from "@/render/mode";
+import { forgetRenderFailure, useRendering } from "@/render/use-rendering";
 import { colors, typography } from "@/theme";
 import { KeyboardLift } from "../keyboard-lift";
 import { Formula } from "./formula";
 import { FoundPhoto } from "./found-photo";
 import { PageTextBar, PageTextField } from "./page-text-edit";
 import { PieceText } from "./piece-text";
+import { RenderSwitch } from "./render-switch";
+import { RichBody } from "./rich-body";
 import { WordEditor } from "./word-editor";
 
 const NO_WORDS: ReadonlySet<number> = new Set();
@@ -128,6 +133,15 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
   const textEdit = useTextEdit(page, placed, clean === null ? (page.text ?? "") : clean.text, clean === null ? NO_WORDS : clean.hidden);
   const editable = read && ((page.pageType === "text" && words.length > 0) || page.pageType === "math");
   const writing = textEdit.draft !== null;
+  const renderMode = useRenderMode();
+  const [suspended, setSuspended] = useState(false);
+  const renderable = read && (page.pageType === "text" || page.pageType === "math") && stripUnderline(page.text ?? "").trim() !== "";
+  const wantsRich = renderable && renderMode === "enriched" && !suspended && !writing;
+  const rendering = useRendering(page, wantsRich);
+  const rich = useMemo(() => (rendering.status === "ready" ? parseRendering(rendering.text) : null), [rendering]);
+  const showRich = rich !== null && rich.length > 0;
+  const waitingForRich = wantsRich && rendering.status === "waiting";
+  const fellBack = wantsRich && (rendering.status === "fallback" || (rendering.status === "ready" && !showRich));
   const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "missing_line" ? page.pageType === "text" : page.pageType === "math"));
 
   function edit(index: number, touchedY: number | null) {
@@ -193,6 +207,9 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
           hitSlop={8}
           onPress={() => {
             setEditing(null);
+            if (wantsRich) {
+              setSuspended(true);
+            }
             textEdit.start();
           }}
           style={styles.editAction}
@@ -225,7 +242,22 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
           >
             {infoRow}
             {found !== null && correctable ? <FoundPhoto pageId={page.id} tokenIndex={found} /> : null}
-            {title}
+            {renderable ? (
+              <RenderSwitch
+                mode={wantsRich ? "enriched" : "faithful"}
+                onChange={(mode) => {
+                  setSuspended(false);
+                  if (mode === "enriched") {
+                    forgetRenderFailure(page.id);
+                  }
+                  setEditing(null);
+                  setRenderMode(mode);
+                }}
+              />
+            ) : null}
+            {waitingForRich ? <Text style={[styles.secondary, styles.alert]}>{t.rendering.waiting}</Text> : null}
+            {fellBack ? <Text style={[styles.secondary, styles.alert]}>{t.rendering.fallback}</Text> : null}
+            {showRich ? null : title}
             {shownAlerts.map((kind) => (
               <Text key={kind} style={[styles.secondary, styles.alert]}>
                 {kind === "missing_line" ? t.document.alertMissingLine : t.document.alertMathIncomplete}
@@ -236,7 +268,9 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
             ) : (
               <MathSwitch page={page} mayLoseWork={mayLoseWork} />
             )}
-            {math !== null ? (
+            {showRich ? (
+              <RichBody blocks={rich} onTouch={() => setSuspended(true)} />
+            ) : math !== null ? (
               <MathBody rows={math.rows} />
             ) : (
               laid?.blocks.map((block, index) =>

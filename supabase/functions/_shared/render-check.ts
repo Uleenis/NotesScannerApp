@@ -39,18 +39,35 @@ function plain(text: string): Plain {
   let headings = 0;
   let bullets = 0;
   let emphasis = 0;
-  const stripped = masked
-    .split(/\r?\n/)
-    .map((line) => {
-      const mark = LINE_MARK.exec(line);
-      if (mark?.[1] !== undefined) headings += 1;
-      if (mark?.[2] !== undefined) bullets += 1;
-      if (mark?.[3] !== undefined) numbers.push(Number(mark[3]));
-      const rest = line.replace(LINE_MARK, "");
-      const bare = rest.replace(BOLD, "$1").replace(STAR, "$1").replace(UNDERSCORE, "$1");
-      emphasis += emphasisMarks(rest) - emphasisMarks(bare);
-      return bare;
-    })
+  const units: string[] = [];
+  let lines: string[] = [];
+  const close = () => {
+    if (lines.length === 0) return;
+    const rest = lines.join(" ");
+    const bare = rest.replace(BOLD, "$1").replace(STAR, "$1").replace(UNDERSCORE, "$1");
+    emphasis += emphasisMarks(rest) - emphasisMarks(bare);
+    units.push(bare);
+    lines = [];
+  };
+  for (const line of masked.split(/\r?\n/)) {
+    if (line.trim() === "") {
+      close();
+      continue;
+    }
+    const mark = LINE_MARK.exec(line);
+    if (mark === null) {
+      lines.push(line);
+      continue;
+    }
+    close();
+    if (mark[1] !== undefined) headings += 1;
+    if (mark[2] !== undefined) bullets += 1;
+    if (mark[3] !== undefined) numbers.push(Number(mark[3]));
+    lines.push(line.replace(LINE_MARK, ""));
+    if (mark[1] !== undefined) close();
+  }
+  close();
+  const stripped = units
     .join(" ")
     .replace(MASKED, (_, index: string) => formulas[Number(index)] ?? "")
     .replace(/\s+/g, " ")

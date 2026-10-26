@@ -2,12 +2,20 @@ import { cleanView, stripUnderline } from "@/pages/clean";
 import { displayDocument } from "@/pages/display";
 import { mathDocument, type MathRow } from "@/pages/formulas";
 import type { NumberedPage } from "@/pages/pages";
+import { renderingFingerprint, type StoredRendering } from "@/render/api";
+import { parseRendering, type RichBlock, type RichSpan } from "@/render/markdown";
 
-export type ExportSource = { second: string | null; edited: boolean };
+export type ExportSource = { second: string | null; edited: boolean; rendering?: StoredRendering | null };
 
-export type Part = { kind: "text"; text: string } | { kind: "formula"; tex: string; source: string };
+export type Part = { kind: "text"; text: string; bold?: boolean; italic?: boolean } | { kind: "formula"; tex: string; source: string };
 
-export type Block = { kind: "line"; parts: Part[] } | { kind: "display"; tex: string; source: string } | { kind: "gap" };
+export type Block =
+  | { kind: "line"; parts: Part[] }
+  | { kind: "paragraph"; parts: Part[] }
+  | { kind: "heading"; level: 1 | 2 | 3; parts: Part[] }
+  | { kind: "item"; depth: 0 | 1; marker: number | null; parts: Part[] }
+  | { kind: "display"; tex: string; source: string }
+  | { kind: "gap" };
 
 export type ExportedPage = { id: string; title: string; blocks: Block[] };
 
@@ -61,8 +69,48 @@ function rowBlock(row: MathRow): Block {
   };
 }
 
-function exportedPage(page: NumberedPage, source: ExportSource | undefined, pageNumber: (number: number) => string): ExportedPage {
+function richParts(spans: RichSpan[]): Part[] {
+  return spans.map((span): Part => {
+    if (span.kind === "formula") {
+      return { kind: "formula", tex: span.tex, source: span.source };
+    }
+    return { kind: "text", text: span.text, ...(span.bold ? { bold: true } : {}), ...(span.italic ? { italic: true } : {}) };
+  });
+}
+
+function richBlock(block: RichBlock, titleLevel: number): Block {
+  switch (block.kind) {
+    case "display":
+      return block;
+    case "heading":
+      return { kind: "heading", level: Math.max(1, block.level - titleLevel) as 1 | 2 | 3, parts: richParts(block.spans) };
+    case "item":
+      return { kind: "item", depth: block.depth, marker: block.marker, parts: richParts(block.spans) };
+    case "paragraph":
+      return { kind: "paragraph", parts: richParts(block.spans) };
+  }
+}
+
+function plainSpans(spans: RichSpan[]): string {
+  return spans.map((span) => (span.kind === "text" ? span.text : span.source)).join("");
+}
+
+function richPage(page: NumberedPage, rich: RichBlock[], pageNumber: (number: number) => string): ExportedPage {
+  const first = rich[0];
+  if (first.kind === "heading") {
+    return { id: page.id, title: plainSpans(first.spans), blocks: rich.slice(1).map((block) => richBlock(block, first.level)) };
+  }
+  return { id: page.id, title: pageNumber(page.number), blocks: rich.map((block) => richBlock(block, 0)) };
+}
+
+function exportedPage(page: NumberedPage, source: ExportSource | undefined, pageNumber: (number: number) => string, enriched: boolean): ExportedPage {
   const text = page.text ?? "";
+  if (enriched && source?.rendering != null && source.rendering.basedOn === renderingFingerprint(text)) {
+    const rich = parseRendering(source.rendering.text);
+    if (rich !== null && rich.length > 0) {
+      return richPage(page, rich, pageNumber);
+    }
+  }
   if (page.pageType === "math") {
     const math = mathDocument(text);
     return { id: page.id, title: math.title ?? pageNumber(page.number), blocks: math.rows.map(rowBlock) };
@@ -77,14 +125,14 @@ function exportedPage(page: NumberedPage, source: ExportSource | undefined, page
 }
 
 export function pageName(page: NumberedPage, pageNumber: (number: number) => string): string {
-  return exportedPage(page, undefined, pageNumber).title;
+  return exportedPage(page, undefined, pageNumber, false).title;
 }
 
-export function buildDocument(plan: ExportPlan, sources: ReadonlyMap<string, ExportSource>, pageNumber: (number: number) => string): ExportDocument {
+export function buildDocument(plan: ExportPlan, sources: ReadonlyMap<string, ExportSource>, pageNumber: (number: number) => string, enriched = false): ExportDocument {
   const sections = plan.sections
     .map((section) => ({
       heading: section.heading,
-      pages: section.pages.filter(isExportable).map((page) => exportedPage(page, sources.get(page.id), pageNumber)),
+      pages: section.pages.filter(isExportable).map((page) => exportedPage(page, sources.get(page.id), pageNumber, enriched)),
     }))
     .filter((section) => section.pages.length > 0);
   return { kind: plan.kind, name: plan.name, sections };

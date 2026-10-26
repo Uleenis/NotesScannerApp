@@ -18,6 +18,11 @@ const STYLE = [
   "h2.section { font-size: 12pt; font-weight: normal; margin: 0 0 8pt; color: dimgray }",
   "p { margin: 0 0 4pt }",
   ".gap { height: 10pt }",
+  "h2.rich { font-size: 15pt; margin: 12pt 0 6pt }",
+  "h3.rich { font-size: 13pt; margin: 10pt 0 4pt }",
+  "h4.rich { font-size: 12pt; margin: 8pt 0 4pt }",
+  ".item { padding-left: 14pt; text-indent: -14pt }",
+  ".item.nested { padding-left: 32pt }",
   ".display { margin: 8pt 0; text-align: center }",
   'code { font-family: "Courier New", monospace; font-size: 10pt }',
   "img { max-width: 100% }",
@@ -73,8 +78,18 @@ function formula(tex: string, source: string, display: boolean, drawings: Drawin
   return embed(drawings.get(formulaKey(tex, display))) ?? `<code>${escapeHtml(source)}</code>`;
 }
 
+function textHtml(part: Extract<Part, { kind: "text" }>): string {
+  const escaped = escapeHtml(part.text);
+  const italic = part.italic === true ? `<em>${escaped}</em>` : escaped;
+  return part.bold === true ? `<strong>${italic}</strong>` : italic;
+}
+
 function partHtml(part: Part, drawings: Drawings, embed: Embedder): string {
-  return part.kind === "text" ? escapeHtml(part.text) : formula(part.tex, part.source, false, drawings, embed);
+  return part.kind === "text" ? textHtml(part) : formula(part.tex, part.source, false, drawings, embed);
+}
+
+function partsHtml(parts: Part[], drawings: Drawings, embed: Embedder): string {
+  return parts.map((part) => partHtml(part, drawings, embed)).join("");
 }
 
 function blockHtml(block: Block, drawings: Drawings, embed: Embedder): string {
@@ -84,7 +99,14 @@ function blockHtml(block: Block, drawings: Drawings, embed: Embedder): string {
   if (block.kind === "display") {
     return `<div class="display">${formula(block.tex, block.source, true, drawings, embed)}</div>`;
   }
-  return `<p>${block.parts.map((part) => partHtml(part, drawings, embed)).join("")}</p>`;
+  if (block.kind === "heading") {
+    return `<h${block.level + 1} class="rich">${partsHtml(block.parts, drawings, embed)}</h${block.level + 1}>`;
+  }
+  if (block.kind === "item") {
+    const mark = block.marker === null ? "\u2022" : `${block.marker}.`;
+    return `<p class="item${block.depth === 1 ? " nested" : ""}">${mark}\u00a0${partsHtml(block.parts, drawings, embed)}</p>`;
+  }
+  return `<p>${partsHtml(block.parts, drawings, embed)}</p>`;
 }
 
 function pageHtml(page: ExportedPage, heading: string | null, drawings: Drawings, embed: Embedder): string {

@@ -36,21 +36,60 @@ function displayFormula(tex: string, source: string): string {
   return kept === null ? sourceText(source) : `$$\n${kept}\n$$`;
 }
 
-function partText(part: Part): string {
-  return part.kind === "text" ? escapeMarkdownInline(part.text) : inlineFormula(part.tex, part.source);
+const OUTER_SPACES = /^(\s*)([\s\S]*?)(\s*)$/;
+
+function emphasized(text: string, bold: boolean, italic: boolean): string {
+  const [, lead, core, trail] = OUTER_SPACES.exec(text) ?? ["", "", text, ""];
+  if (core === "" || (!bold && !italic)) {
+    return text;
+  }
+  const mark = bold && italic ? "***" : bold ? "**" : "*";
+  return `${lead}${mark}${core}${mark}${trail}`;
 }
 
-function paragraphs(blocks: Block[]): string[] {
+function partText(part: Part): string {
+  return part.kind === "text" ? emphasized(escapeMarkdownInline(part.text), part.bold === true, part.italic === true) : inlineFormula(part.tex, part.source);
+}
+
+function inline(parts: Part[]): string {
+  return parts.map(partText).join("").trim();
+}
+
+function itemLine(block: Extract<Block, { kind: "item" }>): string {
+  const mark = block.marker === null ? "-" : `${block.marker}.`;
+  return `${block.depth === 1 ? "    " : ""}${mark} ${escapeLineStart(inline(block.parts))}`;
+}
+
+function paragraphs(blocks: Block[], level: number): string[] {
   const result: string[] = [];
   let lines: string[] = [];
+  let items: string[] = [];
   const flush = () => {
     if (lines.length > 0) {
       result.push(lines.join("  \n"));
       lines = [];
     }
+    if (items.length > 0) {
+      result.push(items.join("\n"));
+      items = [];
+    }
   };
   for (const block of blocks) {
-    if (block.kind === "line") {
+    if (block.kind === "heading") {
+      flush();
+      result.push(`${"#".repeat(Math.min(6, level + block.level))} ${inline(block.parts)}`);
+    } else if (block.kind === "item") {
+      if (lines.length > 0) {
+        flush();
+      }
+      items.push(itemLine(block));
+    } else if (block.kind === "paragraph") {
+      flush();
+      const text = inline(block.parts);
+      if (text !== "") {
+        result.push(escapeLineStart(text));
+      }
+    } else if (block.kind === "line") {
       const text = block.parts.map(partText).join("").trim();
       if (text !== "") {
         lines.push(escapeLineStart(text));
@@ -67,7 +106,7 @@ function paragraphs(blocks: Block[]): string[] {
 }
 
 function pageSection(page: ExportedPage, level: number): string[] {
-  return [heading(level, page.title), ...paragraphs(page.blocks)];
+  return [heading(level, page.title), ...paragraphs(page.blocks, level)];
 }
 
 export function toMarkdown(document: ExportDocument): string {

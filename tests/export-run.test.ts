@@ -1,6 +1,7 @@
 import { planChapter, planNotebook, planPage, type ExportSource } from "@/export/document";
 import { MAX_EXPORT_FORMULAS, MAX_MARKDOWN_CHARS, MAX_MARKDOWN_PAGES, MAX_PDF_CHARS, MAX_PDF_PAGES, runExport, type ExportControl, type ExportDeps, type ExportLabels } from "@/export/run";
 import type { NumberedPage } from "@/pages/pages";
+import type { StoredRendering } from "@/render/api";
 import type { DrawnTex } from "@/pages/tex";
 import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
 
@@ -21,7 +22,7 @@ function page(number: number, text: string | null, overrides: Partial<NumberedPa
   };
 }
 
-const labels: ExportLabels = { pageNumber: (number) => `Page ${number}`, fallbackName: "notes", language: "fr" };
+const labels: ExportLabels = { pageNumber: (number) => `Page ${number}`, fallbackName: "notes", language: "fr", enriched: false };
 
 const drawing: DrawnTex = { svg: '<svg xmlns="http://www.w3.org/2000/svg" width="1ex" height="1ex"></svg>', width: 1, height: 1, shift: 0 };
 
@@ -30,6 +31,7 @@ function makeDeps(overrides: Partial<ExportDeps> = {}) {
   const saved: { format: string; name: string; content: string }[] = [];
   const deps: ExportDeps = {
     sources: jest.fn(async (ids: string[]) => new Map<string, ExportSource>(ids.map((id) => [id, { second: null, edited: false }]))),
+    renderings: jest.fn(async () => new Map<string, StoredRendering>()),
     draw: jest.fn(async () => drawing as DrawnTex | null),
     save: jest.fn(async (file) => {
       saved.push(file);

@@ -34,6 +34,17 @@ Deno.test("a rendering that adds only the accepted marks is accepted [3]", () =>
   accepted("a  b\n\n\n c", "a b c");
 });
 
+Deno.test("an emphasis may span the lines of one paragraph or list item, not a paragraph break [3]", () => {
+  const input = "Projet -> atteindre les Indes\norientales, dont iles\nMoluques en Indonésie.";
+  accepted(input, "Projet -> atteindre **les Indes\norientales, dont** iles\nMoluques en Indonésie.");
+  accepted(input, "Projet -> atteindre *les Indes\norientales,\ndont iles* Moluques en Indonésie.");
+  accepted("a b\nc d", "- **a b\nc** d");
+  discarded("a b\n\nc d", "a **b\n\nc** d");
+  discarded("a b\nc d", "# **a b\nc** d");
+  discarded("a b\nc d", "- **a b\n- c** d");
+  discarded(input, "Projet -> atteindre **les Indes\norientales, dont iles\nMoluques en Indonésie.");
+});
+
 Deno.test("a rendering that touches a word or a sign is discarded [3]", () => {
   discarded(PLAIN, PLAIN.replace("converge", "diverge"));
   discarded(PLAIN, PLAIN.replace("bornée", "bornee"));

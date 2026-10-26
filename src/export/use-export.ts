@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { Alert } from "react-native";
 
 import { useLanguage, useStrings } from "@/i18n";
+import { useRenderMode } from "@/render/mode";
 import { showMenu, type MenuItem } from "@/lib/action-menu";
 import { beginExport, endExport } from "./activity";
 import type { ExportPlan } from "./document";
@@ -11,6 +12,7 @@ import { exportDeps } from "./service";
 export function useExportItem(): (plan: ExportPlan) => MenuItem {
   const t = useStrings();
   const language = useLanguage();
+  const renderMode = useRenderMode();
 
   const message = useCallback(
     (result: ExportResult): string | null => {
@@ -38,7 +40,7 @@ export function useExportItem(): (plan: ExportPlan) => MenuItem {
       if (control === null) {
         return;
       }
-      const labels = { pageNumber: t.document.pageNumber, fallbackName: t.export.fileName, language };
+      const labels = { pageNumber: t.document.pageNumber, fallbackName: t.export.fileName, language, enriched: renderMode === "enriched" };
       void runExport(plan, format, labels, control, exportDeps).then((result) => {
         endExport(control);
         const shown = message(result);
@@ -47,7 +49,7 @@ export function useExportItem(): (plan: ExportPlan) => MenuItem {
         }
       });
     },
-    [t, language, message],
+    [t, language, renderMode, message],
   );
 
   return useCallback(

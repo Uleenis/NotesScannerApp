@@ -1,4 +1,5 @@
 import { MAX_FORMULAS_PER_PAGE, type DrawnTex } from "@/pages/tex";
+import type { StoredRendering } from "@/render/api";
 import { buildDocument, isExportable, type Block, type ExportDocument, type ExportPlan, type ExportSource } from "./document";
 import type { ExportFile, ExportFormat, SavedExport } from "./files";
 import { formulaKey, toHtml, type Drawings } from "./html";
@@ -13,12 +14,13 @@ export const MAX_EXPORT_FORMULAS = 300;
 export const MAX_PDF_CHARS = 12_000_000;
 export const MAX_MARKDOWN_CHARS = 20_000_000;
 
-export type ExportLabels = { pageNumber: (number: number) => string; fallbackName: string; language: "en" | "fr" };
+export type ExportLabels = { pageNumber: (number: number) => string; fallbackName: string; language: "en" | "fr"; enriched: boolean };
 
 export type ExportControl = { cancelled: boolean };
 
 export type ExportDeps = {
   sources: (ids: string[], control: ExportControl) => Promise<Map<string, ExportSource>>;
+  renderings: (ids: string[], control: ExportControl) => Promise<Map<string, StoredRendering>>;
   draw: (tex: string, display: boolean) => Promise<DrawnTex | null>;
   save: (file: ExportFile) => Promise<SavedExport>;
   share: (uri: string, format: ExportFormat) => Promise<boolean>;
@@ -55,7 +57,7 @@ function limitFormulas(document: ExportDocument): ExportDocument {
             return block;
           }
           return {
-            kind: "line",
+            ...block,
             parts: block.parts.map((part) => {
               if (part.kind === "text") {
                 return part;
@@ -75,6 +77,14 @@ function limitFormulas(document: ExportDocument): ExportDocument {
   };
 }
 
+function withRenderings(sources: Map<string, ExportSource>, renderings: Map<string, StoredRendering>): Map<string, ExportSource> {
+  const merged = new Map<string, ExportSource>();
+  for (const [id, source] of sources) {
+    merged.set(id, { ...source, rendering: renderings.get(id) ?? null });
+  }
+  return merged;
+}
+
 function formulasOf(document: ExportDocument): { tex: string; display: boolean }[] {
   const found = new Map<string, { tex: string; display: boolean }>();
   for (const section of document.sections) {
@@ -82,7 +92,7 @@ function formulasOf(document: ExportDocument): { tex: string; display: boolean }
       for (const block of page.blocks) {
         if (block.kind === "display") {
           found.set(formulaKey(block.tex, true), { tex: block.tex, display: true });
-        } else if (block.kind === "line") {
+        } else if (block.kind !== "gap") {
           for (const part of block.parts) {
             if (part.kind === "formula") {
               found.set(formulaKey(part.tex, false), { tex: part.tex, display: false });
@@ -131,10 +141,11 @@ async function prepare(
     return { status: "tooMany", max };
   }
   const sources = await deps.sources(ids, control);
+  const renderings = labels.enriched && !control.cancelled ? await deps.renderings(ids, control) : new Map<string, StoredRendering>();
   if (control.cancelled) {
     return { status: "cancelled" };
   }
-  const document = buildDocument(plan, sources, labels.pageNumber);
+  const document = buildDocument(plan, withRenderings(sources, renderings), labels.pageNumber, labels.enriched);
   const text = await content(document, format, labels, deps, control);
   if (text === null || control.cancelled) {
     return { status: "cancelled" };

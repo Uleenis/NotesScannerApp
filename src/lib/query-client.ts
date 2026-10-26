@@ -1,7 +1,7 @@
 import { focusManager, QueryClient } from "@tanstack/react-query";
 import { AppState } from "react-native";
 
-const ACCOUNT_KEYS = ["pages", "notebooks", "notebook", "allowance", "latest-notebook", "page", "photo-url", "page-words", "search", "anchor"];
+const ACCOUNT_KEYS = ["pages", "notebooks", "notebook", "allowance", "latest-notebook", "page", "photo-url", "page-words", "search", "anchor", "page-rendering"];
 
 export function createQueryClient(): QueryClient {
   return new QueryClient();
