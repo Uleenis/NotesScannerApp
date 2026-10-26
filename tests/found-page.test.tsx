@@ -112,6 +112,17 @@ describe("a page opened from a search result", () => {
     expect(screen.getByText(TITLE)).toBeTruthy();
   });
 
+  test("reads the size of the photo again after a failed read, when the page is opened again [2]", async () => {
+    jest.mocked(pageService.photoPixels).mockRejectedValueOnce(new Error("offline"));
+    await openPage("/page/page-1?found=7");
+    await waitFor(() => expect(pageService.photoPixels).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId("found-photo-image")).toBeNull());
+
+    await openPage("/page/page-1?found=7");
+    await showPhoto();
+    expect(await screen.findByLabelText(fr.search.frameLabel)).toBeTruthy();
+  });
+
   test("frames a line when the position only has the box of its line", async () => {
     jest.mocked(searchService.anchor).mockResolvedValue({ kind: "line", box: [0, 400, 1000, 500] });
     await openPage("/page/page-1?found=7");

@@ -102,10 +102,10 @@ describe("readPhotoPixels", () => {
     expect(await readPhotoPixels("https://photos/one.jpg", load)).toEqual({ width: 2258, height: 3262 });
   });
 
-  test("gives nothing when the photo cannot be loaded", async () => {
+  test("fails, so that it is tried again, when the photo cannot be loaded", async () => {
     const load = jest.fn(async (): Promise<ArrayBuffer> => {
       throw new Error("offline");
     });
-    expect(await readPhotoPixels("https://photos/one.jpg", load)).toBeNull();
+    await expect(readPhotoPixels("https://photos/one.jpg", load)).rejects.toThrow("offline");
   });
 });

@@ -120,16 +120,16 @@ describe("saveExport", () => {
     expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
   });
 
-  test("erases the printed file and the folder when the move fails", async () => {
+  test("erases the printed file and the folder when the move fails, and names the failure a move [4]", async () => {
     mockFailures.move = true;
-    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toThrow();
+    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "MoveFailed" });
     expect(mockOperations.filter((operation) => operation.kind === "delete-file").map((operation) => operation.uri)).toEqual(["file:///cache/Print/abc.pdf"]);
     expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
   });
 
-  test("erases the folder when the print fails twice", async () => {
+  test("erases the folder when the print fails twice, and names the failure a print [4]", async () => {
     mockFailures.print = true;
-    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toThrow();
+    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "PrintFailed" });
     expect(mockPrint).toHaveBeenCalledTimes(2);
     expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
   });

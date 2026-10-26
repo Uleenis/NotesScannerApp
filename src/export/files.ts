@@ -55,14 +55,23 @@ function print(content: string) {
   });
 }
 
+function stepFailure(name: "PrintFailed" | "MoveFailed", cause: unknown): Error {
+  const code = typeof cause === "object" && cause !== null && "code" in cause ? (cause as { code: unknown }).code : undefined;
+  return Object.assign(new Error(name), { name, code: typeof code === "string" ? code : undefined });
+}
+
 async function printPdf(content: string, target: File): Promise<void> {
-  const printed = await print(content).catch(() => print(content));
+  const printed = await print(content)
+    .catch(() => print(content))
+    .catch((error: unknown) => {
+      throw stepFailure("PrintFailed", error);
+    });
   const source = new File(printed.uri);
   try {
     await source.move(target);
   } catch (error) {
     quietly(() => source.delete());
-    throw error;
+    throw stepFailure("MoveFailed", error);
   }
 }
 

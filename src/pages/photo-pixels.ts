@@ -103,10 +103,6 @@ async function loadHeader(uri: string, headers: Record<string, string>): Promise
 }
 
 export async function readPhotoPixels(uri: string, load: HeaderLoader = loadHeader): Promise<PhotoSize | null> {
-  try {
-    const buffer = await load(uri, { Range: `bytes=0-${HEADER_BYTES - 1}` });
-    return jpegSize(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, HEADER_BYTES)));
-  } catch {
-    return null;
-  }
+  const buffer = await load(uri, { Range: `bytes=0-${HEADER_BYTES - 1}` });
+  return jpegSize(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, HEADER_BYTES)));
 }
