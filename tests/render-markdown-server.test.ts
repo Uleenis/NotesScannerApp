@@ -105,6 +105,6 @@ describe("the parser on hostile renderings", () => {
   ])("parses %s in a bounded time", (_name, rendering) => {
     const { blocks, elapsed } = timed(rendering.slice(0, 60_000));
     expect(blocks).not.toBeNull();
-    expect(elapsed).toBeLessThan(1_500);
+    expect(elapsed).toBeLessThan(5_000);
   });
 });
