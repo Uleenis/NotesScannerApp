@@ -22,6 +22,7 @@ Deno.test("the input drops the underline tags of the model and nothing else [3]"
 Deno.test("the fingerprint is the SHA-256 of the input in 64 lowercase hexadecimal characters [4]", async () => {
   assertEquals(await fingerprint("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   assertEquals((await fingerprint("é")).length, 64);
+  assertEquals(await fingerprint(renderInput("<u>La</u> France\n\nfin")), "aecdca09dd4eaf5d22f3d6261a949f7974797523dc52b2df56ff53a7b97822b8");
   assert((await fingerprint("a")) !== (await fingerprint("b")));
 });
 
@@ -32,6 +33,17 @@ Deno.test("a rendering that adds only the accepted marks is accepted [3]", () =>
   accepted(PLAIN, "Les suites\n\n***Une suite*** converge si elle est bornée.\n\nExemples\n\nLa suite 1/n\n\nLa suite (-1)^n");
   accepted("a\nb", "- a\n  - b");
   accepted("a  b\n\n\n c", "a b c");
+});
+
+Deno.test("an emphasis may span the lines of one paragraph or list item, not a paragraph break [3]", () => {
+  const input = "Projet -> atteindre les Indes\norientales, dont iles\nMoluques en Indonésie.";
+  accepted(input, "Projet -> atteindre **les Indes\norientales, dont** iles\nMoluques en Indonésie.");
+  accepted(input, "Projet -> atteindre *les Indes\norientales,\ndont iles* Moluques en Indonésie.");
+  accepted("a b\nc d", "- **a b\nc** d");
+  discarded("a b\n\nc d", "a **b\n\nc** d");
+  discarded("a b\nc d", "# **a b\nc** d");
+  discarded("a b\nc d", "- **a b\n- c** d");
+  discarded(input, "Projet -> atteindre **les Indes\norientales, dont iles\nMoluques en Indonésie.");
 });
 
 Deno.test("a rendering that touches a word or a sign is discarded [3]", () => {

@@ -167,6 +167,13 @@ export const en = {
     unreadableBody: "Take the page in photo again.",
     loadFailed: "This page could not be loaded.",
   },
+  rendering: {
+    switchLabel: "Display of the page",
+    faithful: "Faithful",
+    enriched: "Formatted",
+    waiting: "Formatting in progress. The faithful text stays shown.",
+    fallback: "The formatting could not be done without touching the text. The faithful text stays shown.",
+  },
   document: {
     pageNumber: (number: number) => `Page ${number}`,
     info: (number: number, date: string) => `Page ${number} · ${date}`,

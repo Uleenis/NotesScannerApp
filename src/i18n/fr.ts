@@ -169,6 +169,13 @@ export const fr: Strings = {
     unreadableBody: "Reprends la page en photo.",
     loadFailed: "Cette page n'a pas pu être chargée.",
   },
+  rendering: {
+    switchLabel: "Affichage de la page",
+    faithful: "Fidèle",
+    enriched: "Enrichi",
+    waiting: "Mise en forme en cours. Le texte fidèle reste affiché.",
+    fallback: "La mise en forme n'a pas pu se faire sans toucher au texte. Le texte fidèle reste affiché.",
+  },
   document: {
     pageNumber: (number: number) => `Page ${number}`,
     info: (number: number, date: string) => `Page ${number} · ${date}`,
