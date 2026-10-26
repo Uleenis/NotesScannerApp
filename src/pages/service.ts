@@ -17,6 +17,8 @@ import {
   type StartResult,
   type SwitchableType,
 } from "./pages";
+import type { PhotoSize } from "./frame";
+import { readPhotoPixels } from "./photo-pixels";
 import { readSecond } from "./second";
 import { addCorrection, listWords, type ChosenFrom, type CorrectResult, type PageWords } from "./words";
 
@@ -25,6 +27,7 @@ export type PageService = {
   count: () => Promise<number>;
   get: (id: string) => Promise<NumberedPage | null>;
   photoUrl: (userId: string, pageId: string) => Promise<string>;
+  photoPixels: (uri: string) => Promise<PhotoSize | null>;
   startReading: (pageId: string) => Promise<StartResult>;
   setPageType: (pageId: string, pageType: SwitchableType) => Promise<SetTypeResult>;
   move: (pageId: string, notebookId: string, chapterId: string | null) => Promise<MoveResult>;
@@ -41,6 +44,7 @@ export const pageService: PageService = {
   count: () => countPages(getSupabase()),
   get: (id) => getPage(getSupabase(), id),
   photoUrl: (userId, pageId) => photoUrl(getSupabase(), userId, pageId),
+  photoPixels: (uri) => readPhotoPixels(uri),
   startReading: (pageId) => startReading(getSupabase(), pageId),
   setPageType: (pageId, pageType) => setPageType(getSupabase(), pageId, pageType),
   move: (pageId, notebookId, chapterId) => movePage(getSupabase(), pageId, notebookId, chapterId),

@@ -4,7 +4,7 @@ import { Image, Pressable, StyleSheet, View } from "react-native";
 
 import { useStrings } from "@/i18n";
 import { frameOf, type PhotoSize } from "@/pages/frame";
-import { usePhotoUrl } from "@/pages/queries";
+import { usePhotoPixels, usePhotoUrl } from "@/pages/queries";
 import { useAnchor } from "@/search/queries";
 import { colors } from "@/theme";
 import { FrameOverlay } from "./frame-overlay";
@@ -23,11 +23,12 @@ export function FoundPhoto({ pageId, tokenIndex }: Props) {
 
   const uri = photo.data;
   const box = anchor.data?.box ?? null;
-  if (uri === undefined || box === null) {
+  const pixels = usePhotoPixels(pageId, uri, box !== null);
+  if (uri === undefined || box === null || pixels.data === null || pixels.isError) {
     return null;
   }
-  const frame = size === null ? null : frameOf(box, size);
-  if (size !== null && frame === null) {
+  const frame = pixels.data === undefined ? null : frameOf(box, pixels.data);
+  if (pixels.data !== undefined && frame === null) {
     return null;
   }
   if (size === null || frame === null) {

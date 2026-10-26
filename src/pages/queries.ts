@@ -75,6 +75,16 @@ export function usePhotoUrl(pageId: string) {
   });
 }
 
+export function usePhotoPixels(pageId: string, uri: string | undefined, wanted: boolean) {
+  const { userId } = useAuth();
+  return useQuery({
+    queryKey: ["photo-pixels", userId, pageId],
+    queryFn: () => (uri === undefined ? Promise.reject(new Error("No photo.")) : pageService.photoPixels(uri)),
+    enabled: wanted && uri !== undefined,
+    staleTime: Infinity,
+  });
+}
+
 export function useStartReading() {
   const { userId } = useAuth();
   const queryClient = useQueryClient();

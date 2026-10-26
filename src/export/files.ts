@@ -46,13 +46,17 @@ export function discarding(folder: Directory): () => void {
   return () => quietly(() => folder.delete());
 }
 
-async function printPdf(content: string, target: File): Promise<void> {
-  const printed = await printToFileAsync({
+function print(content: string) {
+  return printToFileAsync({
     html: content,
     width: PAGE_WIDTH,
     height: PAGE_HEIGHT,
     margins: { top: PAGE_MARGIN, right: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN },
   });
+}
+
+async function printPdf(content: string, target: File): Promise<void> {
+  const printed = await print(content).catch(() => print(content));
   const source = new File(printed.uri);
   try {
     await source.move(target);
