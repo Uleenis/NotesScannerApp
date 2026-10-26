@@ -1,5 +1,5 @@
 import { act, render, screen } from "@testing-library/react-native";
-import { Keyboard, Platform, StyleSheet, Text, View, type KeyboardEvent } from "react-native";
+import { Dimensions, Keyboard, Platform, StyleSheet, Text, View, type KeyboardEvent } from "react-native";
 import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 import { KeyboardLift } from "@/components/keyboard-lift";
@@ -54,6 +54,7 @@ async function hideKeyboard() {
 }
 
 beforeEach(() => {
+  jest.spyOn(Dimensions, "get").mockReturnValue({ width: 360, height: 800, scale: 1, fontScale: 1 });
   listeners = new Map();
   jest.spyOn(Keyboard, "addListener").mockImplementation(((name: string, listener: Listener) => {
     listeners.set(name, [...(listeners.get(name) ?? []), listener]);
@@ -117,10 +118,24 @@ describe.each(["android", "ios"] as const)("the lift on %s", (os) => {
     place(0, 800);
     await renderLift(24);
     expect(paddingBottom()).toBe(24);
-    await showKeyboard(500, 300);
-    expect(paddingBottom()).toBe(300);
+    await showKeyboard(476, 300);
+    expect(paddingBottom()).toBe(324);
     await hideKeyboard();
     expect(paddingBottom()).toBe(24);
+  });
+
+  test("lifts by the keyboard and the navigation bar on Android when the reported top of the keyboard falls short [3]", async () => {
+    place(0, 800);
+    await renderLift(24);
+    await showKeyboard(500, 300);
+    expect(paddingBottom()).toBe(os === "android" ? 324 : 300);
+  });
+
+  test("lifts by the covered part only when the content stops above the bottom of the window [3]", async () => {
+    place(0, 700);
+    await renderLift(24);
+    await showKeyboard(476, 300);
+    expect(paddingBottom()).toBe(224);
   });
 
   test("ignores a measure that answers after the keyboard has closed", async () => {

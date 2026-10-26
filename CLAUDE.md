@@ -18,7 +18,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/lib/`: the Supabase client and its config, secure session storage, legal links, opening a link, the action menu.
 - `src/notebooks/`: reading, creating and caching notebooks.
 - `src/capture/`: usage limits before the camera, preparing and sending a page.
-- `src/pages/`: what a user sees of a page: lists, text, photo, title, formulas (`formulas.ts`, `tex.ts` with MathJax), words and corrections (`words.ts`), the edit mode (`edit.ts`), alerts.
+- `src/pages/`: what a user sees of a page: lists, text, photo, title, formulas (`formulas.ts`, `tex.ts` with MathJax), words and corrections (`words.ts`), the edit mode (`edit.ts`), alerts, the size of a photo read from its JPEG header (`photo-pixels.ts`).
 - `src/search/`: the search: the calls to `search_pages` and `suggest_words`, the box of a position, the excerpt and the suggestion text helpers; the screen is `src/app/search.tsx`.
 - `src/render/`: the rich rendering of a page: the parser of the accepted marks, the call to `render-page`, the saved choice of display and when to ask; its switch and body are in `src/components/reading/`.
 - `src/export/`: the PDF and Markdown export of a page, a chapter or a notebook: the plan and document, the Markdown and HTML writers, the files and the share sheet, the wait; the menu item is `useExportItem`. `src/export/data/` is the export of "my data": the ZIP writer, the reads with the rights of the user, the archive, the photos, the hook of the account screen.

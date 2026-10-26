@@ -5,6 +5,7 @@ import { StyleSheet } from "react-native";
 import { defaultAuthServices } from "@/auth/default-services";
 import { strings } from "@/i18n";
 import type { Anchor } from "@/search/search";
+import { pageService } from "@/pages/service";
 import { searchService } from "@/search/service";
 import { histoire, installFakeNotebooks } from "./fake-notebook-service";
 import { installFakePages, page, TITLE } from "./fake-page-service";
@@ -39,6 +40,7 @@ jest.mock("@/pages/service", () => ({
     list: jest.fn(),
     get: jest.fn(),
     photoUrl: jest.fn(),
+    photoPixels: jest.fn(),
     startReading: jest.fn(),
     setPageType: jest.fn(),
     words: jest.fn(async () => ({ words: [], corrections: [], gaps: [] })),
@@ -63,6 +65,7 @@ beforeEach(() => {
   installFakeNotebooks([histoire]);
   installFakePages([page()]);
   jest.mocked(searchService.anchor).mockReset().mockResolvedValue(WORD);
+  jest.mocked(pageService.photoPixels).mockReset().mockResolvedValue(PHOTO);
 });
 
 async function openPage(url: string) {
@@ -71,9 +74,9 @@ async function openPage(url: string) {
   return { getPathname: () => app.getPathname() };
 }
 
-async function showPhoto() {
+async function showPhoto(loaded: { width: number; height: number } = PHOTO) {
   const image = await screen.findByTestId("found-photo-image");
-  await fireEvent(image, "load", { nativeEvent: { source: PHOTO } });
+  await fireEvent(image, "load", { nativeEvent: { source: loaded } });
   await fireEvent(screen.getByTestId("found-photo"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 300 } } });
 }
 
@@ -87,6 +90,37 @@ describe("a page opened from a search result", () => {
     expect(style).toMatchObject({ left: "10%", top: "20%", width: "20%", height: "5%" });
     expect(searchService.anchor).toHaveBeenCalledWith("page-1", 7);
     expect(screen.getByText(TITLE)).toBeTruthy();
+  });
+
+  test("places the box from the size written in the photo, not the smaller size Android loads [2]", async () => {
+    await openPage("/page/page-1?found=7");
+    await showPhoto({ width: 500, height: 1000 });
+
+    const style = StyleSheet.flatten((await screen.findByLabelText(fr.search.frameLabel)).props.style);
+    expect(style).toMatchObject({ left: "10%", top: "20%", width: "20%", height: "5%" });
+    expect(pageService.photoPixels).toHaveBeenCalled();
+  });
+
+  test("opens on the text alone when the size of the photo cannot be read [2]", async () => {
+    jest.mocked(pageService.photoPixels).mockResolvedValue(null);
+    await openPage("/page/page-1?found=7");
+
+    await waitFor(() => expect(pageService.photoPixels).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByTestId("found-photo-image")).toBeNull());
+    expect(screen.queryByTestId("found-photo")).toBeNull();
+    expect(screen.queryByLabelText(fr.search.frameLabel)).toBeNull();
+    expect(screen.getByText(TITLE)).toBeTruthy();
+  });
+
+  test("reads the size of the photo again after a failed read, when the page is opened again [2]", async () => {
+    jest.mocked(pageService.photoPixels).mockRejectedValueOnce(new Error("offline"));
+    await openPage("/page/page-1?found=7");
+    await waitFor(() => expect(pageService.photoPixels).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId("found-photo-image")).toBeNull());
+
+    await openPage("/page/page-1?found=7");
+    await showPhoto();
+    expect(await screen.findByLabelText(fr.search.frameLabel)).toBeTruthy();
   });
 
   test("frames a line when the position only has the box of its line", async () => {
@@ -110,10 +144,10 @@ describe("a page opened from a search result", () => {
   test("opens on the text alone when the box does not lie on the photo shown", async () => {
     jest.mocked(searchService.anchor).mockResolvedValue({ kind: "word", box: [900, 400, 1300, 500] });
     await openPage("/page/page-1?found=7");
-    const image = await screen.findByTestId("found-photo-image");
-    await fireEvent(image, "load", { nativeEvent: { source: PHOTO } });
 
-    await waitFor(() => expect(screen.queryByTestId("found-photo")).toBeNull());
+    await waitFor(() => expect(pageService.photoPixels).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByTestId("found-photo-image")).toBeNull());
+    expect(screen.queryByTestId("found-photo")).toBeNull();
     expect(screen.queryByLabelText(fr.search.frameLabel)).toBeNull();
     expect(screen.getByText(TITLE)).toBeTruthy();
   });
@@ -159,8 +193,9 @@ describe("a page opened from a search result", () => {
 
     await waitFor(() => expect(app.getPathname()).toBe("/page/page-1/photo"));
     await fireEvent(await screen.findByTestId("zoomable-photo"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 300 } } });
-    await fireEvent(await screen.findByLabelText(fr.photo.label), "load", { nativeEvent: { source: PHOTO } });
-    expect(await screen.findByLabelText(fr.search.frameLabel)).toBeTruthy();
+    await fireEvent(await screen.findByLabelText(fr.photo.label), "load", { nativeEvent: { source: { width: 500, height: 1000 } } });
+    const style = StyleSheet.flatten((await screen.findByLabelText(fr.search.frameLabel)).props.style);
+    expect(style).toMatchObject({ left: "10%", top: "20%", width: "20%", height: "5%" });
   });
 
   test("the photo sheet opened the usual way has no box", async () => {

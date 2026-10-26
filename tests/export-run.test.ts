@@ -197,6 +197,51 @@ describe("runExport", () => {
     expect(await runExport(planPage("N", page(1, "T")), "pdf", labels, live(), deps)).toEqual({ status: "error" });
   });
 
+  test.each([
+    ["sources", "sources"],
+    ["renderings", "renderings"],
+    ["draw", "content"],
+    ["save", "save"],
+    ["share", "share"],
+  ] as const)("logs the step where %s failed with the name and code of the error, never its message [4]", async (step, stage) => {
+    const log = jest.fn();
+    const failure = Object.assign(new TypeError("/cache/export-1/Christophe-Colomb.pdf could not be written"), { code: "ERR_FILE" });
+    const { deps } = makeDeps({
+      log,
+      [step]: jest.fn(async () => {
+        throw failure;
+      }),
+    });
+    const enriched = { ...labels, enriched: true };
+
+    expect(await runExport(planPage("N", page(1, "T\n$x$", { pageType: "math" })), "pdf", enriched, live(), deps)).toEqual({ status: "error" });
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("export_failed", { stage, name: "TypeError", code: "ERR_FILE" });
+    expect(JSON.stringify(log.mock.calls)).not.toContain("Colomb");
+  });
+
+  test("logs a failure that carries no name or code as unknown [4]", async () => {
+    const log = jest.fn();
+    const { deps } = makeDeps({
+      log,
+      save: jest.fn(async () => {
+        throw "plain";
+      }),
+    });
+
+    expect(await runExport(planPage("N", page(1, "T")), "pdf", labels, live(), deps)).toEqual({ status: "error" });
+    expect(log).toHaveBeenCalledWith("export_failed", { stage: "save", name: "unknown", code: null });
+  });
+
+  test("logs nothing for an export that is cancelled or shared [4]", async () => {
+    const log = jest.fn();
+    const { deps } = makeDeps({ log });
+    expect(await runExport(planPage("N", page(1, "T")), "pdf", labels, live(), deps)).toEqual({ status: "shared" });
+    expect(await runExport(planPage("N", page(1, "T")), "pdf", labels, { cancelled: true }, deps)).toEqual({ status: "cancelled" });
+    expect(log).not.toHaveBeenCalled();
+  });
+
   test("answers an error when drawing throws", async () => {
     const { deps } = makeDeps({
       draw: jest.fn(async () => {

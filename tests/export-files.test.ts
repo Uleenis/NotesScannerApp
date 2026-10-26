@@ -3,7 +3,7 @@ import { saveExport, shareExport, sweepExports } from "@/export/files";
 type Operation = { kind: string; uri: string; content?: string; to?: string };
 
 const mockOperations: Operation[] = [];
-const mockFailures = { move: false, delete: false, print: false };
+const mockFailures = { move: false, delete: false, print: false, printOnce: false };
 const mockListing: { name: string; directory: boolean }[] = [];
 
 jest.mock("expo-file-system", () => {
@@ -59,6 +59,10 @@ const mockPrint = jest.fn(async (_options: { html?: string; width?: number; heig
   if (mockFailures.print) {
     throw new Error("print failed");
   }
+  if (mockFailures.printOnce) {
+    mockFailures.printOnce = false;
+    throw new Error("print failed once");
+  }
   return { uri: "file:///cache/Print/abc.pdf", numberOfPages: 1 };
 });
 
@@ -77,6 +81,7 @@ beforeEach(() => {
   mockFailures.move = false;
   mockFailures.delete = false;
   mockFailures.print = false;
+  mockFailures.printOnce = false;
   mockPrint.mockClear();
   mockSharing.available = true;
   mockSharing.shareAsync.mockClear();
@@ -115,17 +120,28 @@ describe("saveExport", () => {
     expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
   });
 
-  test("erases the printed file and the folder when the move fails", async () => {
+  test("erases the printed file and the folder when the move fails, and names the failure a move [4]", async () => {
     mockFailures.move = true;
-    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toThrow();
+    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "MoveFailed" });
     expect(mockOperations.filter((operation) => operation.kind === "delete-file").map((operation) => operation.uri)).toEqual(["file:///cache/Print/abc.pdf"]);
     expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
   });
 
-  test("erases the folder when the print fails", async () => {
+  test("erases the folder when the print fails twice, and names the failure a print [4]", async () => {
     mockFailures.print = true;
-    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toThrow();
+    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "PrintFailed" });
+    expect(mockPrint).toHaveBeenCalledTimes(2);
     expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
+  });
+
+  test("prints a second time when the first print fails [4]", async () => {
+    mockFailures.printOnce = true;
+    const saved = await saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" });
+
+    expect(mockPrint).toHaveBeenCalledTimes(2);
+    const folder = mockOperations.find((operation) => operation.kind === "create")?.uri ?? "";
+    expect(saved.uri).toBe(`${folder}/Cours.pdf`);
+    expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(0);
   });
 });
 

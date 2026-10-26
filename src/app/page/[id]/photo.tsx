@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ZoomablePhoto } from "@/components/reading/zoomable-photo";
 import { useStrings } from "@/i18n";
 import { dateParts } from "@/pages/dates";
-import { usePage, usePhotoUrl } from "@/pages/queries";
+import { usePage, usePhotoPixels, usePhotoUrl } from "@/pages/queries";
 import { parseFound } from "@/search/found";
 import { useAnchor } from "@/search/queries";
 import { colors, typography } from "@/theme";
@@ -16,6 +16,8 @@ export default function PhotoSheet() {
   const page = usePage(id);
   const photo = usePhotoUrl(id);
   const anchor = useAnchor(id, parseFound(found));
+  const box = anchor.data?.box ?? null;
+  const pixels = usePhotoPixels(id, photo.data, box !== null);
   const parts = page.data === undefined || page.data === null ? null : dateParts(page.data.capturedAt, new Date());
 
   return (
@@ -31,7 +33,7 @@ export default function PhotoSheet() {
       </View>
       <View style={styles.photo}>
         {photo.data !== undefined ? (
-          <ZoomablePhoto uri={photo.data} label={t.photo.label} found={anchor.data?.box ?? null} foundLabel={t.search.frameLabel} />
+          <ZoomablePhoto uri={photo.data} label={t.photo.label} found={box} foundPixels={pixels.data ?? null} foundLabel={t.search.frameLabel} />
         ) : photo.isError ? (
           <Text style={styles.error}>{t.photo.loadFailed}</Text>
         ) : null}

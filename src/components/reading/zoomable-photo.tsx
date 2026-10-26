@@ -30,15 +30,15 @@ export function displayedSize(photo: Size, box: Size): Size {
   return { width: photo.width * fit, height: photo.height * fit };
 }
 
-type Props = { uri: string; label: string; found?: readonly number[] | null; foundLabel?: string };
+type Props = { uri: string; label: string; found?: readonly number[] | null; foundPixels?: Size | null; foundLabel?: string };
 
-export function ZoomablePhoto({ uri, label, found = null, foundLabel = "" }: Props) {
+export function ZoomablePhoto({ uri, label, found = null, foundPixels = null, foundLabel = "" }: Props) {
   const [box, setBox] = useState<Size>({ width: 0, height: 0 });
   const [photo, setPhoto] = useState<Size>({ width: 0, height: 0 });
 
   const displayed = displayedSize(photo, box);
   const maxScale = maxScaleFor(photo, displayed, PixelRatio.get());
-  const frame = found === null ? null : frameOf(found, photo);
+  const frame = found === null || foundPixels === null || photo.width === 0 ? null : frameOf(found, foundPixels);
 
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);

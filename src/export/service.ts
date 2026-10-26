@@ -23,4 +23,5 @@ export const exportDeps: ExportDeps = {
   draw: drawFormula,
   save: saveExport,
   share: shareExport,
+  log: (event, failure) => console.warn(event, failure),
 };

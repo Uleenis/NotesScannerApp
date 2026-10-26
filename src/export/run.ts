@@ -18,13 +18,29 @@ export type ExportLabels = { pageNumber: (number: number) => string; fallbackNam
 
 export type ExportControl = { cancelled: boolean };
 
+export type ExportStage = "sources" | "renderings" | "content" | "save" | "share";
+
+export type ExportFailure = { stage: ExportStage; name: string; code: string | null };
+
 export type ExportDeps = {
   sources: (ids: string[], control: ExportControl) => Promise<Map<string, ExportSource>>;
   renderings: (ids: string[], control: ExportControl) => Promise<Map<string, StoredRendering>>;
   draw: (tex: string, display: boolean) => Promise<DrawnTex | null>;
   save: (file: ExportFile) => Promise<SavedExport>;
   share: (uri: string, format: ExportFormat) => Promise<boolean>;
+  log?: (event: "export_failed", failure: ExportFailure) => void;
 };
+
+type Progress = { stage: ExportStage };
+
+const NAME = /^[A-Za-z][A-Za-z0-9_]{0,40}$/;
+
+function failureOf(error: unknown, stage: ExportStage): ExportFailure {
+  const name = error instanceof Error && NAME.test(error.name) ? error.name : "unknown";
+  const raw = typeof error === "object" && error !== null && "code" in error ? (error as { code: unknown }).code : null;
+  const code = typeof raw === "string" && NAME.test(raw) ? raw : null;
+  return { stage, name, code };
+}
 
 export type ExportResult =
   | { status: "shared" }
@@ -131,6 +147,7 @@ async function prepare(
   labels: ExportLabels,
   control: ExportControl,
   deps: ExportDeps,
+  progress: Progress,
 ): Promise<ExportResult | { status: "ready"; file: ExportFile }> {
   const ids = plan.sections.flatMap((section) => section.pages.filter(isExportable).map((page) => page.id));
   if (ids.length === 0) {
@@ -140,11 +157,14 @@ async function prepare(
   if (ids.length > max) {
     return { status: "tooMany", max };
   }
+  progress.stage = "sources";
   const sources = await deps.sources(ids, control);
+  progress.stage = "renderings";
   const renderings = labels.enriched && !control.cancelled ? await deps.renderings(ids, control) : new Map<string, StoredRendering>();
   if (control.cancelled) {
     return { status: "cancelled" };
   }
+  progress.stage = "content";
   const document = buildDocument(plan, withRenderings(sources, renderings), labels.pageNumber, labels.enriched);
   const text = await content(document, format, labels, deps, control);
   if (text === null || control.cancelled) {
@@ -159,19 +179,26 @@ async function prepare(
 export async function runExport(plan: ExportPlan, format: ExportFormat, labels: ExportLabels, control: ExportControl, deps: ExportDeps): Promise<ExportResult> {
   let saved: SavedExport | null = null;
   let shared = false;
+  const progress: Progress = { stage: "sources" };
   try {
-    const prepared = await prepare(plan, format, labels, control, deps);
+    const prepared = await prepare(plan, format, labels, control, deps, progress);
     if (prepared.status !== "ready") {
       return prepared;
     }
+    progress.stage = "save";
     saved = await deps.save(prepared.file);
     if (control.cancelled) {
       return { status: "cancelled" };
     }
+    progress.stage = "share";
     shared = await deps.share(saved.uri, format);
     return shared ? { status: "shared" } : { status: "unavailable" };
-  } catch {
-    return control.cancelled ? { status: "cancelled" } : { status: "error" };
+  } catch (error) {
+    if (control.cancelled) {
+      return { status: "cancelled" };
+    }
+    deps.log?.("export_failed", failureOf(error, progress.stage));
+    return { status: "error" };
   } finally {
     if (!shared) {
       saved?.discard();
