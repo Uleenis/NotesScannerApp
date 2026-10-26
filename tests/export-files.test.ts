@@ -1,9 +1,9 @@
 import { saveExport, shareExport, sweepExports } from "@/export/files";
 
-type Operation = { kind: string; uri: string; content?: string; to?: string };
+type Operation = { kind: string; uri: string; content?: string; to?: string; encoding?: string };
 
 const mockOperations: Operation[] = [];
-const mockFailures = { move: false, delete: false, print: false, printOnce: false };
+const mockFailures = { write: false, deleteFile: false, delete: false, print: false, printOnce: false, noData: false };
 const mockListing: { name: string; directory: boolean }[] = [];
 
 jest.mock("expo-file-system", () => {
@@ -19,19 +19,19 @@ jest.mock("expo-file-system", () => {
     }
   }
   class File extends Entry {
-    write(content: string) {
-      mockOperations.push({ kind: "write", uri: this.uri, content });
+    write(content: string, options?: { encoding?: string }) {
+      if (mockFailures.write) {
+        throw Object.assign(new Error("write failed"), { code: "ERR_WRITE" });
+      }
+      mockOperations.push({ kind: "write", uri: this.uri, content, ...(options?.encoding ? { encoding: options.encoding } : {}) });
     }
     async move(destination: { uri: string }) {
-      if (mockFailures.move) {
-        throw new Error("move failed");
-      }
       mockOperations.push({ kind: "move", uri: this.uri, to: destination.uri });
     }
     delete() {
       mockOperations.push({ kind: "delete-file", uri: this.uri });
-      if (mockFailures.delete) {
-        throw new Error("delete failed");
+      if (mockFailures.deleteFile) {
+        throw Object.assign(new Error("delete failed"), { code: "ERR_INVALID_PERMISSION" });
       }
     }
   }
@@ -55,7 +55,7 @@ jest.mock("expo-file-system", () => {
   return { File, Directory, Paths: { cache: new Directory("file:///cache") } };
 });
 
-const mockPrint = jest.fn(async (_options: { html?: string; width?: number; height?: number }) => {
+const mockPrint = jest.fn(async (options: { html?: string; width?: number; height?: number; base64?: boolean }) => {
   if (mockFailures.print) {
     throw new Error("print failed");
   }
@@ -63,10 +63,10 @@ const mockPrint = jest.fn(async (_options: { html?: string; width?: number; heig
     mockFailures.printOnce = false;
     throw new Error("print failed once");
   }
-  return { uri: "file:///cache/Print/abc.pdf", numberOfPages: 1 };
+  return { uri: "file:///root-cache/Print/abc.pdf", numberOfPages: 1, ...(options.base64 && !mockFailures.noData ? { base64: "JVBERi0xLjQK" } : {}) };
 });
 
-jest.mock("expo-print", () => ({ printToFileAsync: (options: { html?: string; width?: number; height?: number }) => mockPrint(options) }));
+jest.mock("expo-print", () => ({ printToFileAsync: (options: { html?: string; width?: number; height?: number; base64?: boolean }) => mockPrint(options) }));
 
 const mockSharing = { available: true, shareAsync: jest.fn(async (_uri: string, _options?: object) => undefined) };
 
@@ -78,7 +78,9 @@ jest.mock("expo-sharing", () => ({
 beforeEach(() => {
   mockOperations.length = 0;
   mockListing.length = 0;
-  mockFailures.move = false;
+  mockFailures.write = false;
+  mockFailures.deleteFile = false;
+  mockFailures.noData = false;
   mockFailures.delete = false;
   mockFailures.print = false;
   mockFailures.printOnce = false;
@@ -104,13 +106,24 @@ describe("saveExport", () => {
     expect(new Set(folders).size).toBe(2);
   });
 
-  test("prints the HTML on A4 and moves the PDF to its name", async () => {
+  test("prints the HTML on A4 and writes the printed data under its name, never moving the printed file", async () => {
     const saved = await saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" });
 
-    expect(mockPrint).toHaveBeenCalledWith(expect.objectContaining({ html: "<p>x</p>", width: 595, height: 842 }));
+    expect(mockPrint).toHaveBeenCalledWith(expect.objectContaining({ html: "<p>x</p>", width: 595, height: 842, base64: true }));
     const folder = mockOperations.find((operation) => operation.kind === "create")?.uri ?? "";
-    expect(mockOperations.find((operation) => operation.kind === "move")).toEqual({ kind: "move", uri: "file:///cache/Print/abc.pdf", to: `${folder}/Cours.pdf` });
+    expect(mockOperations.find((operation) => operation.kind === "write")).toEqual({ kind: "write", uri: `${folder}/Cours.pdf`, content: "JVBERi0xLjQK", encoding: "base64" });
+    expect(mockOperations.some((operation) => operation.kind === "move")).toBe(false);
+    expect(mockOperations.filter((operation) => operation.kind === "delete-file").map((operation) => operation.uri)).toEqual(["file:///root-cache/Print/abc.pdf"]);
     expect(saved.uri).toBe(`${folder}/Cours.pdf`);
+  });
+
+  test("keeps the PDF when the printed file cannot be erased, as in Expo Go", async () => {
+    mockFailures.deleteFile = true;
+    const saved = await saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" });
+
+    const folder = mockOperations.find((operation) => operation.kind === "create")?.uri ?? "";
+    expect(saved.uri).toBe(`${folder}/Cours.pdf`);
+    expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(0);
   });
 
   test("erases the folder when it is discarded, and never throws", async () => {
@@ -120,10 +133,23 @@ describe("saveExport", () => {
     expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
   });
 
-  test("erases the printed file and the folder when the move fails, and names the failure a move [4]", async () => {
-    mockFailures.move = true;
-    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "MoveFailed" });
-    expect(mockOperations.filter((operation) => operation.kind === "delete-file").map((operation) => operation.uri)).toEqual(["file:///cache/Print/abc.pdf"]);
+  test("erases the printed file and the folder when writing fails, and names the failure a write [4]", async () => {
+    mockFailures.write = true;
+    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "WriteFailed", code: "ERR_WRITE" });
+    expect(mockOperations.filter((operation) => operation.kind === "delete-file").map((operation) => operation.uri)).toEqual(["file:///root-cache/Print/abc.pdf"]);
+    expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
+  });
+
+  test("names the failure a print when the print gives no data, and erases the folder", async () => {
+    mockFailures.noData = true;
+    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "PrintFailed" });
+    expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
+  });
+
+  test("names the failure a print when the print gives empty data, and writes nothing", async () => {
+    mockPrint.mockResolvedValueOnce({ uri: "file:///root-cache/Print/abc.pdf", numberOfPages: 1, base64: "" });
+    await expect(saveExport({ format: "pdf", name: "Cours", content: "<p>x</p>" })).rejects.toMatchObject({ name: "PrintFailed" });
+    expect(mockOperations.some((operation) => operation.kind === "write")).toBe(false);
     expect(mockOperations.filter((operation) => operation.kind === "delete")).toHaveLength(1);
   });
 
