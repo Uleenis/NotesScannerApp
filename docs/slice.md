@@ -8,7 +8,7 @@ Paths below are from the repository root.
 - **Method:** `../../01 Steps/Méthode de travail.md`, revised on 19/10/2026. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
 - **Correctifs 1:** spec and plan in `../../02 Design/Correctifs 1.md` (validated 23/10/2026), decisions in `../Correctifs 1/Décisions.md`. Pieces 1 (`fix/action-sheet`), 2 (`fix/keyboard`) and 3 (`fix/display`) are merged; its Bilan is `../Correctifs 1/Bilan.md`, its phone checks `../Correctifs 1/Vérifications.md`.
 - **Spec and plan of slice 9:** `../../02 Design/Tranche 9.md`, validated by the owner on 23/10/2026 with its decisions as proposed. Decisions in `../Tranche 9/Décisions.md`, in French, one line each. No guarded file; Gemini is simulated in tests, measure 9 costs 30 calls over two days.
-- **Next branch:** `t9/measure` (branch 3 of slice 9). Branch 2, `t9/render`, is done (PR 83). The daily limit of renderings was lowered from 30 to 5 and a 429 is no longer retried (PR 84), while the Gemini key is free. Slice 7 is done: its Bilan is `../Tranche 7/Bilan.md`, its phone checks `../Tranche 7/Vérifications.md`. After slice 9: 5, 6, 8, pre-beta, 11.
+- **Next branch:** `t9/screen` (branch 4 of slice 9, the last). Branch 3, `t9/measure`, is done: 26 renderings accepted out of 30 (86.7 %), criterion 10 met, results in `../../04 Testing/T9 mesures/Résultats.md`. One of the four discarded renderings is a false rejection: an emphasis opened on one line and closed on the next is not removed by the fidelity check, which strips marks line by line; `t9/screen` fixes the check (or the prompt) and gives the client parser multi-line emphasis. Branch 2, `t9/render`, is done (PR 83). The daily limit of renderings was lowered from 30 to 5 and a 429 is no longer retried (PR 84), while the Gemini key is free. Slice 7 is done: its Bilan is `../Tranche 7/Bilan.md`, its phone checks `../Tranche 7/Vérifications.md`. After slice 9: 5, 6, 8, pre-beta, 11.
 - **Slice 4 is done:** its seven branches are merged (PRs 58 to 62, 64 and the PR of `t4/edit`), its Bilan is `../Tranche 4/Bilan.md` and its decisions `../Tranche 4/Décisions.md`.
 - **Decisions from now on:** `../Tranche 9/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Guarded files:** only the referee (`.claude/`, `.githooks/`, `.github/`, `scripts/`, the two guardrail tests, gitleaks). A slice that needs one prepares one patch and writes it in `../Pour Tim.md`.
@@ -22,8 +22,8 @@ Paths below are from the repository root.
 |---|---|---|---|---|---|---|
 | 1 | `t9/schema` (`page_renderings`, count of the day, rights, deletion and transfer) | 1 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done, PR 82 |
 | 2 | `t9/render` (`render-page`, prompt, bounds, fidelity check) | 2, 3, 4 | sensitive (model call, hostile input) | Sonnet 5.5, High | code and security, Sonnet | done, PR 83 |
-| 3 | `t9/measure` (30 renderings of the corpus, outside the repository) | 9, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | next |
-| 4 | `t9/screen` (Markdown parser, switch, wait, fallback, export in enriched mode) | 5 to 8, 11 | sensitive (model output displayed) | Sonnet 5.5, High | code and security, Sonnet | last of the slice: Bilan, Vérifications and status of `AGENTS.md` |
+| 3 | `t9/measure` (30 renderings of the corpus, outside the repository) | 9, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | done, 26 of 30 accepted |
+| 4 | `t9/screen` (Markdown parser, switch, wait, fallback, export in enriched mode) | 5 to 8, 11 | sensitive (model output displayed) | Sonnet 5.5, High | code and security, Sonnet | next; last of the slice: Bilan, Vérifications and status of `AGENTS.md` |
 
 ## Slice 7 branches
 
