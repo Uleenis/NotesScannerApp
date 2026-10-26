@@ -52,10 +52,11 @@ function print(content: string) {
     width: PAGE_WIDTH,
     height: PAGE_HEIGHT,
     margins: { top: PAGE_MARGIN, right: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN },
+    base64: true,
   });
 }
 
-function stepFailure(name: "PrintFailed" | "MoveFailed", cause: unknown): Error {
+function stepFailure(name: "PrintFailed" | "WriteFailed", cause: unknown): Error {
   const code = typeof cause === "object" && cause !== null && "code" in cause ? (cause as { code: unknown }).code : undefined;
   return Object.assign(new Error(name), { name, code: typeof code === "string" ? code : undefined });
 }
@@ -66,12 +67,15 @@ async function printPdf(content: string, target: File): Promise<void> {
     .catch((error: unknown) => {
       throw stepFailure("PrintFailed", error);
     });
-  const source = new File(printed.uri);
+  quietly(() => new File(printed.uri).delete());
+  const data = printed.base64;
+  if (typeof data !== "string" || data === "") {
+    throw stepFailure("PrintFailed", null);
+  }
   try {
-    await source.move(target);
+    target.write(data, { encoding: "base64" });
   } catch (error) {
-    quietly(() => source.delete());
-    throw stepFailure("MoveFailed", error);
+    throw stepFailure("WriteFailed", error);
   }
 }
 
