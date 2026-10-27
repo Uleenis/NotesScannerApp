@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createRenderStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createParentConsentStore, createRenderStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -810,4 +810,63 @@ Deno.test("a rendering is written as one row per page, for the owner given, as t
 Deno.test("a refused write of a rendering is an error [2]", async () => {
   const refusing = (() => Promise.resolve(new Response(JSON.stringify({ message: "boom" }), { status: 500, headers: { "content-type": "application/json" } }))) as typeof fetch;
   assertEquals(await storeError(() => createRenderStore(KEYS, refusing).save(ALICE, PAGE_ID, { text: "t", basedOn: "b".repeat(64), model: "m", promptVersion: "r1" })), true);
+});
+
+Deno.test("request_parent_consent is called as the service with the owner and the address, and its answer is read back", async () => {
+  const { fetch, calls } = stub(() => [{ outcome: "requested", request_id: PAGE_ID, code: "004211" }]);
+  const result = await createParentConsentStore(KEYS, fetch).request(ALICE, "parent@example.test");
+  assertEquals(result, { outcome: "requested", requestId: PAGE_ID, code: "004211" });
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/request_parent_consent");
+  assertEquals(calls[0].headers.get("apikey"), "secret-key");
+  assertEquals(calls[0].body, { p_user_id: ALICE, p_parent_email: "parent@example.test" });
+});
+
+Deno.test("a refused parent request carries no code", async () => {
+  const { fetch } = stub(() => [{ outcome: "send_limit", request_id: null, code: null }]);
+  assertEquals(await createParentConsentStore(KEYS, fetch).request(ALICE, "parent@example.test"), { outcome: "send_limit", requestId: null, code: null });
+});
+
+Deno.test("an unknown parent outcome, a requested answer without a six-digit code or a request id is an error", async () => {
+  const answers = [
+    [{ outcome: "sent", request_id: PAGE_ID, code: "004211" }],
+    [{ outcome: "requested", request_id: PAGE_ID, code: "4211" }],
+    [{ outcome: "requested", request_id: "nope", code: "004211" }],
+    [{ outcome: "send_limit", request_id: PAGE_ID, code: "004211" }],
+    [],
+  ];
+  for (const answer of answers) {
+    const { fetch } = stub(() => answer);
+    let failed = false;
+    try {
+      await createParentConsentStore(KEYS, fetch).request(ALICE, "parent@example.test");
+    } catch (error) {
+      failed = error instanceof StoreError;
+    }
+    assertEquals(failed, true, JSON.stringify(answer));
+  }
+});
+
+Deno.test("confirm_parent_consent is called with the owner and the code, and an unknown outcome is an error", async () => {
+  const { fetch, calls } = stub(() => [{ outcome: "wrong_code", attempts_left: 2 }]);
+  const store = createParentConsentStore(KEYS, fetch);
+  assertEquals(await store.confirm(ALICE, "123456"), { outcome: "wrong_code", attemptsLeft: 2 });
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/confirm_parent_consent");
+  assertEquals(calls[0].body, { p_user_id: ALICE, p_code: "123456" });
+  for (const answer of [[{ outcome: "accepted", attempts_left: null }], [{ outcome: "wrong_code", attempts_left: 7 }], [{ outcome: "wrong_code", attempts_left: null }]]) {
+    const bad = stub(() => answer);
+    let failed = false;
+    try {
+      await createParentConsentStore(KEYS, bad.fetch).confirm(ALICE, "123456");
+    } catch (error) {
+      failed = error instanceof StoreError;
+    }
+    assertEquals(failed, true, JSON.stringify(answer));
+  }
+});
+
+Deno.test("withdraw_parent_request is called with the owner and the request id", async () => {
+  const { fetch, calls } = stub(() => null);
+  await createParentConsentStore(KEYS, fetch).withdraw(ALICE, PAGE_ID);
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/withdraw_parent_request");
+  assertEquals(calls[0].body, { p_user_id: ALICE, p_request_id: PAGE_ID });
 });

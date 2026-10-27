@@ -459,3 +459,9 @@ verify_jwt = true
 
 [functions.sweep-alto]
 verify_jwt = false
+
+[functions.request-parent-consent]
+verify_jwt = true
+
+[functions.confirm-parent-consent]
+verify_jwt = true
