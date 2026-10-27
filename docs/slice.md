@@ -7,7 +7,7 @@ Paths below are from the repository root.
 - **Spec and plan of slice 5:** `../../02 Design/Tranche 5.md`, validated by the owner on 27/10/2026 with its eight decisions as proposed.
 - **Decisions:** `../Tranche 5/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Method:** `../../01 Steps/Méthode de travail.md`. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next:** branch 2, `t5/parent`.
+- **Next:** branch 3, `t5/consent-screens`.
 - **Order:** branches 1 to 11 in the order of the table. Branch 11 exists only if measure 19 (branch 10) passes; otherwise branch 10 is the last. Criterion 20 (phone) is checked after the last branch, through `../Tranche 5/Vérifications.md`. The last session writes `../Tranche 5/Bilan.md` and `../Tranche 5/Vérifications.md` and the status of `../../AGENTS.md`.
 - **After this slice:** 6, 8, pre-beta, 11 (`../../01 Steps/Périmètre du MVP.md`). A slice whose document is missing or not validated: stop and ask.
 - **Guarded files:** one patch for the slice, prepared in branch 5: `.claude/settings.json` denies reading `services/training/.env`, with its test in `tests/guardrails.test.ts`. It goes in `../Pour Tim.md`. The training image is not built in CI: its logic lives in the package of the reading service, tested by `check.sh`.
@@ -20,8 +20,8 @@ Paths below are from the repository root.
 | # | Branch | Criteria | Level | Session | Reviews | State |
 |---|---|---|---|---|---|---|
 | 1 | `t5/consent` (birth year, country, table of ages, `consents`, rights) | 1, 2 | critical (consent of minors) | Opus 5.5, High | code Sonnet, security Opus | done, PR 89 |
-| 2 | `t5/parent` (request and confirmation of the parent's consent, the e-mail) | 3 | critical (secret, e-mail to a third party) | Opus 5.5, High | code Sonnet, security Opus | next |
-| 3 | `t5/consent-screens` (screens of age, consent, parent, withdrawal and erasure) | 4, 14 | sensitive (deletion) | Sonnet 5.5, High | code and security, Sonnet | |
+| 2 | `t5/parent` (request and confirmation of the parent's consent, the e-mail) | 3 | critical (secret, e-mail to a third party) | Opus 5.5, High | code Sonnet, security Opus | done, PR 90 |
+| 3 | `t5/consent-screens` (screens of age, consent, parent, withdrawal and erasure) | 4, 14 | sensitive (deletion) | Sonnet 5.5, High | code and security, Sonnet | next |
 | 4 | `t5/writing-test` (texts, photos, check route, screen) | 5 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | |
 | 5 | `t5/trainer` (image, jobs, three functions, harvest, training, replacement of the active model, sweep) | 6, 7, 8 | critical (secret, exposure of a service) | Opus 5.5, High | code Sonnet, security Opus | |
 | 6 | `t5/personal-reading` (reading with the personal model, rules tied to the model of A) | 9 | critical (loading a model) | Opus 5.5, High | code Sonnet, security Opus | |
@@ -30,6 +30,13 @@ Paths below are from the repository root.
 | 9 | `t5/dates` (date check and its display, measure 18) | 11, 18 | ordinary | Sonnet 5.5, High | code, Sonnet | |
 | 10 | `t5/faults-measure` (measure 19, outside the repository) | 19 | ordinary | Sonnet 5.5, High | code, Sonnet | |
 | 11 | `t5/faults` (fault notification, only if measure 19 passes) | 12, 14 | ordinary | Sonnet 5.5, High | code, Sonnet | |
+
+## Notes carried from slice 5, branch 2
+
+- `t5/parent` adds `request-parent-consent` and `confirm-parent-consent`, three `private` tables and the server functions `request_parent_consent`, `confirm_parent_consent`, `withdraw_parent_request` and `private.purge_parent_requests` (migration `20261102120000_t5_parent.sql`); contract in `docs/architecture.md` ("Parent consent").
+- For the screens (branch 3): the request answers `{requested: true}` or `error` among `invalid_request`, `invalid_email`, `same_email`, `account_not_registered`, `age_missing`, `not_under_age`, `consent_already_active`, `send_limit` (429), `unavailable` (503, no Resend key) and `send_failed` (502). The confirmation answers `{confirmed: true}` or `wrong_code` with `attempts_left`, `code_expired`, `no_request` (also after the fifth wrong code), `invalid_request` and the consent refusals. The client cannot see a request in progress: keep "I have a code" reachable, and treat `no_request` as "ask again".
+- The withdrawal (branch 3) must also delete the row of `private.parent_consent_requests` of the user, under the same advisory lock.
+- Until the owner sets `RESEND_API_KEY` (`../Pour Tim.md`, action 5), the request answers `unavailable`; with Resend's sandbox sender, only the owner's address receives the e-mail. The sender `onboarding@resend.dev` is fixed in `_shared/parent-consent.ts` and changes with the pre-beta domain.
 
 ## Notes carried from slice 5, branch 1
 
