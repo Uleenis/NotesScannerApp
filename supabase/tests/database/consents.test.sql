@@ -1,6 +1,6 @@
 begin;
 
-select plan(50);
+select plan(56);
 
 create function pg_temp.make_user(uid uuid, born_before integer, land text) returns void
 language plpgsql as $$
@@ -41,10 +41,14 @@ select pg_temp.make_user('c5c5c5c5-0000-0000-0000-000000000012', 30, 'GB');
 select pg_temp.make_user('c5c5c5c5-0000-0000-0000-000000000013', 15, 'AT');
 select pg_temp.make_user('c5c5c5c5-0000-0000-0000-000000000014', 14, 'AT');
 
-select results_eq(
-  $$select country, age::integer from private.digital_consent_ages where country in ('BE', 'AT', 'FR', 'DE', 'GB', 'SK') order by country$$,
-  $$values ('AT', 14), ('BE', 13), ('DE', 16), ('FR', 15), ('GB', 13), ('SK', 16)$$,
-  'the table of ages holds the ages of the source'
+select set_eq(
+  $$select country, age::integer from private.digital_consent_ages$$,
+  $$values
+    ('BE', 13), ('DK', 13), ('EE', 13), ('FI', 13), ('GB', 13), ('LV', 13), ('MT', 13), ('PT', 13), ('SE', 13),
+    ('AT', 14), ('BG', 14), ('CY', 14), ('ES', 14), ('IT', 14), ('LT', 14),
+    ('CZ', 15), ('FR', 15), ('GR', 15),
+    ('DE', 16), ('HR', 16), ('HU', 16), ('IE', 16), ('LU', 16), ('NL', 16), ('PL', 16), ('RO', 16), ('SI', 16), ('SK', 16)$$,
+  'the table of ages holds exactly the countries and ages of the source'
 );
 
 select is(
@@ -289,8 +293,14 @@ select throws_ok(
 );
 
 select lives_ok(
-  $$update public.consents set revoked_at = now() where user_id = 'c5c5c5c5-0000-0000-0000-000000000001'$$,
+  $$update public.consents set revoked_at = now() + interval '1 year' where user_id = 'c5c5c5c5-0000-0000-0000-000000000001'$$,
   'the server withdraws a consent'
+);
+
+select is(
+  (select revoked_at from public.consents where user_id = 'c5c5c5c5-0000-0000-0000-000000000001'),
+  now(),
+  'the withdrawal is dated by the database, whatever date the writer gives'
 );
 
 select throws_ok(
@@ -311,7 +321,42 @@ select throws_ok(
   $$update public.consents set version = 'training-2' where user_id = 'c5c5c5c5-0000-0000-0000-000000000004'$$,
   '23514',
   'consent_immutable',
-  'the terms of a consent cannot change'
+  'the version of a consent cannot change'
+);
+
+select throws_ok(
+  $$update public.consents set kind = 'training', version = 'training-1', granted_by = 'parent', parent_email = 'parent@example.test' where user_id = 'c5c5c5c5-0000-0000-0000-000000000004'$$,
+  '23514',
+  'consent_immutable',
+  'a user''s consent cannot become a parent''s'
+);
+
+select throws_ok(
+  $$update public.consents set parent_email = 'other@example.test' where granted_by = 'parent' and user_id = 'c5c5c5c5-0000-0000-0000-000000000002'$$,
+  '23514',
+  'consent_immutable',
+  'the parent''s address cannot change'
+);
+
+select throws_ok(
+  $$update public.consents set user_id = 'c5c5c5c5-0000-0000-0000-000000000012' where user_id = 'c5c5c5c5-0000-0000-0000-000000000004'$$,
+  '23514',
+  'consent_immutable',
+  'a consent cannot move to another user'
+);
+
+select throws_ok(
+  $$update public.consents set granted_at = granted_at - interval '1 day' where user_id = 'c5c5c5c5-0000-0000-0000-000000000004'$$,
+  '23514',
+  'consent_immutable',
+  'the date of a consent cannot change'
+);
+
+select throws_ok(
+  $$update public.consents set id = gen_random_uuid() where user_id = 'c5c5c5c5-0000-0000-0000-000000000004'$$,
+  '23514',
+  'consent_immutable',
+  'the identifier of a consent cannot change'
 );
 
 select pg_temp.login('c5c5c5c5-0000-0000-0000-000000000001');

@@ -1,6 +1,6 @@
 begin;
 
-select plan(25);
+select plan(26);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -192,6 +192,13 @@ select throws_ok(
   '23514',
   'age_already_set',
   'the server cannot write the birth year a second time either'
+);
+
+select throws_ok(
+  $$insert into public.profiles (id, birth_year, country) values ('b1b1b1b1-0000-0000-0000-000000000099', 2000, 'FR')$$,
+  '23514',
+  'age_set_on_insert',
+  'a profile cannot be created with a birth year'
 );
 
 select is(

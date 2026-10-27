@@ -50,6 +50,12 @@ security definer
 set search_path = ''
 as $$
 begin
+  if tg_op = 'INSERT' then
+    if new.birth_year is not null or new.country is not null then
+      raise exception 'age_set_on_insert' using errcode = '23514';
+    end if;
+    return new;
+  end if;
   if old.birth_year is not null or old.country is not null then
     raise exception 'age_already_set' using errcode = '23514';
   end if;
@@ -69,7 +75,7 @@ $$;
 revoke all on function private.check_profile_age() from public, anon, authenticated, service_role;
 
 create trigger profiles_check_age
-  before update of birth_year, country on public.profiles
+  before insert or update of birth_year, country on public.profiles
   for each row execute function private.check_profile_age();
 
 grant update (birth_year, country) on public.profiles to authenticated;
@@ -191,6 +197,7 @@ begin
     or new.revoked_at is null then
     raise exception 'consent_immutable' using errcode = '23514';
   end if;
+  new.revoked_at := greatest(now(), old.granted_at);
   return new;
 end;
 $$;
