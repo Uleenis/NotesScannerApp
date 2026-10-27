@@ -105,7 +105,11 @@ select set_eq(
       ('corrections', 'corrected_text', 'insert'),
       ('corrections', 'chosen_from', 'insert'),
       ('corrections', 'from_queue', 'insert'),
-      ('profiles', 'interface_language', 'update')
+      ('profiles', 'interface_language', 'update'),
+      ('profiles', 'birth_year', 'update'),
+      ('profiles', 'country', 'update'),
+      ('consents', 'kind', 'insert'),
+      ('consents', 'version', 'insert')
   $$,
   'the columns a user can write are exactly the ones the client may decide'
 );
