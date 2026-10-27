@@ -12,7 +12,7 @@ sql() {
 }
 
 cleanup() {
-  sql -c "delete from auth.users where id::text like '${USER_PREFIX}%'; drop table if exists private.parent_race_results;" > /dev/null
+  sql -c "delete from auth.users where id::text like '${USER_PREFIX}%'; delete from private.parent_address_sends where address_hash in (public.email_hash('c6a6-sender@example.test'), public.email_hash('c6a6-guesser@example.test'), public.email_hash('c6a6-confirmer@example.test'), public.email_hash('c6a6-shared@example.test')); drop table if exists private.parent_race_results;" > /dev/null
 }
 
 trap cleanup EXIT
@@ -46,16 +46,22 @@ CONFIRMER="${USER_PREFIX}-0000-0000-0000-000000000003"
 make_child "$SENDER"
 make_child "$GUESSER"
 make_child "$CONFIRMER"
+for i in $(seq 0 39); do make_child "${USER_PREFIX}-0000-0000-0001-$(printf '%012d' "$i")"; done
 sql -c "create table private.parent_race_results (step text not null, outcome text not null);" > /dev/null
 
-sql -c "select outcome from public.request_parent_consent('${GUESSER}', 'parent@example.test');
-  select outcome from public.request_parent_consent('${CONFIRMER}', 'parent@example.test');
+sql -c "select outcome from public.request_parent_consent('${GUESSER}', 'c6a6-guesser@example.test');
+  select outcome from public.request_parent_consent('${CONFIRMER}', 'c6a6-confirmer@example.test');
   update private.parent_consent_requests set code_hash = extensions.crypt('111111', extensions.gen_salt('bf', 8))
   where user_id in ('${GUESSER}', '${CONFIRMER}');" > /dev/null
 
 install_script request <<EOS
 insert into private.parent_race_results (step, outcome)
-select 'request', outcome from public.request_parent_consent('${SENDER}', 'parent@example.test');
+select 'request', outcome from public.request_parent_consent('${SENDER}', 'c6a6-sender@example.test');
+EOS
+
+install_script shared <<EOS
+insert into private.parent_race_results (step, outcome)
+select 'shared', outcome from public.request_parent_consent(('${USER_PREFIX}-0000-0000-0001-' || lpad((:client_id)::text, 12, '0'))::uuid, 'c6a6-shared@example.test');
 EOS
 
 install_script guess <<EOS
@@ -78,10 +84,15 @@ check "the 37 others are refused by the limit of the day" 37 "$(results request 
 check "three sends are counted" 3 "$(sql -c "select count(*) from private.parent_consent_sends where user_id = '${SENDER}'")"
 check "one request is in progress" 1 "$(sql -c "select count(*) from private.parent_consent_requests where user_id = '${SENDER}'")"
 
+bench shared 40 1
+check "40 children write at once to one address: three are sent" 3 "$(results shared requested)"
+check "the 37 others are refused by the limit of the address" 37 "$(results shared send_limit)"
+check "three sends are counted for the address" 3 "$(sql -c "select count(*) from private.parent_address_sends where address_hash = public.email_hash('c6a6-shared@example.test')")"
+
 bench guess 40 1
 check "40 simultaneous wrong codes: five count as attempts" 5 "$(results guess wrong_code)"
-check "the 35 others are refused after five attempts" 35 "$(results guess too_many_attempts)"
-check "the request holds five attempts" 5 "$(sql -c "select attempts from private.parent_consent_requests where user_id = '${GUESSER}'")"
+check "the 35 others find the request gone after five attempts" 35 "$(results guess no_request)"
+check "no request is left" 0 "$(sql -c "select count(*) from private.parent_consent_requests where user_id = '${GUESSER}'")"
 
 bench confirm 40 1
 check "40 simultaneous right codes: one confirms" 1 "$(results confirm confirmed)"

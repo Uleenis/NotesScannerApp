@@ -1,6 +1,6 @@
 begin;
 
-select plan(71);
+select plan(96);
 
 create function pg_temp.make_user(uid uuid, born_before integer, land text) returns void
 language plpgsql as $$
@@ -62,6 +62,11 @@ language sql as $$
   select count(*)::integer from private.parent_consent_sends where user_id = uid;
 $$;
 
+create function pg_temp.address_sends(address text) returns integer
+language sql as $$
+  select count(*)::integer from private.parent_address_sends where address_hash = public.email_hash(address);
+$$;
+
 select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000001', 14, 'FR');
 select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000002', 30, 'GB');
 select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000003', null, null);
@@ -69,27 +74,38 @@ insert into auth.users (id, is_anonymous) values ('c6c6c6c6-0000-0000-0000-00000
 insert into auth.users (id, email) values ('c6c6c6c6-0000-0000-0000-000000000005', 'c6c6c6c6-5@example.test');
 select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000006', 14, 'FR');
 insert into public.consents (user_id, kind, version, granted_by, parent_email)
-values ('c6c6c6c6-0000-0000-0000-000000000006', 'training', 'training-1', 'parent', 'parent@example.test');
+values ('c6c6c6c6-0000-0000-0000-000000000006', 'training', 'training-1', 'parent', 'c6-p6@example.test');
 select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000007', 14, 'FR');
 select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000008', 14, 'FR');
 select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000009', 14, 'FR');
 select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000010', 16, 'XX');
 select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000011', 14, 'FR');
+select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000012', 14, 'FR');
+select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000013', 14, 'FR');
+select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000014', 14, 'FR');
+select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000015', 14, 'FR');
+select pg_temp.make_user('c6c6c6c6-0000-0000-0000-000000000016', 14, 'FR');
 
 select has_table('private', 'parent_consent_requests', 'the pending requests live in the private schema');
 select has_table('private', 'parent_consent_sends', 'the sends of the last day live in the private schema');
+select has_table('private', 'parent_address_sends', 'the sends to each address live in the private schema');
 
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000004', 'parent@example.test'), 'account_not_registered', 'an anonymous account cannot ask a parent');
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000005', 'parent@example.test'), 'account_not_registered', 'an account whose address is not confirmed cannot ask a parent');
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000003', 'parent@example.test'), 'age_missing', 'an account without a birth year cannot ask a parent');
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000002', 'parent@example.test'), 'not_under_age', 'an account at or above the age of its country does not need a parent');
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000006', 'other@example.test'), 'consent_already_active', 'an account with an active consent cannot ask again');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000004', 'c6-p1@example.test'), 'account_not_registered', 'an anonymous account cannot ask a parent');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000005', 'c6-p1@example.test'), 'account_not_registered', 'an account whose address is not confirmed cannot ask a parent');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000003', 'c6-p1@example.test'), 'age_missing', 'an account without a birth year cannot ask a parent');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000002', 'c6-p1@example.test'), 'not_under_age', 'an account at or above the age of its country does not need a parent');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000006', 'c6-p1@example.test'), 'consent_already_active', 'an account with an active consent cannot ask again');
 
 select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', 'not-an-address'), 'invalid_email', 'an address without @ is refused');
 select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', 'parent@localhost'), 'invalid_email', 'an address without a dotted domain is refused');
 select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', 'par ent@example.test'), 'invalid_email', 'an address with a space is refused');
 select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', E'parent@example.test\nbcc: x@example.test'), 'invalid_email', 'an address with a line break is refused');
 select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', '<parent@example.test>'), 'invalid_email', 'an address with a sign outside the allowed ones is refused');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', 'victim%host@example.test'), 'invalid_email', 'an address with a percent sign is refused');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', '.parent@example.test'), 'invalid_email', 'an address starting with a dot is refused');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', 'par..ent@example.test'), 'invalid_email', 'an address with two dots in a row is refused');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', 'parent@-example.test'), 'invalid_email', 'a domain label starting with a hyphen is refused');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', repeat('p', 65) || '@example.test'), 'invalid_email', 'a local part over 64 characters is refused');
 select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', ''), 'invalid_email', 'an empty address is refused');
 select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', null), 'invalid_email', 'no address is refused');
 select is(
@@ -115,12 +131,12 @@ select is(
   'requested',
   'an address of 254 characters is accepted'
 );
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', 'Parent.Name+kid@Example.TEST'), 'requested', 'a user under the age of its country asks a parent');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000001', 'C6-Parent.Name+kid@Example.TEST'), 'requested', 'a user under the age of its country asks a parent');
 select matches(pg_temp.code('c6c6c6c6-0000-0000-0000-000000000001'), '^[0-9]{6}$', 'the code has six digits');
 select is(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000001'), 1, 'a new request replaces the one in progress');
 select is(
   (select parent_email from private.parent_consent_requests where user_id = 'c6c6c6c6-0000-0000-0000-000000000001'),
-  'parent.name+kid@example.test',
+  'c6-parent.name+kid@example.test',
   'the address is kept in lower case'
 );
 select is(
@@ -148,7 +164,13 @@ select is(
   '(t,t,0)',
   'the code is valid seven days and starts with no attempt'
 );
-select is(pg_temp.sends('c6c6c6c6-0000-0000-0000-000000000001'), 2, 'each request counts as a send');
+select is(pg_temp.sends('c6c6c6c6-0000-0000-0000-000000000001'), 2, 'each request counts as a send of the account');
+select is(pg_temp.address_sends('c6-parent.name+kid@example.test'), 1, 'each request counts as a send to the address');
+select is(
+  (select count(*)::integer from private.parent_address_sends a where octet_length(a.address_hash) = 32 and a.address_hash = public.email_hash('c6-parent.name+kid@example.test')),
+  1,
+  'the sends to an address keep its peppered hash, not the address'
+);
 
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000002', '123456'), '(no_request,)', 'a confirmation without a request is refused');
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000001', '12345'), '(invalid_code,)', 'a code of five digits is refused');
@@ -164,51 +186,76 @@ select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000001', pg_temp.wrong(
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000001', pg_temp.wrong('c6c6c6c6-0000-0000-0000-000000000001')), '(wrong_code,3)', 'a second wrong code counts a second attempt');
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000001', pg_temp.wrong('c6c6c6c6-0000-0000-0000-000000000001')), '(wrong_code,2)', 'a third wrong code counts a third attempt');
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000001', pg_temp.wrong('c6c6c6c6-0000-0000-0000-000000000001')), '(wrong_code,1)', 'a fourth wrong code counts a fourth attempt');
+select is(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000001'), 1, 'the request stays while an attempt is left');
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000001', pg_temp.wrong('c6c6c6c6-0000-0000-0000-000000000001')), '(wrong_code,0)', 'a fifth wrong code uses the last attempt');
-select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000001', pg_temp.code('c6c6c6c6-0000-0000-0000-000000000001')), '(too_many_attempts,)', 'after five attempts even the right code is refused');
+select is(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000001'), 0, 'the request and the address of the parent are gone after five attempts');
+select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000001', pg_temp.code('c6c6c6c6-0000-0000-0000-000000000001')), '(no_request,)', 'after five attempts even the right code finds nothing');
 select is(
   (select count(*)::integer from public.consents where user_id = 'c6c6c6c6-0000-0000-0000-000000000001'),
   0,
   'no consent is written after five wrong attempts'
 );
 
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000008', 'parent@example.test'), 'requested', 'another child asks a parent');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000008', 'c6-p8@example.test'), 'requested', 'another child asks a parent');
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000008', pg_temp.wrong('c6c6c6c6-0000-0000-0000-000000000008')), '(wrong_code,4)', 'a wrong code first');
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000008', pg_temp.code('c6c6c6c6-0000-0000-0000-000000000008')), '(confirmed,)', 'the right code within its attempts confirms');
 select results_eq(
   $$select kind, version, granted_by, parent_email, granted_at = now(), revoked_at from public.consents where user_id = 'c6c6c6c6-0000-0000-0000-000000000008'$$,
-  $$values ('training', 'training-1', 'parent', 'parent@example.test', true, null::timestamptz)$$,
+  $$values ('training', 'training-1', 'parent', 'c6-p8@example.test', true, null::timestamptz)$$,
   'the right code writes the parent consent with the address of the parent'
 );
 select is(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000008'), 0, 'the request is gone once confirmed');
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000008', pg_temp.code('c6c6c6c6-0000-0000-0000-000000000008')), '(no_request,)', 'a code confirms once');
 
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000009', 'parent@example.test'), 'requested', 'a third child asks a parent');
-update private.parent_consent_requests set created_at = now() - interval '7 days 1 second', expires_at = now() - interval '1 second' where user_id = 'c6c6c6c6-0000-0000-0000-000000000009';
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000009', 'c6-p9@example.test'), 'requested', 'a third child asks a parent');
+update private.parent_consent_requests
+set created_at = now() - interval '7 days 1 second', expires_at = now() - interval '1 second'
+where user_id = 'c6c6c6c6-0000-0000-0000-000000000009';
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000009', pg_temp.code('c6c6c6c6-0000-0000-0000-000000000009')), '(code_expired,)', 'a code past its seven days is refused');
+select is(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000009'), 0, 'an expired request is removed');
 select is(
   (select count(*)::integer from public.consents where user_id = 'c6c6c6c6-0000-0000-0000-000000000009'),
   0,
   'an expired code writes no consent'
 );
 
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000010', 'parent@example.test'), 'requested', 'a child of a country outside the table asks a parent');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000010', 'c6-p10@example.test'), 'requested', 'a child of a country outside the table asks a parent');
 insert into private.digital_consent_ages (country, age) values ('XX', 13);
 select is(pg_temp.confirm('c6c6c6c6-0000-0000-0000-000000000010', pg_temp.code('c6c6c6c6-0000-0000-0000-000000000010')), '(not_under_age,)', 'a code is refused once the child no longer needs a parent');
 select is(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000010'), 0, 'a request that can no longer be confirmed is removed');
 
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'parent@example.test'), 'requested', 'a first send of the day');
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'parent@example.test'), 'requested', 'a second send of the day');
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'parent@example.test'), 'requested', 'a third send of the day');
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'parent@example.test'), 'send_limit', 'a fourth send within 24 hours is refused');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'c6-p7a@example.test'), 'requested', 'a first send of the day');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'c6-p7b@example.test'), 'requested', 'a second send of the day');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'c6-p7c@example.test'), 'requested', 'a third send of the day');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'c6-p7d@example.test'), 'send_limit', 'a fourth send of an account within 24 hours is refused');
 select is(
   (select id from private.parent_consent_requests where user_id = 'c6c6c6c6-0000-0000-0000-000000000007'),
   (select request_id from kept where user_id = 'c6c6c6c6-0000-0000-0000-000000000007'),
   'a refused send leaves the request in progress as it was'
 );
+select is(pg_temp.address_sends('c6-p7d@example.test'), 0, 'a refused send is not counted for its address');
 update private.parent_consent_sends set sent_at = now() - interval '24 hours 1 second'
 where ctid = (select ctid from private.parent_consent_sends where user_id = 'c6c6c6c6-0000-0000-0000-000000000007' limit 1);
-select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'parent@example.test'), 'requested', 'a send older than 24 hours no longer counts');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000007', 'c6-p7d@example.test'), 'requested', 'a send of the account older than 24 hours no longer counts');
+
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000012', 'c6-shared@example.test'), 'requested', 'a first account writes to an address');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000013', 'C6-Shared@Example.test'), 'requested', 'a second account writes to the same address');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000014', 'c6-shared@example.test'), 'requested', 'a third account writes to the same address');
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000015', 'c6-shared@example.test'), 'send_limit', 'a fourth send to one address within seven days is refused, whatever the account');
+select is(pg_temp.sends('c6c6c6c6-0000-0000-0000-000000000015'), 0, 'the refused account counts no send');
+update private.parent_address_sends set sent_at = now() - interval '7 days 1 second'
+where ctid = (select ctid from private.parent_address_sends where address_hash = public.email_hash('c6-shared@example.test') limit 1);
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000015', 'c6-shared@example.test'), 'requested', 'a send to the address older than seven days no longer counts');
+
+insert into private.parent_address_sends (address_hash)
+select extensions.gen_random_bytes(32)
+from generate_series(1, 50 - (select count(*)::integer from private.parent_address_sends where sent_at > now() - interval '24 hours'));
+select is(pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000016', 'c6-p16@example.test'), 'send_limit', 'the fifty-first send of the day across all accounts is refused');
+select is(
+  row(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000016'), pg_temp.sends('c6c6c6c6-0000-0000-0000-000000000016'))::text,
+  '(0,0)',
+  'a send refused by the daily cap writes nothing'
+);
 
 select lives_ok(
   $$select public.withdraw_parent_request('c6c6c6c6-0000-0000-0000-000000000007', 'c6c6c6c6-ffff-ffff-ffff-ffffffffffff')$$,
@@ -217,19 +264,19 @@ select lives_ok(
 select is(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000007'), 1, 'the request in progress stays when another is withdrawn');
 select public.withdraw_parent_request('c6c6c6c6-0000-0000-0000-000000000007', (select request_id from kept where user_id = 'c6c6c6c6-0000-0000-0000-000000000007'));
 select is(
-  row(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000007'), pg_temp.sends('c6c6c6c6-0000-0000-0000-000000000007'))::text,
-  '(0,3)',
+  row(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000007'), pg_temp.sends('c6c6c6c6-0000-0000-0000-000000000007'), pg_temp.address_sends('c6-p7d@example.test'))::text,
+  '(0,3,1)',
   'withdrawing a request removes it and keeps it counted as a send'
 );
 
 select throws_ok(
-  $$select * from public.request_parent_consent(null, 'parent@example.test')$$,
+  $$select * from public.request_parent_consent(null, 'c6-p1@example.test')$$,
   'P0001',
   'account_not_found',
   'a request without an account is an error'
 );
 
-select pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000011', 'parent@example.test');
+select pg_temp.ask('c6c6c6c6-0000-0000-0000-000000000011', 'c6-p11@example.test');
 delete from auth.users where id = 'c6c6c6c6-0000-0000-0000-000000000011';
 select is(
   row(pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000011'), pg_temp.sends('c6c6c6c6-0000-0000-0000-000000000011'))::text,
@@ -237,16 +284,42 @@ select is(
   'deleting the account deletes its request and its sends'
 );
 
+update private.parent_consent_requests
+set created_at = now() - interval '7 days 1 second', expires_at = now() - interval '1 second'
+where user_id = 'c6c6c6c6-0000-0000-0000-000000000012';
+update private.parent_consent_sends set sent_at = now() - interval '24 hours 1 second' where user_id = 'c6c6c6c6-0000-0000-0000-000000000013';
+update private.parent_address_sends set sent_at = now() - interval '7 days 1 second' where address_hash = public.email_hash('c6-p8@example.test');
+select private.purge_parent_requests();
+select is(
+  row(
+    pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000012'),
+    pg_temp.requests('c6c6c6c6-0000-0000-0000-000000000013'),
+    pg_temp.sends('c6c6c6c6-0000-0000-0000-000000000013'),
+    pg_temp.sends('c6c6c6c6-0000-0000-0000-000000000014'),
+    pg_temp.address_sends('c6-p8@example.test'),
+    pg_temp.address_sends('c6-p9@example.test')
+  )::text,
+  '(0,1,0,1,0,1)',
+  'the nightly purge removes expired requests and the sends past their window, and nothing else'
+);
+select is(
+  (select count(*)::integer from cron.job where jobname = 'purge-parent-requests' and schedule = '50 2 * * *' and active and command = 'select private.purge_parent_requests()'),
+  1,
+  'the purge runs every night'
+);
+
 select pg_temp.login('c6c6c6c6-0000-0000-0000-000000000009');
-select throws_ok($$select * from public.request_parent_consent('c6c6c6c6-0000-0000-0000-000000000009', 'parent@example.test')$$, '42501', null, 'a user cannot ask a parent without the server');
+select throws_ok($$select * from public.request_parent_consent('c6c6c6c6-0000-0000-0000-000000000009', 'c6-p9@example.test')$$, '42501', null, 'a user cannot ask a parent without the server');
 select throws_ok($$select * from public.confirm_parent_consent('c6c6c6c6-0000-0000-0000-000000000009', '123456')$$, '42501', null, 'a user cannot confirm without the server');
 select throws_ok($$select public.withdraw_parent_request('c6c6c6c6-0000-0000-0000-000000000009', gen_random_uuid())$$, '42501', null, 'a user cannot withdraw a request');
+select throws_ok($$select private.purge_parent_requests()$$, '42501', null, 'a user cannot purge the requests');
 select throws_ok($$select * from private.parent_consent_requests$$, '42501', null, 'a user cannot read the requests');
-select throws_ok($$select * from private.parent_consent_sends$$, '42501', null, 'a user cannot read the sends');
+select throws_ok($$select * from private.parent_consent_sends$$, '42501', null, 'a user cannot read the sends of an account');
+select throws_ok($$select * from private.parent_address_sends$$, '42501', null, 'a user cannot read the sends to an address');
 reset role;
 
 select set_config('role', 'anon', true);
-select throws_ok($$select * from public.request_parent_consent('c6c6c6c6-0000-0000-0000-000000000009', 'parent@example.test')$$, '42501', null, 'a visitor cannot ask a parent');
+select throws_ok($$select * from public.request_parent_consent('c6c6c6c6-0000-0000-0000-000000000009', 'c6-p9@example.test')$$, '42501', null, 'a visitor cannot ask a parent');
 select throws_ok($$select * from public.confirm_parent_consent('c6c6c6c6-0000-0000-0000-000000000009', '123456')$$, '42501', null, 'a visitor cannot confirm');
 reset role;
 
@@ -256,6 +329,7 @@ select is(
   'no_request',
   'the server confirms through the function'
 );
+select throws_ok($$select * from private.parent_address_sends$$, '42501', null, 'the server reads no table of requests directly');
 reset role;
 
 select * from finish();

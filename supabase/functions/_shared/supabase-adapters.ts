@@ -589,7 +589,6 @@ const PARENT_CONFIRM_OUTCOMES: readonly string[] = [
   "no_request",
   "invalid_code",
   "code_expired",
-  "too_many_attempts",
   "wrong_code",
   "account_not_registered",
   "consent_version_outdated",

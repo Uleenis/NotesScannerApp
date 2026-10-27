@@ -112,7 +112,7 @@ Deno.test("request-parent-consent takes a body of exactly parent_email [3]", asy
 Deno.test("request-parent-consent refuses an invalid address or one over 254 characters before the database [3]", async () => {
   const long = `p@${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(56)}.test`;
   assertEquals(long.length, 255);
-  const addresses = ["", "parent", "parent@localhost", "par ent@example.test", "parent@example.test\r\nBcc: x@example.test", "<parent@example.test>", "parent@exa_mple.test", "a@b@example.test", long];
+  const addresses = ["", "parent", "parent@localhost", "par ent@example.test", "parent@example.test\r\nBcc: x@example.test", "<parent@example.test>", "parent@exa_mple.test", "a@b@example.test", ".parent@example.test", "parent.@example.test", "par..ent@example.test", "parent@-example.test", "parent@example-.test", "parent@example..test", "parent@example.t3st", "victim%host@example.test", `${"p".repeat(65)}@example.test`, long];
   for (const address of addresses) {
     const world = setup();
     const response = await ask(world, { parent_email: address });
@@ -161,6 +161,25 @@ Deno.test("request-parent-consent passes on each refusal of the database and sen
     assertEquals(await readJson(response), { error: outcome });
     assertEquals(world.outbox.sent, []);
   }
+});
+
+Deno.test("request-parent-consent accepts the usual shapes of an address [3]", async () => {
+  for (const address of ["parent@example.test", "first.last+kid@mail.example.co.uk", "p_1-2@a-b.example.fr", `${"p".repeat(64)}@example.test`]) {
+    const world = setup();
+    const response = await ask(world, { parent_email: address });
+    assertEquals(response.status, 200, address);
+  }
+});
+
+Deno.test("request-parent-consent fails without sending when the database answers requested without a code [3]", async () => {
+  const world = setup();
+  world.parents.request = (userId, parentEmail) => {
+    world.parents.requests.push({ userId, parentEmail });
+    return Promise.resolve({ outcome: "requested", requestId: REQUEST_ID, code: null });
+  };
+  const response = await ask(world, { parent_email: PARENT });
+  assertEquals(response.status, 500);
+  assertEquals(world.outbox.sent, []);
 });
 
 Deno.test("request-parent-consent withdraws the request when the e-mail cannot be sent [3]", async () => {
@@ -240,7 +259,6 @@ Deno.test("confirm-parent-consent passes on each refusal of the database [3]", a
     ["no_request", 404],
     ["invalid_code", 400],
     ["code_expired", 410],
-    ["too_many_attempts", 429],
     ["account_not_registered", 403],
     ["consent_version_outdated", 409],
     ["age_missing", 409],

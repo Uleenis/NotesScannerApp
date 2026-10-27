@@ -1,7 +1,21 @@
+create extension if not exists pgcrypto with schema extensions;
+
+create function private.is_parent_email(p_email text) returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select p_email is not null
+    and char_length(p_email) <= 254
+    and p_email ~ '^(?=[^@]{1,64}@)[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*@([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$';
+$$;
+
+revoke all on function private.is_parent_email(text) from public, anon, authenticated, service_role;
+
 create table private.parent_consent_requests (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references auth.users (id) on delete cascade,
-  parent_email text not null check (char_length(parent_email) between 3 and 254 and parent_email ~ '^[a-z0-9._%+-]{1,64}@[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$'),
+  parent_email text not null check (parent_email = lower(parent_email) and private.is_parent_email(parent_email)),
   code_hash text not null check (code_hash like '$2a$%'),
   attempts smallint not null default 0 check (attempts between 0 and 5),
   created_at timestamptz not null default now(),
@@ -24,6 +38,18 @@ revoke all on private.parent_consent_sends from public, anon, authenticated, ser
 
 alter table private.parent_consent_sends enable row level security;
 
+create table private.parent_address_sends (
+  address_hash bytea not null,
+  sent_at timestamptz not null default now()
+);
+
+create index parent_address_sends_address_idx on private.parent_address_sends (address_hash, sent_at);
+create index parent_address_sends_sent_idx on private.parent_address_sends (sent_at);
+
+revoke all on private.parent_address_sends from public, anon, authenticated, service_role;
+
+alter table private.parent_address_sends enable row level security;
+
 create function public.request_parent_consent(p_user_id uuid, p_parent_email text)
 returns table (outcome text, request_id uuid, code text)
 language plpgsql
@@ -35,6 +61,7 @@ declare
   v_email text;
   v_bytes bytea;
   v_code text;
+  v_hash bytea;
   v_id uuid;
 begin
   if p_user_id is null then
@@ -64,9 +91,7 @@ begin
     return;
   end if;
 
-  if p_parent_email is null
-    or char_length(p_parent_email) > 254
-    or p_parent_email !~ '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(\.[A-Za-z0-9-]{1,63})+$' then
+  if not private.is_parent_email(p_parent_email) then
     return query select 'invalid_email'::text, null::uuid, null::text;
     return;
   end if;
@@ -83,6 +108,15 @@ begin
     return;
   end if;
 
+  perform pg_advisory_xact_lock(hashtextextended('parent_address_sends', 0));
+  v_hash := public.email_hash(v_email);
+  delete from private.parent_address_sends a where a.sent_at <= now() - interval '7 days';
+  if (select count(*) from private.parent_address_sends a where a.address_hash = v_hash) >= 3
+    or (select count(*) from private.parent_address_sends a where a.sent_at > now() - interval '24 hours') >= 50 then
+    return query select 'send_limit'::text, null::uuid, null::text;
+    return;
+  end if;
+
   v_bytes := extensions.gen_random_bytes(4);
   v_code := lpad((
     ((get_byte(v_bytes, 0)::bigint << 24) | (get_byte(v_bytes, 1) << 16) | (get_byte(v_bytes, 2) << 8) | get_byte(v_bytes, 3))
@@ -94,6 +128,7 @@ begin
   values (p_user_id, v_email, extensions.crypt(v_code, extensions.gen_salt('bf', 8)), now(), now() + interval '7 days')
   returning id into v_id;
   insert into private.parent_consent_sends (user_id) values (p_user_id);
+  insert into private.parent_address_sends (address_hash) values (v_hash);
 
   return query select 'requested'::text, v_id, v_code;
 end;
@@ -146,15 +181,16 @@ begin
     return;
   end if;
   if v_request.expires_at <= now() then
+    delete from private.parent_consent_requests r where r.id = v_request.id;
     return query select 'code_expired'::text, null::integer;
     return;
   end if;
-  if v_request.attempts >= 5 then
-    return query select 'too_many_attempts'::text, null::integer;
-    return;
-  end if;
   if extensions.crypt(p_code, v_request.code_hash) is distinct from v_request.code_hash then
-    update private.parent_consent_requests r set attempts = r.attempts + 1 where r.id = v_request.id;
+    if v_request.attempts >= 4 then
+      delete from private.parent_consent_requests r where r.id = v_request.id;
+    else
+      update private.parent_consent_requests r set attempts = r.attempts + 1 where r.id = v_request.id;
+    end if;
     return query select 'wrong_code'::text, 4 - v_request.attempts::integer;
     return;
   end if;
@@ -178,3 +214,19 @@ $$;
 
 revoke all on function public.confirm_parent_consent(uuid, text) from public, anon, authenticated, service_role;
 grant execute on function public.confirm_parent_consent(uuid, text) to service_role;
+
+create function private.purge_parent_requests() returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  delete from private.parent_consent_requests r where r.expires_at <= now();
+  delete from private.parent_consent_sends s where s.sent_at <= now() - interval '24 hours';
+  delete from private.parent_address_sends a where a.sent_at <= now() - interval '7 days';
+end;
+$$;
+
+revoke all on function private.purge_parent_requests() from public, anon, authenticated, service_role;
+
+select cron.schedule('purge-parent-requests', '50 2 * * *', 'select private.purge_parent_requests()');

@@ -7,7 +7,6 @@ const REFUSALS: Record<Exclude<ParentConfirmOutcome, "confirmed" | "wrong_code">
   no_request: { status: 404, code: "no_request" },
   invalid_code: { status: 400, code: "invalid_code" },
   code_expired: { status: 410, code: "code_expired" },
-  too_many_attempts: { status: 429, code: "too_many_attempts" },
   account_not_registered: { status: 403, code: "account_not_registered" },
   consent_version_outdated: { status: 409, code: "consent_version_outdated" },
   age_missing: { status: 409, code: "age_missing" },
