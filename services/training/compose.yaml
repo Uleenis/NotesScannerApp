@@ -1,0 +1,40 @@
+name: notes-training
+
+services:
+  trainer:
+    image: notes-training:local
+    build:
+      context: ../reading
+      dockerfile: ../training/Dockerfile
+    container_name: notes-training
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      READING_ESPEAK_DIR: /run/espeak
+      HOME: /tmp
+    networks:
+      - supabase
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g
+      - /run/espeak:exec,nosuid,nodev,size=16m,mode=0700,uid=10002
+      - /work:size=8g,mode=0700,uid=10002
+    shm_size: 2gb
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+networks:
+  supabase:
+    name: supabase_network_NotesScannerApp
+    external: true

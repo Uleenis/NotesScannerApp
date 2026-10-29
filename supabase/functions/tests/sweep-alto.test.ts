@@ -35,7 +35,7 @@ function deps(bucket: Bucket, lines: string[] = [], step = 0): SweepAltoDeps {
   let now = 0;
   return {
     secret: SWEEP_SECRET,
-    sweeps: bucket,
+    sweeps: { alto: bucket, models: new Bucket([]), writingTests: new Bucket([]) },
     clock: { now: () => (now += step) },
     log: createLogger((line) => lines.push(line)),
   };
@@ -197,7 +197,7 @@ async function thrownBy(run: () => Promise<unknown>): Promise<unknown> {
 Deno.test("the orphans are asked of alto_orphans with the limit alone, as the service", async () => {
   const names = [altoPath(ALICE, 1), `${BOB}/${OTHER_PAGE_ID}/a-2.xml`];
   const { fetch, calls } = stub(() => ({ status: 200, body: names.map((name) => ({ name })) }));
-  assertEquals(await createSweepStore(KEYS, fetch).orphans(500), names);
+  assertEquals(await createSweepStore(KEYS, "alto", fetch).orphans(500), names);
   assertEquals(calls.length, 1);
   assertEquals(calls[0].method, "POST");
   assertEquals(calls[0].url.pathname, "/rest/v1/rpc/alto_orphans");
@@ -208,14 +208,14 @@ Deno.test("the orphans are asked of alto_orphans with the limit alone, as the se
 for (const name of ["photos/x.jpg", `${ALICE}/${PAGE_ID}`, `${ALICE}/${PAGE_ID}/../x.xml`, `${ALICE}/${PAGE_ID}/.hidden`, `${ALICE}/${PAGE_ID}/a/b.xml`, `${PAGE_ID.toUpperCase()}/${PAGE_ID}/a.xml`, 42, null]) {
   Deno.test(`an answer naming ${JSON.stringify(name)} is an error, never a file to erase`, async () => {
     const { fetch } = stub(() => ({ status: 200, body: [{ name: altoPath(ALICE, 1) }, { name }] }));
-    assertEquals((await thrownBy(() => createSweepStore(KEYS, fetch).orphans(500))) instanceof StoreError, true);
+    assertEquals((await thrownBy(() => createSweepStore(KEYS, "alto", fetch).orphans(500))) instanceof StoreError, true);
   });
 }
 
 Deno.test("an answer that is not a list, or a refused call, is an error", async () => {
   for (const reply of [{ status: 200, body: { name: altoPath(ALICE, 1) } }, { status: 500, body: { message: "boom" } }]) {
     const { fetch } = stub(() => reply);
-    assertEquals((await thrownBy(() => createSweepStore(KEYS, fetch).orphans(500))) instanceof StoreError, true);
+    assertEquals((await thrownBy(() => createSweepStore(KEYS, "alto", fetch).orphans(500))) instanceof StoreError, true);
   }
 });
 
@@ -225,7 +225,7 @@ Deno.test("erasing the orphans removes them from the alto bucket alone, 100 at m
     const prefixes = (call.body as { prefixes: string[] }).prefixes;
     return { status: 200, body: prefixes.slice(1).map((name) => ({ name })) };
   });
-  assertEquals(await createSweepStore(KEYS, fetch).remove(paths), 247);
+  assertEquals(await createSweepStore(KEYS, "alto", fetch).remove(paths), 247);
   assertEquals(calls.map((call) => [call.method, call.url.pathname]), [
     ["DELETE", "/storage/v1/object/alto"],
     ["DELETE", "/storage/v1/object/alto"],
@@ -237,5 +237,19 @@ Deno.test("erasing the orphans removes them from the alto bucket alone, 100 at m
 
 Deno.test("a storage failure while erasing is an error", async () => {
   const { fetch } = stub(() => ({ status: 500, body: { statusCode: "500", error: "internal", message: "Internal error" } }));
-  assertEquals((await thrownBy(() => createSweepStore(KEYS, fetch).remove([altoPath(ALICE, 1)]))) instanceof StoreError, true);
+  assertEquals((await thrownBy(() => createSweepStore(KEYS, "alto", fetch).remove([altoPath(ALICE, 1)]))) instanceof StoreError, true);
+});
+
+Deno.test("a failure on one kind of orphan does not stop the sweep of the others, and the night answers an error", async () => {
+  const lines: string[] = [];
+  const models = new Bucket([`${ALICE}/${PAGE_ID}.safetensors`]);
+  const response = await handleSweepAlto(sweep(SWEEP_SECRET), {
+    ...deps(new Bucket([altoPath(ALICE, 1)], { failOrphans: true }), lines),
+    sweeps: { alto: new Bucket([altoPath(ALICE, 1)], { failOrphans: true }), models, writingTests: new Bucket([]) },
+  });
+  assertEquals(response.status, 500);
+  assertEquals(models.alto, []);
+  const events = lines.map((line) => JSON.parse(line));
+  assertEquals(events.find((record) => record.event === "alto_swept")?.code, "interrupted");
+  assertEquals(events.find((record) => record.event === "models_swept")?.files, 1);
 });

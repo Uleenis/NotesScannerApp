@@ -11,7 +11,11 @@ if (!secret || secret.length < MIN_SECRET_LENGTH || secret !== secret.trim()) th
 
 const deps = {
   secret,
-  sweeps: createSweepStore(keys),
+  sweeps: {
+    alto: createSweepStore(keys, "alto"),
+    models: createSweepStore(keys, "models"),
+    writingTests: createSweepStore(keys, "writingTests"),
+  },
   clock: { now: () => Date.now() },
   log: consoleLogger,
 };

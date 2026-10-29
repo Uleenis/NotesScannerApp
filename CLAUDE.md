@@ -29,7 +29,8 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `supabase/templates/`: the e-mail templates, a code and never a link.
 - `supabase/functions/`: Edge Functions, their shared code in `_shared/`, their Deno tests in `tests/`.
 - `supabase/tests/database/`: pgTAP tests. `supabase/tests/concurrency/`: parallel-call tests.
-- `services/reading/`: the reading service (Python, FastAPI, Kraken): `/recognize` reads A from a photo, `/arbitrate` aligns A with B1 and B2, applies the rules and writes A through `record_reading_a`.
+- `services/reading/`: the reading service (Python, FastAPI, Kraken): `/recognize` reads A from a photo, `/arbitrate` aligns A with B1 and B2, applies the rules and writes A through `record_reading_a`. The same package holds the trainer (`harvest.py`, `training.py`, `trainer.py`), tested by `check.sh`.
+- `services/training/`: the image of the trainer (the reading package with torch for CUDA) and its compose file; never built in CI.
 - `scripts/merge-pr.mjs`: the only way a PR is merged. `scripts/deploy-function.mjs`: the only way an Edge Function is deployed. Their rules live in `scripts/merge-gate.ts`, tested by `tests/merge-gate.test.ts`.
 - `.githooks/pre-push`: refuses pushes to `main` and remote deletions.
 - `docs/slice.md`: the state of the current slice. `docs/architecture.md`: the detailed contracts of each part (bounds, answers, refusals), read for the part a branch touches.
@@ -52,6 +53,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 | `npm run service:build` | Build the image of the reading service |
 | `npm run service:test` | Build the check stage of the image and run ruff, mypy, pytest and pip-audit in it |
 | `npm run service:start` / `npm run service:stop` | Start the reading service on the network of the local stack (needs `db:start`), waiting until it answers, or stop it |
+| `npm run trainer:start` / `npm run trainer:stop` | Build and start the trainer on the GPU, on the network of the local stack, or stop it |
 | `node supabase/tests/manual/read-photo.cjs --photo <jpeg>` | Read one photo for real through `read-page` on the local stack (needs `functions serve` and the service), then wait for A |
 | `node supabase/tests/manual/reading-report.cjs [--page <id>] [--user <id>]` | For the last pages of the local stack: status, type, language, B1, A, positions by kind of anchor; no text |
 | `node scripts/merge-pr.mjs <number>` | Merge a PR through the gate of `main` |
@@ -124,15 +126,17 @@ The owner does not read the code. What protects `main` is the spec, the tests, t
 - Usage limits are enforced by Edge Functions, never by the app.
 - An e-mail address is kept by an account only once its code is proven (`enable_confirmations = true`, local and production).
 - No account is created in advance for an address: the hook `private.refuse_email_signup` (`[auth.hook.before_user_created]`, local and production) refuses every new account that comes from an e-mail or a phone number. Without it, anyone could create an account for someone else's address with a password they know, and keep access to it once the owner signs in by code. The signup settings stay open: turning off `enable_signup` blocks the anonymous accounts, turning off the e-mail one blocks the sign-in by code.
+- Training: `training-claim`, `training-upload` and `training-report` refuse everything without `TRAINING_SECRET` (32 characters at least, in `X-Training-Secret`, compared in constant time) and take bodies of exactly their fields; a task gives the trainer only the data of one consenting user (the accepted test, the active model, the 300 last read text pages, never math or retouched ones, with B1 and the corrections) through addresses signed for one hour and given without their host; the upload path is fixed by the database, `models/{user_id}/{attempt}.safetensors`; `training_tasks` is the server's alone, one open task per user and one claimed task at a time for the whole service; the active model is replaced only by `report_training_task`, under the user's lock with the consent active, when the new CER is lower and it writes no more planted faults correctly; a report after a withdrawal is refused and its file erased. The trainer holds the Supabase URL and `TRAINING_SECRET`, never the service key, loads only `.safetensors` files checked by their SHA-256 (the generic one included) and checkpoints of its own task folder, and erases that folder after each task.
 - `delete-account` takes the account from the verified token alone, never from the request, erases the files of the account in `photos`, `alto` and `models` before the account, then `alto` once more (an A that ended meanwhile; a failure there is logged as `account_files_left`, the deletion stands), and logs no identifier.
 - `transfer-account` takes both accounts from the two verified tokens alone (the first must be anonymous, the second registered), never from the request. It copies the photos, moves the rows in one transaction (`transfer_account_rows`, which rewrites the paths of photos and ALTO files), copies the ALTO files (after the rows, so that an A written meanwhile is not left behind), then erases the old files of the three buckets and the anonymous account; every step can be played again. It refuses while a page of the anonymous account is being read, is never stopped by a usage limit, and logs no identifier.
 
 ## Dependency audit allowlist
 
-`audit-ci.json` allows two high advisories, both in development tooling that never ships in the app. Remove an entry as soon as a fix can be taken.
+`audit-ci.json` allows three high advisories: two in development tooling that never ships in the app, one in the app pending the owner's answer. Remove an entry as soon as a fix can be taken.
 
 - `GHSA-86w9-cpqp-85rv`: `node-forge` 1.4.0 via `@expo/cli` code signing, lax RSA signature parsing.
 - `GHSA-mrhx-c7xc-m3w5`: `zod` 3.25.76 via `@expo/cli` and `eslint-plugin-react-hooks` (fixed in zod 4.6.6, a major version those tools do not take yet), memory exhaustion when validating oversized collections. Allowed on 24/10/2026 at the owner's choice; retry the upgrade with the next Expo SDK patch.
+- `GHSA-qr28-fpjm-wq7f`: `decode-uri-component` 0.2.2 via `expo-router` 57 and `query-string` 7, quadratic time on a long run of malformed percent-encoded text (a crafted deep link can stall the app). It ships in the app. The fix, 0.5.1, is ESM only and `query-string` 7 loads it with `require`; `expo-router` 58 (next Expo SDK) takes it. Allowed on 29/10/2026 as the safest option easy to undo, pending the owner's answer in `../Pour Tim.md`.
 
 `services/reading/audit-allowlist.txt` allows one advisory to pip-audit, in the reading service:
 

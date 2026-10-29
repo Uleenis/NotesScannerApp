@@ -44,6 +44,11 @@ export type LogEvent =
   | "writing_test_started"
   | "writing_test_checked"
   | "writing_test_failed"
+  | "training_claimed"
+  | "training_upload"
+  | "training_reported"
+  | "models_swept"
+  | "writing_tests_swept"
   | "writing_test_files_left"
   | "unexpected_error";
 

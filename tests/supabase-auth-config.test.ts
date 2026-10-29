@@ -85,7 +85,20 @@ test.each(["relaunch-page", "sweep-alto"])(
   },
 );
 
+test.each(["training-claim", "training-upload", "training-report"])(
+  "%s skips the token check, since the trainer proves itself with its own secret",
+  (name) => {
+    expect(section(`functions.${name}`).verify_jwt).toBe("false");
+  },
+);
+
 test("no other function skips the token check", () => {
   const names = [...config.matchAll(/^\[functions\.([a-z-]+)\]\r?$/gm)].map((match) => match[1]);
-  expect(names.filter((name) => section(`functions.${name}`).verify_jwt !== "true").sort()).toEqual(["relaunch-page", "sweep-alto"]);
+  expect(names.filter((name) => section(`functions.${name}`).verify_jwt !== "true").sort()).toEqual([
+    "relaunch-page",
+    "sweep-alto",
+    "training-claim",
+    "training-report",
+    "training-upload",
+  ]);
 });

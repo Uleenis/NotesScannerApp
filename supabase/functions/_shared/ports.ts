@@ -242,9 +242,11 @@ export type SweepStore = {
   remove: (paths: readonly string[]) => Promise<number>;
 };
 
+export type SweepKind = "alto" | "models" | "writingTests";
+
 export type SweepAltoDeps = {
   secret: string;
-  sweeps: SweepStore;
+  sweeps: Record<SweepKind, SweepStore>;
   clock: { now: () => number };
   log: Logger;
 };
@@ -323,5 +325,51 @@ export type ParentConsentDeps = {
   auth: Auth;
   parents: ParentConsentStore;
   mailer: Mailer | null;
+  log: Logger;
+};
+
+export type TrainingCorrection = { tokenIndex: number; text: string; readingA: string | null };
+
+export type TrainingPage = { pageId: string; b1: string; language: string | null; corrections: TrainingCorrection[] };
+
+export type ClaimedTask = {
+  taskId: string;
+  userId: string;
+  testId: string;
+  template: WritingTemplate;
+  model: { path: string; sha256: string } | null;
+  pages: TrainingPage[];
+};
+
+export type UploadOutcome = "ready" | "task_not_found" | "task_expired" | "consent_required";
+
+export type TrainingMeasures = {
+  cer: number;
+  baseCer: number;
+  faults: number;
+  baseFaults: number;
+  alphabet: number;
+  samples: number;
+  sha256: string;
+};
+
+export type TrainingReport = { outcome: "trained"; measures: TrainingMeasures } | { outcome: "failed" };
+
+export type ReportOutcome = "activated" | "rejected" | "failed" | "model_missing" | "task_not_found" | "task_expired" | "consent_required";
+
+export type TrainingBucket = "photos" | "models";
+
+export type TrainingStore = {
+  claim: () => Promise<ClaimedTask | null>;
+  uploadTarget: (taskId: string) => Promise<{ outcome: UploadOutcome; path: string | null }>;
+  report: (taskId: string, report: TrainingReport) => Promise<{ outcome: ReportOutcome; remove: string[] }>;
+  signedReads: (bucket: TrainingBucket, paths: readonly string[], seconds: number) => Promise<(string | null)[]>;
+  signedUpload: (path: string) => Promise<string>;
+  removeModels: (paths: readonly string[]) => Promise<void>;
+};
+
+export type TrainingDeps = {
+  secret: string;
+  training: TrainingStore;
   log: Logger;
 };
