@@ -84,6 +84,9 @@ export default function WritingTestScreen() {
   function useShot(uri: string) {
     forget(sheet - 1);
     setPhoto(sheet - 1, uri);
+    if (resume !== null && resume.uploaded[sheet - 1]) {
+      setResume(null);
+    }
     setProblem(null);
     setStage("write");
   }

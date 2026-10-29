@@ -1,6 +1,6 @@
 import { File } from "expo-file-system";
 
-import { uploadPhotoFile } from "@/capture/api";
+import { uploadPhoto } from "@/capture/api";
 import { getSupabase } from "@/lib/supabase";
 import { fetchWritingTest, requestCheck, startWritingTest, type Upload } from "./writing-api";
 import type { RunDeps } from "./run-writing-test";
@@ -11,7 +11,15 @@ export function realRunDeps(): RunDeps {
   const client = getSupabase();
   return {
     start: (template) => startWritingTest(client, template),
-    upload: (upload: Upload, photoUri) => uploadPhotoFile(client, new File(photoUri), upload.path, upload.token),
+    upload: async (upload: Upload, photoUri) => {
+      let bytes: Uint8Array;
+      try {
+        bytes = await new File(photoUri).bytes();
+      } catch {
+        return "failed";
+      }
+      return uploadPhoto(client, upload.path, upload.token, bytes);
+    },
     check: (testId) => requestCheck(client, testId),
     read: (testId) => fetchWritingTest(client, testId),
     wait: POLL_PAUSE,

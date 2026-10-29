@@ -251,14 +251,42 @@ Deno.test("check-writing-test erases the photos of the tests an accepted test re
   assertEquals(filesOfTest(world, ALICE, second).length, 2);
 });
 
-Deno.test("check-writing-test erases the photos when the consent was withdrawn during the check [5]", async () => {
+Deno.test("check-writing-test leaves the photos alone when the test is no longer pending at the end of the check [5]", async () => {
   const world = consenting();
   const id = await started(world);
   photograph(world, ALICE, id);
   world.beforeFinish = () => {
-    world.writingTests.delete(id);
+    world.writingTests.get(id)!.status = "accepted";
   };
   await check(world, TOKEN_ALICE, { test_id: id });
+  await world.settle();
+  assertEquals(filesOfTest(world, ALICE, id).length, 2);
+});
+
+Deno.test("check-writing-test leaves the photos alone when it fails after another check accepted the test [5]", async () => {
+  const world = consenting();
+  const id = await started(world);
+  photograph(world, ALICE, id);
+  world.checkOutcomes.push({ ok: false, failure: { kind: "http_error", status: 503, code: "busy" } });
+  world.beforeFinish = () => undefined;
+  world.writingTests.get(id)!.status = "accepted";
+  const response = await handleCheckWritingTest(post(TOKEN_ALICE, { test_id: id }), { ...world.checkWritingDeps(), tests: { ...world.writingStore(), pending: () => Promise.resolve({ template: "fr" }) } });
+  assertEquals(response.status, 202);
+  await world.settle();
+  assertEquals(world.writingTests.get(id)?.status, "accepted");
+  assertEquals(filesOfTest(world, ALICE, id).length, 2);
+});
+
+Deno.test("check-writing-test erases the photos when the consent is gone at the end of the check [5]", async () => {
+  const world = consenting();
+  const id = await started(world);
+  photograph(world, ALICE, id);
+  const store = world.writingStore();
+  const deps = {
+    ...world.checkWritingDeps(),
+    tests: { ...store, finish: () => Promise.resolve({ outcome: "consent_required" as const, redo: [], replaced: [] }) },
+  };
+  await handleCheckWritingTest(post(TOKEN_ALICE, { test_id: id }), deps);
   await world.settle();
   assertEquals(filesOfTest(world, ALICE, id), []);
 });

@@ -154,17 +154,16 @@ def count_sheet(template: str, sheet: int, read: Sequence[str]) -> SheetCount:
         starts.append(offset)
         offset += len(line) + 1
     first_line = (sheet - 1) * SHEET_LINES
-    training = 0
-    validation = 0
+    training: set[int] = set()
+    validation: set[int] = set()
     for text, piece in zip(read, cut(reference, read), strict=True):
         if piece.first < 0 or cer(text, piece.text) > MAX_CER:
             continue
         begins = first_line + line_of(starts, piece.first)
         ends = first_line + line_of(starts, piece.last)
+        covered = range(begins, ends + 1)
         if ends < TRAINING_LINES:
-            training += 1
+            training.update(covered)
         elif begins >= TRAINING_LINES:
-            validation += 1
-    own_training = max(0, min(TRAINING_LINES - first_line, SHEET_LINES))
-    own_validation = SHEET_LINES - own_training
-    return SheetCount(lines=len(read), training=min(training, own_training), validation=min(validation, own_validation))
+            validation.update(covered)
+    return SheetCount(lines=len(read), training=len(training), validation=len(validation))

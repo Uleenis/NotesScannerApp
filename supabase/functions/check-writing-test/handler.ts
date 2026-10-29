@@ -77,7 +77,7 @@ async function settle(deps: CheckWritingTestDeps, userId: string, testId: string
     validation: counts.sheet2Validation,
   });
   if (finished.outcome === "accepted") await erase(deps, userId, finished.replaced);
-  else await erase(deps, userId, [testId]);
+  else if (finished.outcome !== "test_not_found") await erase(deps, userId, [testId]);
 }
 
 async function run(deps: CheckWritingTestDeps, service: ReadingService, userId: string, testId: string, template: WritingTemplate): Promise<void> {
@@ -89,12 +89,13 @@ async function run(deps: CheckWritingTestDeps, service: ReadingService, userId: 
   } catch (error) {
     const failure = error instanceof ServiceUnavailable ? error.failure : null;
     deps.log.event("writing_test_failed", { errorName: errorName(error), kind: failure?.kind, status: failure?.status, code: failure?.code });
+    let marked = false;
     try {
-      await deps.tests.fail(userId, testId);
+      marked = await deps.tests.fail(userId, testId);
     } catch {
       deps.log.event("writing_test_files_left");
     }
-    await erase(deps, userId, [testId]);
+    if (marked) await erase(deps, userId, [testId]);
   }
 }
 

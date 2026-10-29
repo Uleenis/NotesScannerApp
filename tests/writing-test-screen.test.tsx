@@ -319,6 +319,22 @@ describe("the check", () => {
     expect(captureService.discardPhoto).toHaveBeenCalledWith("file:///cache/sheet-2.jpg");
   });
 
+  test("a sheet photographed again after its upload starts a new test, so that the new photo is the one checked", async () => {
+    deps.upload.mockResolvedValueOnce("uploaded").mockResolvedValueOnce("refused");
+    await open();
+    await photographBoth();
+    await send();
+    await screen.findByText(fr.training.writing.errors.photo);
+
+    await photograph(1, true);
+    await photograph(2);
+    await send();
+
+    expect(await screen.findByText(fr.training.writing.acceptedTitle)).toBeTruthy();
+    expect(deps.start).toHaveBeenCalledTimes(2);
+    expect(deps.upload).toHaveBeenLastCalledWith(UPLOADS[1], "file:///cache/sheet-4.jpg");
+  });
+
   test("shows the same sentences in English", async () => {
     jest.mocked(useLocales).mockReturnValue([phoneLocale("en")]);
     deps.read.mockResolvedValue({ status: "rejected", training: 12, validation: 10, redo: [2] });

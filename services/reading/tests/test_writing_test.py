@@ -139,12 +139,35 @@ def test_a_line_that_covers_the_end_of_training_and_the_start_of_validation_is_d
     assert count_sheet("fr", 2, merged) == SheetCount(lines=19, training=9, validation=9)
 
 
-def test_lines_cut_in_two_are_counted_once_per_line_of_the_model_at_most() -> None:
+def test_a_line_of_the_model_cut_in_two_counts_once() -> None:
     lines = list(template_lines("fr"))[:20]
     halves = [half for line in lines for half in (line[:20], line[20:])]
     counted = count_sheet("fr", 1, halves)
     assert counted.lines == 40
     assert counted.training == 20
+
+
+def test_lines_of_the_model_missing_from_the_page_are_not_made_up_by_cut_lines() -> None:
+    lines = list(template_lines("fr"))[:20]
+    kept = lines[:16]
+    halves = [half for line in kept for half in (line[:20], line[20:])]
+    assert count_sheet("fr", 1, halves).training == 16
+
+
+def test_two_lines_of_the_model_read_as_one_count_as_two() -> None:
+    lines = list(template_lines("fr"))[:20]
+    merged = [lines[0] + " " + lines[1], *lines[2:]]
+    assert count_sheet("fr", 1, merged) == SheetCount(lines=19, training=20, validation=0)
+
+
+def test_the_threshold_holds_through_the_count_of_a_sheet() -> None:
+    lines = list(template_lines("fr"))[:20]
+    size = len(lines[4])
+    edits = int(MAX_CER * size)
+    at_threshold = [*lines[:4], "#" * edits + lines[4][edits:], *lines[5:]]
+    over_threshold = [*lines[:4], "#" * (edits + 1) + lines[4][edits + 1 :], *lines[5:]]
+    assert count_sheet("fr", 1, at_threshold).training == 20
+    assert count_sheet("fr", 1, over_threshold).training == 19
 
 
 def test_text_that_is_not_the_template_keeps_nothing() -> None:
