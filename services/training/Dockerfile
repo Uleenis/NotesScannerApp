@@ -7,7 +7,7 @@ ADD --checksum=sha256:15313b51ace64cbfa81f8f6ef25ad64f04e5a6fb7f7823e67b107527bc
     https://zenodo.org/api/records/21788410/files/medium.safetensors/content /medium.safetensors
 
 FROM python:3.13.15-slim-trixie@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS runtime
-ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
+ARG TORCH_CUDA=cu130
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
@@ -27,8 +27,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     && uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes --no-header --no-annotate \
         --output-file /tmp/locked.txt > /dev/null \
     && grep -v -E '^(torch|torchvision)==' /tmp/locked.txt > /tmp/requirements.txt \
-    && uv pip install --python /opt/venv --index-url "$TORCH_INDEX" --extra-index-url https://pypi.org/simple \
-        --index-strategy unsafe-best-match --constraint /tmp/requirements.txt torch==2.14.0 torchvision==0.29.0 \
+    && uv pip install --python /opt/venv --index-url "https://download.pytorch.org/whl/$TORCH_CUDA" \
+        --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match --constraint /tmp/requirements.txt \
+        "torch==2.14.0+$TORCH_CUDA" "torchvision==0.29.0+$TORCH_CUDA" \
     && uv pip install --python /opt/venv --no-deps --requirement /tmp/requirements.txt
 COPY --from=model --chmod=a=rX /medium.safetensors /models/medium.safetensors
 COPY src ./src
