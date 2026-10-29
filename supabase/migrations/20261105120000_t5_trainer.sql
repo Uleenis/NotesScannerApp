@@ -55,14 +55,16 @@ as $$
     )
     and (
       (select l.created_at from last_task l) is null
-      or (select l.created_at from last_task l) < (select t.checked_at from test t)
       or (
         (select l.created_at from last_task l) <= now() - interval '24 hours'
         and (
-          select count(*) from public.pages g
-          where g.user_id = p_user_id and g.status = 'read' and g.page_type = 'text'
-            and g.read_at > (select l.created_at from last_task l)
-        ) >= 20
+          (select l.created_at from last_task l) < (select t.checked_at from test t)
+          or (
+            select count(*) from public.pages g
+            where g.user_id = p_user_id and g.status = 'read' and g.page_type = 'text'
+              and g.read_at > (select l.created_at from last_task l)
+          ) >= 20
+        )
       )
     );
 $$;
@@ -178,13 +180,23 @@ declare
   v_model record;
   v_attempt uuid;
   v_pages jsonb;
+  v_stale record;
 begin
-  update public.training_tasks k
-  set status = case when k.attempts >= 2 then 'failed' else 'queued' end,
-      finished_at = case when k.attempts >= 2 then now() end,
-      attempt_id = case when k.attempts >= 2 then k.attempt_id end,
-      claimed_at = case when k.attempts >= 2 then k.claimed_at end
-  where k.status = 'claimed' and k.claimed_at < now() - interval '2 hours';
+  perform pg_advisory_xact_lock(hashtextextended('training_claim', 0));
+
+  for v_stale in
+    select k.id, k.user_id, k.attempts from public.training_tasks k
+    where k.status = 'claimed' and k.claimed_at < now() - interval '2 hours'
+    order by k.user_id
+  loop
+    if pg_try_advisory_xact_lock(hashtextextended(v_stale.user_id::text, 0)) then
+      perform private.expire_task(v_stale.id, v_stale.attempts);
+    end if;
+  end loop;
+
+  if exists (select 1 from public.training_tasks k where k.status = 'claimed') then
+    return null;
+  end if;
 
   for v_user in
     select c.user_id from public.consents c
@@ -195,7 +207,9 @@ begin
       )
     order by c.user_id
   loop
-    perform private.enqueue_training(v_user);
+    if pg_try_advisory_xact_lock(hashtextextended(v_user::text, 0)) then
+      perform private.enqueue_training(v_user);
+    end if;
   end loop;
 
   for i in 1..20 loop
@@ -203,13 +217,16 @@ begin
     from public.training_tasks k
     where k.status = 'queued'
     order by k.created_at, k.id
-    limit 1
-    for update skip locked;
+    limit 1;
     if not found then
       return null;
     end if;
 
     perform pg_advisory_xact_lock(hashtextextended(v_user::text, 0));
+    perform 1 from public.training_tasks k where k.id = v_task and k.status = 'queued' for update;
+    if not found then
+      continue;
+    end if;
 
     select t.id, t.template into v_test
     from public.writing_tests t
@@ -293,7 +310,7 @@ as $$
       finished_at = case when p_attempts >= 2 then now() end,
       attempt_id = case when p_attempts >= 2 then k.attempt_id end,
       claimed_at = case when p_attempts >= 2 then k.claimed_at end
-  where k.id = p_task_id;
+  where k.id = p_task_id and k.status = 'claimed';
 $$;
 
 revoke all on function private.expire_task(uuid, smallint) from public, anon, authenticated, service_role;
@@ -370,8 +387,8 @@ begin
     raise exception 'invalid_report' using errcode = '22023';
   end if;
   if p_outcome = 'trained' and (
-    p_cer is null or p_cer < 0 or p_cer > 100
-    or p_base_cer is null or p_base_cer < 0 or p_base_cer > 100
+    p_cer is null or p_cer < 0 or p_cer > 10
+    or p_base_cer is null or p_base_cer < 0 or p_base_cer > 10
     or p_faults is null or p_faults not between 0 and 8
     or p_base_faults is null or p_base_faults not between 0 and 8
     or p_alphabet is null or p_alphabet not between 1 and 10000

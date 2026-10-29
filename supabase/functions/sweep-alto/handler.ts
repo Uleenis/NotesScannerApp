@@ -10,29 +10,31 @@ const KINDS: readonly [SweepKind, LogEvent][] = [["alto", "alto_swept"], ["model
 export async function handleSweepAlto(request: Request, deps: SweepAltoDeps): Promise<Response> {
   let start: number | null = null;
   let removed = 0;
-  let current: LogEvent = "alto_swept";
-  let files = 0;
+  let failure: unknown = null;
   try {
     const refused = await admitSweep(request, deps.secret, deps.log);
     if (refused) return refused;
     start = deps.clock.now();
     for (const [kind, event] of KINDS) {
-      current = event;
-      files = 0;
-      const sweeps = deps.sweeps[kind];
-      for (let batch = 0; batch < MAX_BATCHES; batch++) {
-        const paths = await sweeps.orphans(BATCH_SIZE);
-        if (paths.length === 0) break;
-        const count = await sweeps.remove(paths);
-        files += count;
-        if (paths.length < BATCH_SIZE || count < paths.length || deps.clock.now() - start >= BUDGET_MS) break;
+      let files = 0;
+      try {
+        const sweeps = deps.sweeps[kind];
+        for (let batch = 0; batch < MAX_BATCHES; batch++) {
+          const paths = await sweeps.orphans(BATCH_SIZE);
+          if (paths.length === 0) break;
+          const count = await sweeps.remove(paths);
+          files += count;
+          if (paths.length < BATCH_SIZE || count < paths.length || deps.clock.now() - start >= BUDGET_MS) break;
+        }
+        deps.log.event(event, { files, durationMs: deps.clock.now() - start });
+      } catch (error) {
+        failure ??= error;
+        deps.log.event(event, { files, durationMs: deps.clock.now() - start, code: "interrupted" });
       }
       removed += files;
-      deps.log.event(event, { files, durationMs: deps.clock.now() - start });
     }
-    return json(200, { removed });
+    return failure === null ? json(200, { removed }) : failed(deps.log, failure);
   } catch (error) {
-    if (start !== null) deps.log.event(current, { files, durationMs: deps.clock.now() - start, code: "interrupted" });
     return failed(deps.log, error);
   }
 }

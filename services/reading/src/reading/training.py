@@ -27,6 +27,7 @@ MAX_SAMPLES = 20_000
 TRAIN_SECONDS = 60 * 60
 WEIGHTS = ".safetensors"
 CHECKPOINT = re.compile(r"^checkpoint_\d+-(\d+\.\d+)\.ckpt$")
+BEST = re.compile(r"^best_(\d+\.\d+)\.safetensors$")
 CHARACTERS = re.compile(r"^(\d+)\s+Characters$", re.MULTILINE)
 ERRORS = re.compile(r"^(\d+)\s+Errors$", re.MULTILINE)
 
@@ -106,8 +107,10 @@ def best_checkpoint(output: Path, task_dir: Path) -> Path | None:
 
 
 def best_weights(output: Path) -> Path | None:
-    found = sorted(output.glob(f"best_*{WEIGHTS}"))
-    return found[-1] if found else None
+    found = [
+        (float(match.group(1)), path) for path in output.glob(f"best_*{WEIGHTS}") if (match := BEST.match(path.name))
+    ]
+    return max(found, key=lambda item: (item[0], item[1].name))[1] if found else None
 
 
 def ketos_train_command(

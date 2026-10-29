@@ -12,14 +12,14 @@ services:
         required: false
     environment:
       READING_ESPEAK_DIR: /run/espeak
+      HOME: /tmp
     networks:
       - supabase
     read_only: true
     tmpfs:
       - /tmp:size=2g
       - /run/espeak:exec,nosuid,nodev,size=16m,mode=0700,uid=10002
-    volumes:
-      - work:/work
+      - /work:size=8g,mode=0700,uid=10002
     shm_size: 2gb
     security_opt:
       - no-new-privileges:true
@@ -33,9 +33,6 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-
-volumes:
-  work:
 
 networks:
   supabase:

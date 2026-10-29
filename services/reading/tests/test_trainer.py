@@ -15,8 +15,10 @@ from reading.trainer import (
     SupabaseApi,
     Task,
     TaskError,
+    main,
     page_of,
     run_task,
+    serve,
     task_of,
 )
 from reading.training import sha256_of
@@ -92,6 +94,8 @@ class FakeMachine:
         self.folder_seen = folder_seen
         self.produce = produce
         self.converted: list[Path] = []
+        self.timeouts: list[float] = []
+        self.released = 0
 
     def reader(self, model: Path) -> LineReader:
         self.readers.append(model)
@@ -102,6 +106,7 @@ class FakeMachine:
 
     def run(self, command: Sequence[str], timeout: float) -> tuple[int, str]:
         self.commands.append(list(command))
+        self.timeouts.append(timeout)
         if "train" in command:
             output = Path(command[command.index("-o") + 1])
             self.folder_seen.append(output.parent)
@@ -116,6 +121,9 @@ class FakeMachine:
         self.converted.append(checkpoint)
         target.write_bytes(weights_bytes())
         return target
+
+    def release(self) -> None:
+        self.released += 1
 
 
 def settings(tmp_path: Path) -> Settings:
@@ -304,3 +312,78 @@ def test_the_fingerprint_helper_hashes_the_file(tmp_path: Path) -> None:
     path = tmp_path / "m.safetensors"
     path.write_bytes(weights_bytes())
     assert sha256_of(path) == sha256_of_bytes(weights_bytes())
+
+
+class Clock:
+    def __init__(self, step: float) -> None:
+        self.now = 0.0
+        self.step = step
+
+    def __call__(self) -> float:
+        self.now += self.step
+        return self.now
+
+
+def test_the_pages_stop_once_the_harvest_budget_is_spent(tmp_path: Path) -> None:
+    pages = tuple(
+        page_of({"photo": PHOTO, "b1": "Le chat dort", "language": "fr", "corrections": []}) for _ in range(50)
+    )
+    api = FakeApi(FILES)
+    long_task = Task(TASK_ID, "fr", (SHEET_1, SHEET_2), None, pages)
+    assert run_task(long_task, api, FakeMachine([]), settings(tmp_path), never, Clock(20 * 60)) == "trained"
+    assert api.reports[0]["samples"] == 31
+
+
+def test_training_gets_only_the_time_left_before_the_claim_ends(tmp_path: Path) -> None:
+    machine = FakeMachine([])
+    assert run_task(task(), FakeApi(FILES), machine, settings(tmp_path), never, Clock(15 * 60)) == "trained"
+    assert machine.timeouts[0] == 100 * 60 - 20 * 60 - 2 * 15 * 60
+    assert machine.released == 1
+
+
+def test_a_task_without_ten_minutes_left_to_train_fails_before_training(tmp_path: Path) -> None:
+    api = FakeApi(FILES)
+    machine = FakeMachine([])
+    assert run_task(task(), api, machine, settings(tmp_path), never, Clock(36 * 60)) == "failed"
+    assert machine.commands == []
+    assert api.reports == [{"task_id": TASK_ID, "outcome": "failed"}]
+
+
+def test_a_task_the_trainer_cannot_read_is_reported_failed() -> None:
+    reports: list[httpx2.Request] = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/functions/v1/training-claim":
+            return httpx2.Response(200, json=answer(template="de"))
+        reports.append(request)
+        return httpx2.Response(200, json={"outcome": "failed"})
+
+    api = SupabaseApi("https://project.supabase.co", "s" * 40, httpx2.Client(transport=httpx2.MockTransport(respond)))
+    with pytest.raises(TaskError):
+        api.claim()
+    assert [request.url.path for request in reports] == ["/functions/v1/training-report"]
+    assert b'"outcome":"failed"' in reports[0].content.replace(b" ", b"")
+
+
+def test_serve_runs_each_claimed_task_and_waits_when_there_is_none(tmp_path: Path) -> None:
+    queue: list[Task | None] = [task(), None]
+    api = FakeApi(FILES)
+    api.claim = lambda: queue.pop(0)  # type: ignore[method-assign]
+    serve(api, FakeMachine([]), settings(tmp_path), never, 0.0, lambda: not queue)
+    assert [report["outcome"] for report in api.reports] == ["trained"]
+
+
+def test_the_trainer_does_not_start_without_its_secret_or_with_a_wrong_generic_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
+    monkeypatch.setenv("TRAINING_WORK", str(work))
+    monkeypatch.delenv("TRAINING_SECRET", raising=False)
+    assert main() == 1
+    monkeypatch.setenv("TRAINING_SECRET", "s" * 40)
+    wrong = tmp_path / "medium.safetensors"
+    wrong.write_bytes(weights_bytes())
+    monkeypatch.setenv("TRAINING_MODEL", str(wrong))
+    assert main() == 1

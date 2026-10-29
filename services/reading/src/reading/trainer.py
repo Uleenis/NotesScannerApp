@@ -51,6 +51,10 @@ SIGNED = re.compile(r"^/storage/v1/object/sign/(photos|models)/[0-9A-Za-z/._-]+\
 UPLOAD = re.compile(r"^/storage/v1/object/upload/sign/models/[0-9a-f/-]+\.safetensors\?token=[0-9A-Za-z._-]+$")
 INTERRUPT_GRACE = 120.0
 TEST_SECONDS = 600
+TASK_SECONDS = 100 * 60
+HARVEST_SECONDS = 40 * 60
+RESERVE_SECONDS = 20 * 60
+MIN_TRAIN_SECONDS = 10 * 60
 
 log = logging.getLogger("reading.trainer")
 
@@ -111,6 +115,17 @@ def page_of(value: object) -> Page:
             raise TaskError("bad correction")
         found[index] = Correction(index, text, reading_a)
     return Page(signed(value["photo"], "photos"), b1, language, found)
+
+
+def claimed_id(value: object) -> str | None:
+    task = value.get("task") if isinstance(value, dict) else None
+    task_id = task.get("task_id") if isinstance(task, dict) else None
+    if not isinstance(task_id, str):
+        return None
+    try:
+        return task_id if str(uuid.UUID(task_id)) == task_id else None
+    except ValueError:
+        return None
 
 
 def task_of(value: object) -> Task | None:
@@ -174,7 +189,14 @@ class SupabaseApi:
         return response.json()
 
     def claim(self) -> Task | None:
-        return task_of(self._call("training-claim", {}))
+        answer = self._call("training-claim", {})
+        try:
+            return task_of(answer)
+        except (TaskError, ValueError):
+            task_id = claimed_id(answer)
+            if task_id is not None:
+                self.report(task_id, {"outcome": "failed"})
+            raise
 
     def download(self, address: str, target: Path, max_bytes: int) -> None:
         received = 0
@@ -224,6 +246,8 @@ class Machine(Protocol):
 
     def convert(self, checkpoint: Path, target: Path) -> Path: ...
 
+    def release(self) -> None: ...
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -250,13 +274,15 @@ def open_downloaded(path: Path) -> Image.Image:
     return open_photo(path.read_bytes())
 
 
-def train(machine: Machine, settings: Settings, folder: Path, train_list: Path, validation_list: Path) -> Path:
+def train(
+    machine: Machine, settings: Settings, folder: Path, train_list: Path, validation_list: Path, seconds: float
+) -> Path:
     output = folder / "output"
     output.mkdir()
     command = ketos_train_command(
         settings.ketos, settings.generic, train_list, validation_list, output, settings.device
     )
-    machine.run(command, TRAIN_SECONDS)
+    machine.run(command, seconds)
     weights = best_weights(output)
     if weights is None:
         checkpoint = best_checkpoint(output, folder)
@@ -277,7 +303,15 @@ def measure_cer(machine: Machine, settings: Settings, model: Path, validation_li
     return report_cer(report)
 
 
-def run_task(task: Task, api: Api, machine: Machine, settings: Settings, homophones: Homophones) -> str:
+def run_task(
+    task: Task,
+    api: Api,
+    machine: Machine,
+    settings: Settings,
+    homophones: Homophones,
+    clock: Callable[[], float] = time.monotonic,
+) -> str:
+    started = clock()
     folder = settings.work / task.task_id
     try:
         folder.mkdir(parents=True)
@@ -301,7 +335,7 @@ def run_task(task: Task, api: Api, machine: Machine, settings: Settings, homopho
             raise TaskError("the test gives no line")
 
         for page in task.pages:
-            if len(training) >= MAX_SAMPLES:
+            if len(training) >= MAX_SAMPLES or clock() - started >= HARVEST_SECONDS:
                 break
             target = folder / "page.jpg"
             try:
@@ -312,10 +346,15 @@ def run_task(task: Task, api: Api, machine: Machine, settings: Settings, homopho
                 continue
             training += harvest(page.b1, lines, page.corrections, page.language, homophones)
         training = training[:MAX_SAMPLES]
+        del reader
+        machine.release()
+        seconds = min(TRAIN_SECONDS, TASK_SECONDS - RESERVE_SECONDS - (clock() - started))
+        if seconds < MIN_TRAIN_SECONDS:
+            raise TaskError("no time left to train")
 
         train_list = write_samples(folder / "train", training)
         validation_list = write_samples(folder / "validation", [v.sample for v in validation])
-        model = train(machine, settings, folder, train_list, validation_list)
+        model = train(machine, settings, folder, train_list, validation_list, seconds)
 
         cer = measure_cer(machine, settings, model, validation_list)
         base_cer = measure_cer(machine, settings, base, validation_list)
@@ -393,6 +432,15 @@ class KrakenMachine:
         from kraken.models.convert import convert_models
 
         return Path(convert_models([str(checkpoint)], str(target)))
+
+    def release(self) -> None:
+        import gc
+
+        import torch
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 def generic_model(path: Path) -> Path:

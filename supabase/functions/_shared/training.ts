@@ -6,6 +6,7 @@ export const TRAINING_SECRET_HEADER = "x-training-secret";
 export const SIGNED_URL_SECONDS = 3600;
 
 const SHA256 = /^[0-9a-f]{64}$/;
+const MAX_CER = 10;
 const MEASURE_KEYS = ["task_id", "outcome", "cer", "base_cer", "faults", "base_faults", "alphabet", "samples", "sha256"];
 
 export function admitTraining(request: Request, secret: string, log: Logger): Promise<Record<string, unknown> | Response> {
@@ -24,7 +25,7 @@ export function taskIdOf(body: Record<string, unknown>): string | null {
 }
 
 function rate(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= MAX_CER ? value : null;
 }
 
 function count(value: unknown, low: number, high: number): number | null {

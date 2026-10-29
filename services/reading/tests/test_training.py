@@ -12,6 +12,7 @@ from reading.training import (
     ValidationSample,
     alphabet_of,
     best_checkpoint,
+    best_weights,
     checked_model,
     faults_of,
     faults_written_correctly,
@@ -156,3 +157,9 @@ def test_each_template_lists_eight_faults_on_validation_lines() -> None:
 
 def test_the_alphabet_is_the_characters_of_the_training_lines() -> None:
     assert alphabet_of([Sample(Image.new("L", (1, 1)), "abc"), Sample(Image.new("L", (1, 1)), "cd é")]) == 6
+
+
+def test_the_best_weights_are_chosen_by_their_score(tmp_path: Path) -> None:
+    for name in ("best_0.9100.safetensors", "best_0.8000.safetensors", "best_0.95.safetensors", "other.safetensors"):
+        (tmp_path / name).write_bytes(b"x")
+    assert best_weights(tmp_path) == tmp_path / "best_0.95.safetensors"

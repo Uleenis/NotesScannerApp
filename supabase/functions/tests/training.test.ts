@@ -106,7 +106,7 @@ for (const [name, handle, body] of HANDLERS) {
   }
 
   Deno.test(`${name} refuses everything when no secret is configured`, async () => {
-    for (const configured of ["", "short-secret"]) {
+    for (const configured of ["", "short-secret", ` ${TRAINING_SECRET}`]) {
       const training = new Training();
       const response = await handle(call(configured, body), deps(training, [], configured));
       assertEquals(response.status, 401);
@@ -237,7 +237,8 @@ for (const [label, body] of [
   ["a missing measure", { task_id: TASK_ID, outcome: "trained", ...MEASURES, sha256: undefined }],
   ["an extra field", { task_id: TASK_ID, outcome: "trained", ...MEASURES, user_id: BOB }],
   ["a negative CER", { task_id: TASK_ID, outcome: "trained", ...MEASURES, cer: -0.1 }],
-  ["a CER above 100", { task_id: TASK_ID, outcome: "trained", ...MEASURES, base_cer: 101 }],
+  ["a CER above 10", { task_id: TASK_ID, outcome: "trained", ...MEASURES, base_cer: 11 }],
+  ["a CER given in percent", { task_id: TASK_ID, outcome: "trained", ...MEASURES, cer: 12.9 }],
   ["nine faults", { task_id: TASK_ID, outcome: "trained", ...MEASURES, faults: 9 }],
   ["a fraction of a fault", { task_id: TASK_ID, outcome: "trained", ...MEASURES, base_faults: 1.5 }],
   ["no sample", { task_id: TASK_ID, outcome: "trained", ...MEASURES, samples: 0 }],

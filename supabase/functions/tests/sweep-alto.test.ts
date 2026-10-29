@@ -239,3 +239,17 @@ Deno.test("a storage failure while erasing is an error", async () => {
   const { fetch } = stub(() => ({ status: 500, body: { statusCode: "500", error: "internal", message: "Internal error" } }));
   assertEquals((await thrownBy(() => createSweepStore(KEYS, "alto", fetch).remove([altoPath(ALICE, 1)]))) instanceof StoreError, true);
 });
+
+Deno.test("a failure on one kind of orphan does not stop the sweep of the others, and the night answers an error", async () => {
+  const lines: string[] = [];
+  const models = new Bucket([`${ALICE}/${PAGE_ID}.safetensors`]);
+  const response = await handleSweepAlto(sweep(SWEEP_SECRET), {
+    ...deps(new Bucket([altoPath(ALICE, 1)], { failOrphans: true }), lines),
+    sweeps: { alto: new Bucket([altoPath(ALICE, 1)], { failOrphans: true }), models, writingTests: new Bucket([]) },
+  });
+  assertEquals(response.status, 500);
+  assertEquals(models.alto, []);
+  const events = lines.map((line) => JSON.parse(line));
+  assertEquals(events.find((record) => record.event === "alto_swept")?.code, "interrupted");
+  assertEquals(events.find((record) => record.event === "models_swept")?.files, 1);
+});

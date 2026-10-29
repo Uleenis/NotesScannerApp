@@ -1,6 +1,6 @@
 begin;
 
-select plan(54);
+select plan(63);
 
 create function pg_temp.make_user(uid uuid) returns void
 language plpgsql as $$
@@ -381,6 +381,57 @@ select is(
   (select count(*)::integer from public.htr_models where user_id = 'e5e5e5e5-0000-0000-0000-000000000002'),
   0,
   'no model is written after the withdrawal'
+);
+
+update public.training_tasks set created_at = now() - interval '23 hours', finished_at = now() - interval '23 hours'
+where user_id = 'e5e5e5e5-0000-0000-0000-000000000001';
+update public.writing_tests set checked_at = now() - interval '1 hour'
+where user_id = 'e5e5e5e5-0000-0000-0000-000000000001' and status = 'accepted';
+select is(public.claim_training_task(), null, 'a test accepted again waits until the last task is a day old');
+
+insert into public.consents (user_id, kind, version, granted_by) values
+  ('e5e5e5e5-0000-0000-0000-000000000003', 'training', 'training-1', 'user');
+create temp table busy as select public.claim_training_task() as task;
+select is(
+  (select task ->> 'user_id' from busy),
+  'e5e5e5e5-0000-0000-0000-000000000003',
+  'a consent given after the test was accepted gets its first task at once'
+);
+update public.training_tasks set created_at = now() - interval '25 hours' where user_id = 'e5e5e5e5-0000-0000-0000-000000000001';
+select is(public.claim_training_task(), null, 'while one task is claimed, no other is given, for the whole service');
+
+update public.training_tasks set claimed_at = now() - interval '3 hours', created_at = now() - interval '2 minutes'
+where user_id = 'e5e5e5e5-0000-0000-0000-000000000003';
+select is(
+  (select outcome || ' ' || array_to_string(remove, ',') from pg_temp.report((select task ->> 'task_id' from busy)::uuid, 0.01, 0.10, 0, 1)),
+  'task_expired e5e5e5e5-0000-0000-0000-000000000003/' || (select task ->> 'task_id' from busy) || '.safetensors',
+  'a report past the two hours is refused and names the file of its attempt'
+);
+create temp table busy_again as select public.claim_training_task() as task;
+select is(
+  (select task ->> 'user_id' from busy_again),
+  'e5e5e5e5-0000-0000-0000-000000000003',
+  'the expired task is claimed again before a younger one'
+);
+update public.consents set revoked_at = now() where user_id = 'e5e5e5e5-0000-0000-0000-000000000003';
+select is(
+  (select outcome from public.training_upload_target((select task ->> 'task_id' from busy_again)::uuid)),
+  'consent_required',
+  'a task whose consent was withdrawn gets no upload path'
+);
+select is(
+  (select status from public.training_tasks where user_id = 'e5e5e5e5-0000-0000-0000-000000000003'),
+  'failed',
+  'and it fails'
+);
+select is(
+  (select outcome from public.report_training_task((select task ->> 'task_id' from busy_again)::uuid, 'failed', null, null, null, null, null, null, null)),
+  'task_not_found',
+  'a failed task takes no report'
+);
+select throws_ok(
+  $$select * from public.report_training_task(gen_random_uuid(), 'trained', 12.9, 0.3, 0, 0, 80, 500, repeat('a', 64))$$,
+  '22023', 'invalid_report', 'a CER given in percent is refused: it is a fraction'
 );
 
 insert into storage.objects (bucket_id, name, created_at, updated_at) values

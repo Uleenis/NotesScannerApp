@@ -109,7 +109,7 @@ export async function admitWithSecret(
   log: Logger,
 ): Promise<Record<string, unknown> | Response> {
   if (request.method !== "POST") return refuse(log, { status: 405, code: "method_not_allowed" });
-  if (secret.length < MIN_SECRET_LENGTH || !(await holdsSecret(request, header, secret))) {
+  if (secret.length < MIN_SECRET_LENGTH || secret !== secret.trim() || !(await holdsSecret(request, header, secret))) {
     return refuse(log, { status: 401, code: "unauthenticated" });
   }
   let body: unknown;

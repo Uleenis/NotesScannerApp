@@ -24,13 +24,13 @@ COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv venv /opt/venv \
-    && uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes --no-header --no-annotate \
+    && uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-header --no-annotate \
         --output-file /tmp/locked.txt > /dev/null \
-    && grep -v -E '^(torch|torchvision)==' /tmp/locked.txt > /tmp/requirements.txt \
+    && awk '/^(torch|torchvision)==/ { skip = 1; next } /^[^ ]/ { skip = 0 } !skip' /tmp/locked.txt > /tmp/requirements.txt \
+    && sed -n 's/^\([A-Za-z0-9_.-]*==[^ ;]*\).*/\1/p' /tmp/requirements.txt > /tmp/constraints.txt \
+    && uv pip install --python /opt/venv --no-deps --require-hashes --requirement /tmp/requirements.txt \
     && uv pip install --python /opt/venv --index-url "https://download.pytorch.org/whl/$TORCH_CUDA" \
-        --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match --constraint /tmp/requirements.txt \
-        "torch==2.14.0+$TORCH_CUDA" "torchvision==0.29.0+$TORCH_CUDA" \
-    && uv pip install --python /opt/venv --no-deps --requirement /tmp/requirements.txt
+        --constraint /tmp/constraints.txt "torch==2.14.0+$TORCH_CUDA" "torchvision==0.29.0+$TORCH_CUDA"
 COPY --from=model --chmod=a=rX /medium.safetensors /models/medium.safetensors
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
