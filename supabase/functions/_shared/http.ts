@@ -99,3 +99,25 @@ export async function admitSweep(request: Request, secret: string, log: Logger):
   const empty = typeof body === "object" && body !== null && !Array.isArray(body) && Object.keys(body).length === 0;
   return empty ? null : refuse(log, { status: 400, code: "invalid_request" });
 }
+
+export const MIN_SECRET_LENGTH = 32;
+
+export async function admitWithSecret(
+  request: Request,
+  header: string,
+  secret: string,
+  log: Logger,
+): Promise<Record<string, unknown> | Response> {
+  if (request.method !== "POST") return refuse(log, { status: 405, code: "method_not_allowed" });
+  if (secret.length < MIN_SECRET_LENGTH || !(await holdsSecret(request, header, secret))) {
+    return refuse(log, { status: 401, code: "unauthenticated" });
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return refuse(log, { status: 400, code: "invalid_request" });
+  return body as Record<string, unknown>;
+}

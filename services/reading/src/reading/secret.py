@@ -8,13 +8,13 @@ class SecretError(Exception):
     pass
 
 
-def check_secret(secret: str) -> str:
+def check_secret(secret: str, name: str = GATE_VARIABLE) -> str:
     if secret == "":
-        raise SecretError(f"{GATE_VARIABLE} is not set: the service does not start without it")
+        raise SecretError(f"{name} is not set: the service does not start without it")
     if secret != secret.strip():
-        raise SecretError(f"{GATE_VARIABLE} starts or ends with a space")
+        raise SecretError(f"{name} starts or ends with a space")
     if len(secret) < MINIMUM_LENGTH:
-        raise SecretError(f"{GATE_VARIABLE} is shorter than {MINIMUM_LENGTH} characters")
+        raise SecretError(f"{name} is shorter than {MINIMUM_LENGTH} characters")
     return secret
 
 

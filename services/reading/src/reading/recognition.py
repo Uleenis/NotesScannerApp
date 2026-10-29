@@ -114,13 +114,13 @@ def quiet_libraries() -> None:
 
 
 class Recognizer:
-    def __init__(self, model_path: str) -> None:
+    def __init__(self, model_path: str, accelerator: str = "cpu") -> None:
         from kraken.configs import RecognitionInferenceConfig
         from kraken.tasks import RecognitionTaskModel
 
         quiet_libraries()
         self._model = RecognitionTaskModel.load_model(model_path)
-        self._config = RecognitionInferenceConfig(num_line_workers=0, accelerator="cpu")
+        self._config = RecognitionInferenceConfig(num_line_workers=0, accelerator=accelerator)
 
     def words(self, tile: Image.Image) -> list[TileWord]:
         from kraken.containers import BBoxLine, Segmentation

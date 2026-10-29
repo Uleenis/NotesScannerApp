@@ -11,6 +11,7 @@ import type {
   CallerStore,
   ChargeReason,
   ChargeResult,
+  ClaimedTask,
   ClaimExpectation,
   EditOutcome,
   EditStore,
@@ -32,8 +33,15 @@ import type {
   RevokeStore,
   ServerStore,
   SwitchOutcome,
+  SweepKind,
   SweepStore,
+  TrainingBucket,
+  TrainingPage,
+  TrainingReport,
+  TrainingStore,
   TransferStore,
+  UploadOutcome,
+  ReportOutcome,
   WritingBegin,
   WritingFinish,
   WritingTestStore,
@@ -533,23 +541,39 @@ export function createPageTypeStore(keys: Keys, fetchImpl?: typeof fetch): PageT
 
 const ALTO_PATH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
-export function createSweepStore(keys: Keys, fetchImpl?: typeof fetch): SweepStore {
+const SWEEPS: Record<SweepKind, { rpc: string; bucket: Bucket; name: RegExp }> = {
+  alto: { rpc: "alto_orphans", bucket: "alto", name: ALTO_PATH },
+  models: {
+    rpc: "model_orphans",
+    bucket: "models",
+    name: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.safetensors$/,
+  },
+  writingTests: {
+    rpc: "writing_test_orphans",
+    bucket: "photos",
+    name: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/writing-tests\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[12]\.jpg$/,
+  },
+};
+
+export function createSweepStore(keys: Keys, kind: SweepKind = "alto", fetchImpl?: typeof fetch): SweepStore {
   const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  const sweep = SWEEPS[kind];
   return {
     orphans: async (limit) => {
-      const { data, error } = await client.rpc("alto_orphans", { p_limit: limit });
-      if (error || !Array.isArray(data)) throw new StoreError("altoOrphans");
+      const { data, error } = await client.rpc(sweep.rpc, { p_limit: limit });
+      if (error || !Array.isArray(data)) throw new StoreError("orphans");
       return data.map((entry) => {
         const name = row(entry)?.name;
-        if (typeof name !== "string" || !ALTO_PATH.test(name)) throw new StoreError("altoOrphans");
+        if (typeof name !== "string" || !sweep.name.test(name)) throw new StoreError("orphans");
         return name;
       });
     },
     remove: async (paths) => {
+      if (!paths.every((path) => sweep.name.test(path))) throw new StoreError("removeOrphans");
       let removed = 0;
       for (let start = 0; start < paths.length; start += REMOVE_BATCH_SIZE) {
-        const { data, error } = await client.storage.from("alto").remove(paths.slice(start, start + REMOVE_BATCH_SIZE));
-        if (error || !Array.isArray(data)) throw new StoreError("removeAlto");
+        const { data, error } = await client.storage.from(sweep.bucket).remove(paths.slice(start, start + REMOVE_BATCH_SIZE));
+        if (error || !Array.isArray(data)) throw new StoreError("removeOrphans");
         removed += data.length;
       }
       return removed;
@@ -722,3 +746,133 @@ export function createWritingTestStore(keys: Keys, fetchImpl?: typeof fetch): Wr
     removeTestFiles: (userId, testId) => removeFolder(client, BUCKET, `${userId}/writing-tests/${testId}`),
   };
 }
+
+const UPLOAD_OUTCOMES: readonly string[] = ["ready", "task_not_found", "task_expired", "consent_required"];
+const REPORT_OUTCOMES: readonly string[] = ["activated", "rejected", "failed", "model_missing", "task_not_found", "task_expired", "consent_required"];
+const MODEL_PATH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.safetensors$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+const LANGUAGE = /^[a-z]{2}$/;
+const MAX_TASK_PAGES = 300;
+
+function uuidOf(value: unknown, operation: string): string {
+  if (typeof value !== "string" || !UUID.test(value)) throw new StoreError(operation);
+  return value.toLowerCase();
+}
+
+function trainingPage(value: unknown): TrainingPage {
+  const page = row(value);
+  if (!page || typeof page.b1 !== "string" || !Array.isArray(page.corrections)) throw new StoreError("claimTraining");
+  if (page.language !== null && (typeof page.language !== "string" || !LANGUAGE.test(page.language))) throw new StoreError("claimTraining");
+  return {
+    pageId: uuidOf(page.page_id, "claimTraining"),
+    b1: page.b1,
+    language: page.language as string | null,
+    corrections: page.corrections.map((entry) => {
+      const correction = row(entry);
+      const index = correction?.token_index;
+      if (!correction || typeof index !== "number" || !Number.isInteger(index) || index < 0 || typeof correction.text !== "string") {
+        throw new StoreError("claimTraining");
+      }
+      if (correction.reading_a !== null && typeof correction.reading_a !== "string") throw new StoreError("claimTraining");
+      return { tokenIndex: index, text: correction.text, readingA: correction.reading_a as string | null };
+    }),
+  };
+}
+
+function claimedTask(value: unknown): ClaimedTask | null {
+  if (value === null) return null;
+  const task = row(value);
+  if (!task || !isTemplate(task.template) || !Array.isArray(task.pages) || task.pages.length > MAX_TASK_PAGES) throw new StoreError("claimTraining");
+  const userId = uuidOf(task.user_id, "claimTraining");
+  let model: ClaimedTask["model"] = null;
+  if (task.model !== null) {
+    const found = row(task.model);
+    if (!found || typeof found.path !== "string" || !MODEL_PATH.test(found.path) || !found.path.startsWith(`${userId}/`)) throw new StoreError("claimTraining");
+    if (typeof found.sha256 !== "string" || !SHA256.test(found.sha256)) throw new StoreError("claimTraining");
+    model = { path: found.path, sha256: found.sha256 };
+  }
+  return {
+    taskId: uuidOf(task.task_id, "claimTraining"),
+    userId,
+    testId: uuidOf(task.test_id, "claimTraining"),
+    template: task.template,
+    model,
+    pages: task.pages.map(trainingPage),
+  };
+}
+
+function relativeUrl(signedUrl: unknown, prefix: string): string | null {
+  if (typeof signedUrl !== "string") return null;
+  let url: URL;
+  try {
+    url = new URL(signedUrl);
+  } catch {
+    return null;
+  }
+  if (!url.pathname.startsWith(prefix) || !url.searchParams.has("token")) return null;
+  return url.pathname + url.search;
+}
+
+export function createTrainingStore(keys: Keys, fetchImpl?: typeof fetch): TrainingStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    claim: async () => {
+      const { data, error } = await client.rpc("claim_training_task");
+      if (error) throw new StoreError("claimTraining");
+      return claimedTask(data ?? null);
+    },
+    uploadTarget: async (taskId) => {
+      const { data, error } = await client.rpc("training_upload_target", { p_attempt_id: taskId });
+      const found = first(data);
+      if (error || !found || !UPLOAD_OUTCOMES.includes(String(found.outcome))) throw new StoreError("uploadTarget");
+      const outcome = found.outcome as UploadOutcome;
+      if (outcome !== "ready") {
+        if (found.path !== null) throw new StoreError("uploadTarget");
+        return { outcome, path: null };
+      }
+      if (typeof found.path !== "string" || !MODEL_PATH.test(found.path) || !found.path.endsWith(`/${taskId}.safetensors`)) {
+        throw new StoreError("uploadTarget");
+      }
+      return { outcome, path: found.path };
+    },
+    report: async (taskId, report: TrainingReport) => {
+      const measures = report.outcome === "trained" ? report.measures : null;
+      const { data, error } = await client.rpc("report_training_task", {
+        p_attempt_id: taskId,
+        p_outcome: report.outcome,
+        p_cer: measures?.cer ?? null,
+        p_base_cer: measures?.baseCer ?? null,
+        p_faults: measures?.faults ?? null,
+        p_base_faults: measures?.baseFaults ?? null,
+        p_alphabet: measures?.alphabet ?? null,
+        p_samples: measures?.samples ?? null,
+        p_sha256: measures?.sha256 ?? null,
+      });
+      const found = first(data);
+      if (error || !found || !REPORT_OUTCOMES.includes(String(found.outcome))) throw new StoreError("reportTraining");
+      const remove = found.remove;
+      if (!Array.isArray(remove) || !remove.every((path) => typeof path === "string" && MODEL_PATH.test(path))) throw new StoreError("reportTraining");
+      return { outcome: found.outcome as ReportOutcome, remove: remove as string[] };
+    },
+    signedReads: async (bucket: TrainingBucket, paths, seconds) => {
+      if (paths.length === 0) return [];
+      const { data, error } = await client.storage.from(bucket).createSignedUrls([...paths], seconds);
+      if (error || !Array.isArray(data) || data.length !== paths.length) throw new StoreError("signedReads");
+      return data.map((entry) => (entry.error ? null : relativeUrl(entry.signedUrl, `/storage/v1/object/sign/${bucket}/`)));
+    },
+    signedUpload: async (path) => {
+      const { data, error } = await client.storage.from("models").createSignedUploadUrl(path, { upsert: true });
+      const url = data ? relativeUrl(data.signedUrl, `/storage/v1/object/upload/sign/models/`) : null;
+      if (error || !url) throw new StoreError("signedUpload");
+      return url;
+    },
+    removeModels: async (paths) => {
+      if (!paths.every((path) => MODEL_PATH.test(path))) throw new StoreError("removeModels");
+      for (let start = 0; start < paths.length; start += REMOVE_BATCH_SIZE) {
+        const { error } = await client.storage.from("models").remove(paths.slice(start, start + REMOVE_BATCH_SIZE));
+        if (error) throw new StoreError("removeModels");
+      }
+    },
+  };
+}
+
