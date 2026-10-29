@@ -259,3 +259,47 @@ Deno.test("the time left to A shortens a call, never lengthens it", async () => 
     failure: { kind: "timeout" },
   });
 });
+
+Deno.test("/check-writing gets the photo as it is, the template and the sheet, and the secret, and answers numbers [5]", async () => {
+  const { fetch, seen } = recorder(() => reply(200, JSON.stringify({ template: "fr", sheet: 2, lines: 20, training: 10, validation: 9 })));
+  const result = await service(fetch).checkWriting("fr", 2, JPEG_BYTES, new AbortController().signal);
+  assertEquals(result, { ok: true, lines: 20, training: 10, validation: 9 });
+  assertEquals(seen.length, 1);
+  assertEquals(seen[0].method, "POST");
+  assertEquals(seen[0].url.pathname, "/check-writing");
+  assertEquals(seen[0].url.search, "?template=fr&sheet=2");
+  assertEquals(seen[0].headers.get("content-type"), "image/jpeg");
+  assertEquals(seen[0].headers.get("x-reading-secret"), SECRET);
+  assertEquals(seen[0].redirect, "manual");
+  assertEquals(seen[0].body, JPEG_BYTES);
+});
+
+Deno.test("/check-writing refuses an answer that is not the numbers asked for [5]", async () => {
+  const answers = [
+    { template: "en", sheet: 1, lines: 20, training: 20, validation: 0 },
+    { template: "fr", sheet: 2, lines: 20, training: 20, validation: 0 },
+    { template: "fr", sheet: 1, lines: -1, training: 20, validation: 0 },
+    { template: "fr", sheet: 1, lines: 20, training: 21, validation: 0 },
+    { template: "fr", sheet: 1, lines: 20, training: 20, validation: 11 },
+    { template: "fr", sheet: 1, lines: 61, training: 20, validation: 0 },
+    { template: "fr", sheet: 1, lines: 20.5, training: 20, validation: 0 },
+    { template: "fr", sheet: 1, lines: "20", training: 20, validation: 0 },
+    { template: "fr", sheet: 1, lines: 20, training: 20 },
+  ];
+  for (const answer of answers) {
+    const { fetch } = recorder(() => reply(200, JSON.stringify(answer)));
+    assertEquals(await service(fetch).checkWriting("fr", 1, JPEG_BYTES, new AbortController().signal), { ok: false, failure: { kind: "bad_response" } });
+  }
+  const { fetch } = recorder(() => reply(200, "not json"));
+  assertEquals(await service(fetch).checkWriting("fr", 1, JPEG_BYTES, new AbortController().signal), { ok: false, failure: { kind: "bad_response" } });
+});
+
+Deno.test("/check-writing keeps the code of a refusal and the kind of a lost connection [5]", async () => {
+  const refused = recorder(() => reply(422, JSON.stringify({ error: "too_complex" })));
+  assertEquals(await service(refused.fetch).checkWriting("fr", 1, JPEG_BYTES, new AbortController().signal), {
+    ok: false,
+    failure: { kind: "http_error", status: 422, code: "too_complex" },
+  });
+  const lost = recorder(() => Promise.reject(new TypeError("fetch failed")));
+  assertEquals(await service(lost.fetch).checkWriting("fr", 1, JPEG_BYTES, new AbortController().signal), { ok: false, failure: { kind: "network" } });
+});

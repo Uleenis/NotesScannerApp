@@ -118,6 +118,7 @@ export default function TrainingScreen() {
           <>
             <Text style={trainingStyles.body}>{state.consent === "parent" ? t.training.byParent : t.training.byYou}</Text>
             <AccountGroup>
+              <AccountRow label={t.training.writing.row} onPress={() => router.push("/training/writing-test")} />
               <AccountRow label={t.training.withdraw} onPress={askToWithdraw} disabled={withdrawing} danger last />
             </AccountGroup>
             <Text style={trainingStyles.note}>{t.training.withdrawNote}</Text>

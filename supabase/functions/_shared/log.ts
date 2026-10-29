@@ -41,6 +41,10 @@ export type LogEvent =
   | "parent_email_failed"
   | "training_revoked"
   | "training_files_left"
+  | "writing_test_started"
+  | "writing_test_checked"
+  | "writing_test_failed"
+  | "writing_test_files_left"
   | "unexpected_error";
 
 export type LogFields = {
@@ -55,6 +59,8 @@ export type LogFields = {
   thoughtsTokens?: number;
   tokens?: number;
   files?: number;
+  training?: number;
+  validation?: number;
   errorName?: string;
 };
 
@@ -66,7 +72,7 @@ const MAX_WORD_LENGTH = 64;
 const PLAIN_WORD = /^[A-Za-z0-9_.:-]+$/;
 
 const WORD_FIELDS = ["pageId", "code", "kind", "errorName"] as const;
-const NUMBER_FIELDS = ["status", "attempt", "durationMs", "inputTokens", "outputTokens", "thoughtsTokens", "tokens", "files"] as const;
+const NUMBER_FIELDS = ["status", "attempt", "durationMs", "inputTokens", "outputTokens", "thoughtsTokens", "tokens", "files", "training", "validation"] as const;
 
 export function createLogger(sink: (line: string) => void): Logger {
   return {

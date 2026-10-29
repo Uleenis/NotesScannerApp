@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createParentConsentStore, createRenderStore, createRevokeStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createParentConsentStore, createRenderStore, createRevokeStore, createServerStore, createTransferStore, createWritingTestStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -917,4 +917,79 @@ Deno.test("the withdrawal is called with the account id alone, as the service, a
 Deno.test("a withdrawal that fails or answers something else is an error [4]", async () => {
   assertEquals((await thrownBy(() => createRevokeStore(KEYS, answer(500, { message: "boom" })).revoke(ALICE))) instanceof StoreError, true);
   assertEquals((await thrownBy(() => createRevokeStore(KEYS, stub(() => "yes").fetch).revoke(ALICE))) instanceof StoreError, true);
+});
+
+Deno.test("begin_writing_test is called as the service with the owner and the template, and its answer is read back [5]", async () => {
+  const { fetch, calls } = stub(() => [{ outcome: "started", test_id: PAGE_ID, expired: [BOB] }]);
+  const result = await createWritingTestStore(KEYS, fetch).begin(ALICE, "fr");
+  assertEquals(result, { outcome: "started", testId: PAGE_ID, expired: [BOB] });
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/begin_writing_test");
+  assertEquals(calls[0].body, { p_user_id: ALICE, p_template: "fr" });
+  assertEquals(calls[0].headers.get("apikey"), "secret-key");
+});
+
+Deno.test("a refused start carries no test id, and a malformed answer is an error [5]", async () => {
+  assertEquals(await createWritingTestStore(KEYS, stub(() => [{ outcome: "test_limit", test_id: null, expired: [] }]).fetch).begin(ALICE, "fr"), {
+    outcome: "test_limit",
+    testId: null,
+    expired: [],
+  });
+  const answers = [
+    [{ outcome: "test_limit", test_id: PAGE_ID, expired: [] }],
+    [{ outcome: "started", test_id: "nope", expired: [] }],
+    [{ outcome: "started", test_id: null, expired: [] }],
+    [{ outcome: "started", test_id: PAGE_ID, expired: ["nope"] }],
+    [{ outcome: "started", test_id: PAGE_ID }],
+    [{ outcome: "later", test_id: PAGE_ID, expired: [] }],
+    [],
+  ];
+  for (const answer of answers) {
+    assertEquals(await storeError(() => createWritingTestStore(KEYS, stub(() => answer).fetch).begin(ALICE, "fr")), true);
+  }
+});
+
+Deno.test("finish_writing_test is called with the owner, the test and the three counts, and its answer is read back [5]", async () => {
+  const { fetch, calls } = stub(() => [{ outcome: "rejected", redo: [1, 2], replaced: [] }]);
+  const result = await createWritingTestStore(KEYS, fetch).finish(ALICE, PAGE_ID, { sheet1Training: 12, sheet2Training: 7, sheet2Validation: 3 });
+  assertEquals(result, { outcome: "rejected", redo: [1, 2], replaced: [] });
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/finish_writing_test");
+  assertEquals(calls[0].body, { p_user_id: ALICE, p_test_id: PAGE_ID, p_sheet1_training: 12, p_sheet2_training: 7, p_sheet2_validation: 3 });
+});
+
+Deno.test("a finish answer with an unknown outcome, a sheet other than 1 or 2 or a bad id is an error [5]", async () => {
+  const counts = { sheet1Training: 1, sheet2Training: 1, sheet2Validation: 1 };
+  for (const answer of [
+    [{ outcome: "later", redo: [], replaced: [] }],
+    [{ outcome: "rejected", redo: [3], replaced: [] }],
+    [{ outcome: "rejected", redo: "1", replaced: [] }],
+    [{ outcome: "accepted", redo: [], replaced: ["nope"] }],
+    [],
+  ]) {
+    assertEquals(await storeError(() => createWritingTestStore(KEYS, stub(() => answer).fetch).finish(ALICE, PAGE_ID, counts)), true);
+  }
+});
+
+Deno.test("a test is read for its owner and its pending state alone, and failed with the owner and the test [5]", async () => {
+  const read = stub(() => [{ template: "en" }]);
+  assertEquals(await createWritingTestStore(KEYS, read.fetch).pending(ALICE, PAGE_ID), { template: "en" });
+  assertEquals(read.calls[0].url.pathname, "/rest/v1/writing_tests");
+  assertEquals(read.calls[0].url.searchParams.get("id"), `eq.${PAGE_ID}`);
+  assertEquals(read.calls[0].url.searchParams.get("user_id"), `eq.${ALICE}`);
+  assertEquals(read.calls[0].url.searchParams.get("status"), "eq.pending");
+  assertEquals(await createWritingTestStore(KEYS, stub(() => []).fetch).pending(ALICE, PAGE_ID), null);
+  assertEquals(await storeError(() => createWritingTestStore(KEYS, stub(() => [{ template: "de" }]).fetch).pending(ALICE, PAGE_ID)), true);
+  const failure = stub(() => true);
+  assertEquals(await createWritingTestStore(KEYS, failure.fetch).fail(ALICE, PAGE_ID), true);
+  assertEquals(failure.calls[0].url.pathname, "/rest/v1/rpc/fail_writing_test");
+  assertEquals(failure.calls[0].body, { p_user_id: ALICE, p_test_id: PAGE_ID });
+  assertEquals(await storeError(() => createWritingTestStore(KEYS, stub(() => "yes").fetch).fail(ALICE, PAGE_ID)), true);
+});
+
+Deno.test("the files of one test are the folder of that test in photos and nothing else [5]", async () => {
+  const storage = trainingStorage(
+    [],
+    [`${ALICE}/writing-tests/t-1/1.jpg`, `${ALICE}/writing-tests/t-1/2.jpg`, `${ALICE}/writing-tests/t-2/1.jpg`, `${ALICE}/page-1/original.jpg`],
+  );
+  await createWritingTestStore(KEYS, storage.fetch).removeTestFiles(ALICE, "t-1");
+  assertEquals([...storage.photos.files].sort(), [`${ALICE}/page-1/original.jpg`, `${ALICE}/writing-tests/t-2/1.jpg`]);
 });

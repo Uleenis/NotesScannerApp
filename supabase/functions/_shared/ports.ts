@@ -3,6 +3,7 @@ import type { GeminiRenderer } from "./gemini-render.ts";
 import type { Logger } from "./log.ts";
 import type { PageType } from "./page-type.ts";
 import type { ReadingService } from "./reading-service.ts";
+import type { WritingTemplate } from "./writing-test.ts";
 
 export type PageStatus = "queued" | "processing" | "read" | "failed";
 
@@ -121,6 +122,45 @@ export type RevokeStore = {
 export type RevokeTrainingDeps = {
   auth: Auth;
   training: RevokeStore;
+  log: Logger;
+};
+
+export type WritingBegin = {
+  outcome: "started" | "consent_required" | "test_in_progress" | "test_limit";
+  testId: string | null;
+  expired: string[];
+};
+
+export type SheetCounts = { sheet1Training: number; sheet2Training: number; sheet2Validation: number };
+
+export type WritingFinish = {
+  outcome: "accepted" | "rejected" | "test_not_found" | "consent_required";
+  redo: number[];
+  replaced: string[];
+};
+
+export type WritingTestStore = {
+  begin: (userId: string, template: WritingTemplate) => Promise<WritingBegin>;
+  pending: (userId: string, testId: string) => Promise<{ template: WritingTemplate } | null>;
+  finish: (userId: string, testId: string, counts: SheetCounts) => Promise<WritingFinish>;
+  fail: (userId: string, testId: string) => Promise<boolean>;
+  createUploadUrl: (path: string) => Promise<{ signedUrl: string; token: string }>;
+  downloadPhoto: (path: string) => Promise<Uint8Array | null>;
+  removeTestFiles: (userId: string, testId: string) => Promise<void>;
+};
+
+export type PrepareWritingTestDeps = {
+  auth: Auth;
+  tests: WritingTestStore;
+  log: Logger;
+};
+
+export type CheckWritingTestDeps = {
+  auth: Auth;
+  tests: WritingTestStore;
+  service: ReadingService | null;
+  running: Set<string>;
+  background: (task: Promise<void>) => void;
   log: Logger;
 };
 

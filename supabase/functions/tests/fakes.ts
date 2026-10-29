@@ -2,9 +2,11 @@ import { GeminiFailure } from "../_shared/gemini.ts";
 import type { GeminiFailureKind, GeminiReading } from "../_shared/gemini.ts";
 import { photoPath } from "../_shared/photo.ts";
 import type { PageType } from "../_shared/page-type.ts";
-import type { Arbitrated, Arbitration, Recognized, ReadingService } from "../_shared/reading-service.ts";
+import type { Arbitrated, Arbitration, Checked, Recognized, ReadingService } from "../_shared/reading-service.ts";
 import type {
   AccountStore,
+  CheckWritingTestDeps,
+  PrepareWritingTestDeps,
   RevokeStore,
   RevokeTrainingDeps,
   Allowance,
@@ -35,7 +37,10 @@ import type {
   SetPageTypeDeps,
   TransferAccountDeps,
   TransferStore,
+  WritingFinish,
+  WritingTestStore,
 } from "../_shared/ports.ts";
+import type { WritingTemplate } from "../_shared/writing-test.ts";
 import type { LogEvent, LogFields, Logger } from "../_shared/log.ts";
 
 export const ALICE = "11111111-1111-4111-8111-111111111111";
@@ -113,6 +118,17 @@ type FakeNotebook = { id: string; userId: string; name: string };
 
 type FakeChapter = { id: string; userId: string; notebookId: string; name: string };
 
+export type FakeWritingTest = {
+  id: string;
+  userId: string;
+  template: WritingTemplate;
+  status: "pending" | "accepted" | "rejected" | "failed" | "replaced";
+  trainingLines: number | null;
+  validationLines: number | null;
+  redo: number[];
+  createdAt: number;
+};
+
 type FakePhoto = { bytes: Uint8Array; mimeType: string | null; size: number };
 
 type StoredReading = ReadingInput & { userId: string; pageId: string };
@@ -187,6 +203,12 @@ export class World {
   recognizeDurationMs = 26_000;
   arbitrateDurationMs = 500;
   backgroundTasks: Promise<void>[] = [];
+  writingTests = new Map<string, FakeWritingTest>();
+  checkOutcomes: (Checked | "hold")[] = [];
+  checks: { template: string; sheet: number; image: Uint8Array }[] = [];
+  heldChecks: (() => void)[] = [];
+  beforeFinish: (() => void) | null = null;
+  running = new Set<string>();
 
   addPage(userId: string, status: PageStatus = "queued", id: string = PAGE_ID): void {
     this.pages.set(id, { id, userId, status, queueReason: null, retryCount: 0, readAt: null, manualRelaunchedAt: null, notebookId: null, chapterId: null, pageType: "text", aRelaunches: 0, aRelaunchedAt: null });
@@ -555,6 +577,7 @@ export class World {
         this.beforeRevoke?.();
         await this.tick("revoke");
         this.revoked.push(userId);
+        for (const [id, test] of [...this.writingTests]) if (test.userId === userId) this.writingTests.delete(id);
         return this.activeConsents.delete(userId);
       },
     };
@@ -765,6 +788,20 @@ export class World {
         await Promise.resolve();
         return signal.aborted ? CANCELLED : outcome;
       },
+      checkWriting: async (template, sheet, image, signal): Promise<Checked> => {
+        this.calls.push("checkWriting");
+        this.checks.push({ template, sheet, image });
+        const outcome = this.checkOutcomes.shift() ?? { ok: true, lines: 20, training: sheet === 1 ? 20 : 10, validation: sheet === 1 ? 0 : 10 };
+        if (outcome === "hold") {
+          await new Promise<void>((resolve) => {
+            this.heldChecks.push(resolve);
+            signal.addEventListener("abort", () => resolve());
+          });
+          return { ok: true, lines: 20, training: sheet === 1 ? 20 : 10, validation: sheet === 1 ? 0 : 10 };
+        }
+        await Promise.resolve();
+        return outcome;
+      },
       arbitrate: async (input, _signal, timeoutMs): Promise<Arbitrated> => {
         this.calls.push("arbitrate");
         this.arbitrations.push(input);
@@ -776,6 +813,100 @@ export class World {
         return this.arbitrateOutcomes.shift() ?? { ok: true, tokens: 3 };
       },
     };
+  }
+
+  writingStore(): WritingTestStore {
+    return {
+      begin: async (userId, template) => {
+        await this.tick("beginWritingTest");
+        if (!this.activeConsents.has(userId)) return { outcome: "consent_required", testId: null, expired: [] };
+        const own = [...this.writingTests.values()].filter((test) => test.userId === userId);
+        const expired: string[] = [];
+        for (const test of own) {
+          if (test.status === "pending" && test.createdAt < this.clock - 30 * 60 * 1000) {
+            test.status = "failed";
+            expired.push(test.id);
+          }
+        }
+        if (own.some((test) => test.status === "pending")) return { outcome: "test_in_progress", testId: null, expired };
+        if (own.filter((test) => test.createdAt > this.clock - DAY_MS).length >= 3) return { outcome: "test_limit", testId: null, expired };
+        const id = `5e5e5e5e-0000-4000-8000-${String(this.writingTests.size + 1).padStart(12, "0")}`;
+        this.writingTests.set(id, { id, userId, template, status: "pending", trainingLines: null, validationLines: null, redo: [], createdAt: this.clock });
+        return { outcome: "started", testId: id, expired };
+      },
+      pending: async (userId, testId) => {
+        await this.tick("pendingWritingTest");
+        const test = this.writingTests.get(testId);
+        return test && test.userId === userId && test.status === "pending" ? { template: test.template } : null;
+      },
+      finish: async (userId, testId, counts): Promise<WritingFinish> => {
+        this.beforeFinish?.();
+        await this.tick("finishWritingTest");
+        const test = this.writingTests.get(testId);
+        if (!test || test.userId !== userId || test.status !== "pending") return { outcome: "test_not_found", redo: [], replaced: [] };
+        const training = counts.sheet1Training + counts.sheet2Training;
+        const accepted = training >= 24 && counts.sheet2Validation >= 8;
+        const redo: number[] = [];
+        const replaced: string[] = [];
+        if (accepted) {
+          for (const other of this.writingTests.values()) {
+            if (other.userId === userId && other.status === "accepted") {
+              other.status = "replaced";
+              replaced.push(other.id);
+            }
+          }
+        } else {
+          if (counts.sheet1Training < 16 && training < 24) redo.push(1);
+          if (counts.sheet2Validation < 8 || (counts.sheet2Training < 8 && training < 24)) redo.push(2);
+        }
+        test.status = accepted ? "accepted" : "rejected";
+        test.trainingLines = training;
+        test.validationLines = counts.sheet2Validation;
+        test.redo = redo;
+        return { outcome: accepted ? "accepted" : "rejected", redo, replaced };
+      },
+      fail: async (userId, testId) => {
+        await this.tick("failWritingTest");
+        const test = this.writingTests.get(testId);
+        if (!test || test.userId !== userId || test.status !== "pending") return false;
+        test.status = "failed";
+        return true;
+      },
+      createUploadUrl: async (path) => {
+        await this.tick("createUploadUrl");
+        this.uploadPaths.push(path);
+        return { signedUrl: `http://storage.test/upload/${path}?token=${CANARY_UPLOAD_TOKEN}`, token: CANARY_UPLOAD_TOKEN };
+      },
+      downloadPhoto: async (path) => {
+        await this.tick("downloadWritingPhoto");
+        return this.photos.get(path)?.bytes ?? null;
+      },
+      removeTestFiles: async (userId, testId) => {
+        await this.tick("removeWritingTestFiles");
+        for (const path of [...this.photos.keys()]) if (path.startsWith(`${userId}/writing-tests/${testId}/`)) this.photos.delete(path);
+      },
+    };
+  }
+
+  prepareWritingDeps(): PrepareWritingTestDeps {
+    return { auth: this.authPort(), tests: this.writingStore(), log: this.logger() };
+  }
+
+  checkWritingDeps(configured: boolean = true): CheckWritingTestDeps {
+    return {
+      auth: this.authPort(),
+      tests: this.writingStore(),
+      service: configured ? this.readingService() : null,
+      running: this.running,
+      background: this.background(),
+      log: this.logger(),
+    };
+  }
+
+  releaseCheck(): void {
+    const release = this.heldChecks.shift();
+    if (!release) throw new Error("no check is held");
+    release();
   }
 
   release(outcome?: Recognized): void {

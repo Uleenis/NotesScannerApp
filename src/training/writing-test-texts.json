@@ -1,0 +1,174 @@
+{
+  "fr": {
+    "lines": [
+      "Le 12 juin, j'ai acheté 3 pommes et 4 poires.",
+      "« Vraiment ? » dit Zoé. « Oui ! » dit Max.",
+      "Âge ? Il a 56 ans, je crois bien, Gaël.",
+      "Prix : 7,80 € + 2,50 € = 10,30 € au total.",
+      "Un yak à Zürich ? Quelle drôle d'idée, Wafa !",
+      "Être ou ne pas être ? Où est ma veste, Bob ?",
+      "Noël, Pâques, Août : les fêtes de l'année.",
+      "Le week-end, ce fruit est à point (89 %).",
+      "Œil, sœur, cœur, bœuf : ça s'écrit avec un œ.",
+      "Æsir, ex æquo, cætera : des mots assez rares.",
+      "Écoute : Joël arrive à 7 h 45 ce soir-là.",
+      "Êtes-vous prêt, Kévin ? À demain, à Èze !",
+      "Ulysse a vu Xavier, Müller et Yann au goûter.",
+      "Qui a lu ce texte ? Jules, Victor ou Uma ?",
+      "Björn va à Köln ; Bärbel et Käthe, à Aÿ.",
+      "Naïve, Haïti, maïs : 3/4 d'un œuf plein.",
+      "Ôte ce sac : l'Île de Ré, l'Île d'Yeu.",
+      "Âne, âme, âge : trois mots avec un â.",
+      "Le train de L'Haÿ-les-Roses est parti tôt.",
+      "Çà et là, François cherche Camille et Éole.",
+      "Elle écrit à Dora et Gabriel : « Salut ! »",
+      "À Rémi je dois 15 €, à Théo 20 € (50 %).",
+      "Walid, Xénia : un wagon, un kayak, un zèbre.",
+      "Quatre-vingt-dix-sept fleurs à Èze, Emma.",
+      "Crème brûlée, pâté, goûter : 6 + 8 = 14.",
+      "Il dit \"bonjour\" puis \"merci\" et/ou \"salut\".",
+      "Le maître connaît Bruno, David et Félix.",
+      "Dina a dit : « J'arrive à 9 h, pas à 10 h ! »",
+      "Ça va, Olivier ? Où sont Sami ; Tom, Yves ?",
+      "Œuvre d'art, œil pour œil : Ô temps, Œdipe !",
+      "Ils sont parti tôt ce matin pour la gare.",
+      "Elle a mangé trois pomme avant de partir.",
+      "Je ne sais pas si il viendra demain soir.",
+      "Les enfants joue dans le jardin du voisin.",
+      "Nous irons à la plage s'il fait beau demain.",
+      "Cette semaine, j'ai aprit à faire du pain.",
+      "Il faut que tu vien avec nous à midi.",
+      "La réunion est reporter à jeudi prochain.",
+      "Ce soir, nous mangeons chez des amis proches.",
+      "Mon frère et moi avont fini le travail."
+    ],
+    "faults": [
+      {
+        "line": 31,
+        "written": "parti",
+        "correct": "partis"
+      },
+      {
+        "line": 32,
+        "written": "pomme",
+        "correct": "pommes"
+      },
+      {
+        "line": 33,
+        "written": "si il",
+        "correct": "s'il"
+      },
+      {
+        "line": 34,
+        "written": "joue",
+        "correct": "jouent"
+      },
+      {
+        "line": 36,
+        "written": "aprit",
+        "correct": "appris"
+      },
+      {
+        "line": 37,
+        "written": "vien",
+        "correct": "viennes"
+      },
+      {
+        "line": 38,
+        "written": "reporter",
+        "correct": "reportée"
+      },
+      {
+        "line": 40,
+        "written": "avont",
+        "correct": "avons"
+      }
+    ]
+  },
+  "en": {
+    "lines": [
+      "Alice paid $15 for 2 pens and 3 books.",
+      "Bob said: \"Meet me at 9:30, not 10!\"",
+      "Clara's bill: £47.80 + $6 = a lot (8%).",
+      "David & Emma bought 1/2 kg of figs; yum!",
+      "Frank, Grace and Henry arrive at 5:15.",
+      "Ivy asked: \"Where's Jack?\" Kate didn't know.",
+      "Liam, Mia and Noah play; Olivia sings.",
+      "Paul quickly fixed the red zip (a quirk).",
+      "Ruth, Sam and Tom walk 6 + 7 = 13 miles.",
+      "Uma, Vic and Will visit Xavier on May 20th.",
+      "Yara found a quiet zoo near York (2-3 km).",
+      "Zoe & Quinn pay £9 and $8 for the jazz show.",
+      "Jack's box of 40 jumpy frogs: what a view!",
+      "Is 100% right? Maybe; ask Grace (or Henry).",
+      "Kate typed: \"Hello, World!\" then waited.",
+      "Wow! Seven extra boxes came at six o'clock.",
+      "Quinn's quiz: 4 + 5 = 9, 7 - 2 = 5, 8/2 = 4.",
+      "Vic, Will & Xavier fix the jammed zipper.",
+      "Olivia owes Paul £20 and Ruth $30 (25%).",
+      "Dave's dog hid; Eve & Frank searched for it.",
+      "Henry's jazz band plays in York at 8:40.",
+      "Uma asked: \"Is it 6 or 7?\" Yara said 6.",
+      "Liam & Mia brought 12 apples; Noah took 1.",
+      "Sam's box was heavy (19 kg); Tom lifted it.",
+      "Zoe typed: \"Wait! Extra work (3 jobs).\"",
+      "Bob's quick fox jumped over the lazy dog.",
+      "Ivy, Jack & Kate: 3 + 4 + 5 = 12 pages.",
+      "Greg's pizza costs £11.50; mine costs $9.",
+      "Clara hid 2 keys in a box (1 is extra).",
+      "Quick: dial 0-800 for help, or ask Alice!",
+      "The childrens played in the garden today.",
+      "She dont know where the keys are hidden.",
+      "We seen the new film on Saturday night.",
+      "Their going to arrive before lunch time.",
+      "Please close the window before you leave.",
+      "He has alot of books in his small flat.",
+      "I recieved your letter this morning, Tom.",
+      "The weather is more better than before.",
+      "Everyone enjoyed the long walk by the sea.",
+      "Me and Sara goes to school together."
+    ],
+    "faults": [
+      {
+        "line": 31,
+        "written": "childrens",
+        "correct": "children"
+      },
+      {
+        "line": 32,
+        "written": "dont",
+        "correct": "doesn't"
+      },
+      {
+        "line": 33,
+        "written": "seen",
+        "correct": "saw"
+      },
+      {
+        "line": 34,
+        "written": "Their",
+        "correct": "They're"
+      },
+      {
+        "line": 36,
+        "written": "alot",
+        "correct": "a lot"
+      },
+      {
+        "line": 37,
+        "written": "recieved",
+        "correct": "received"
+      },
+      {
+        "line": 38,
+        "written": "more better",
+        "correct": "better"
+      },
+      {
+        "line": 40,
+        "written": "Me and Sara goes",
+        "correct": "Sara and I go"
+      }
+    ]
+  }
+}
