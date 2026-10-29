@@ -36,6 +36,9 @@ export type LogEvent =
   | "render_failed"
   | "render_limit"
   | "reading_service_misconfigured"
+  | "parent_consent_requested"
+  | "parent_consent_confirmed"
+  | "parent_email_failed"
   | "unexpected_error";
 
 export type LogFields = {

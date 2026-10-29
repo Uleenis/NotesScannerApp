@@ -23,6 +23,9 @@ import type {
   PageRow,
   PageStatus,
   PageTypeStore,
+  ParentConfirmOutcome,
+  ParentConsentStore,
+  ParentRequestOutcome,
   PhotoInfo,
   QueueReason,
   RenderStore,
@@ -576,6 +579,57 @@ export function createRenderStore(keys: Keys, fetchImpl?: typeof fetch): RenderS
         created_at: new Date().toISOString(),
       }, { onConflict: "page_id" });
       if (error) throw new StoreError("saveRendering");
+    },
+  };
+}
+
+const PARENT_REQUEST_OUTCOMES: readonly string[] = ["requested", "account_not_registered", "age_missing", "not_under_age", "consent_already_active", "invalid_email", "same_email", "send_limit"];
+const PARENT_CONFIRM_OUTCOMES: readonly string[] = [
+  "confirmed",
+  "no_request",
+  "invalid_code",
+  "code_expired",
+  "wrong_code",
+  "account_not_registered",
+  "consent_version_outdated",
+  "age_missing",
+  "not_under_age",
+  "consent_already_active",
+];
+const SIX_DIGITS = /^[0-9]{6}$/;
+
+export function createParentConsentStore(keys: Keys, fetchImpl?: typeof fetch): ParentConsentStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    request: async (userId, parentEmail) => {
+      const { data, error } = await client.rpc("request_parent_consent", { p_user_id: userId, p_parent_email: parentEmail });
+      const found = first(data);
+      if (error || !found || !PARENT_REQUEST_OUTCOMES.includes(String(found.outcome))) throw new StoreError("requestParent");
+      const outcome = found.outcome as ParentRequestOutcome;
+      if (outcome !== "requested") {
+        if (found.request_id !== null || found.code !== null) throw new StoreError("requestParent");
+        return { outcome, requestId: null, code: null };
+      }
+      if (typeof found.request_id !== "string" || !UUID.test(found.request_id)) throw new StoreError("requestParent");
+      if (typeof found.code !== "string" || !SIX_DIGITS.test(found.code)) throw new StoreError("requestParent");
+      return { outcome, requestId: found.request_id, code: found.code };
+    },
+    withdraw: async (userId, requestId) => {
+      const { error } = await client.rpc("withdraw_parent_request", { p_user_id: userId, p_request_id: requestId });
+      if (error) throw new StoreError("withdrawParent");
+    },
+    confirm: async (userId, code) => {
+      const { data, error } = await client.rpc("confirm_parent_consent", { p_user_id: userId, p_code: code });
+      const found = first(data);
+      if (error || !found || !PARENT_CONFIRM_OUTCOMES.includes(String(found.outcome))) throw new StoreError("confirmParent");
+      const outcome = found.outcome as ParentConfirmOutcome;
+      const left = found.attempts_left;
+      if (outcome === "wrong_code") {
+        if (typeof left !== "number" || !Number.isInteger(left) || left < 0 || left > 4) throw new StoreError("confirmParent");
+        return { outcome, attemptsLeft: left };
+      }
+      if (left !== null) throw new StoreError("confirmParent");
+      return { outcome, attemptsLeft: null };
     },
   };
 }

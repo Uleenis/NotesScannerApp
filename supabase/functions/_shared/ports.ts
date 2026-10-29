@@ -241,3 +241,36 @@ export type RenderDeps = {
   clock: { now: () => number };
   log: Logger;
 };
+
+export type ParentRequestOutcome = "requested" | "account_not_registered" | "age_missing" | "not_under_age" | "consent_already_active" | "invalid_email" | "same_email" | "send_limit";
+
+export type ParentConfirmOutcome =
+  | "confirmed"
+  | "no_request"
+  | "invalid_code"
+  | "code_expired"
+  | "wrong_code"
+  | "account_not_registered"
+  | "consent_version_outdated"
+  | "age_missing"
+  | "not_under_age"
+  | "consent_already_active";
+
+export type ParentConsentStore = {
+  request: (userId: string, parentEmail: string) => Promise<{ outcome: ParentRequestOutcome; requestId: string | null; code: string | null }>;
+  withdraw: (userId: string, requestId: string) => Promise<void>;
+  confirm: (userId: string, code: string) => Promise<{ outcome: ParentConfirmOutcome; attemptsLeft: number | null }>;
+};
+
+export type Mail = { to: string; subject: string; text: string };
+
+export type Mailer = {
+  send: (mail: Mail) => Promise<void>;
+};
+
+export type ParentConsentDeps = {
+  auth: Auth;
+  parents: ParentConsentStore;
+  mailer: Mailer | null;
+  log: Logger;
+};

@@ -46,7 +46,7 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:test": "supabase test db",
-    "db:test:concurrency": "bash supabase/tests/concurrency/charge-page.sh && bash supabase/tests/concurrency/relaunch-pages.sh && bash supabase/tests/concurrency/transfer-account.sh && bash supabase/tests/concurrency/library-race.sh && bash supabase/tests/concurrency/corrections-race.sh && bash supabase/tests/concurrency/edit-race.sh && bash supabase/tests/concurrency/lexicon-race.sh && bash supabase/tests/concurrency/charge-render.sh && bash supabase/tests/concurrency/consent-race.sh",
+    "db:test:concurrency": "bash supabase/tests/concurrency/charge-page.sh && bash supabase/tests/concurrency/relaunch-pages.sh && bash supabase/tests/concurrency/transfer-account.sh && bash supabase/tests/concurrency/library-race.sh && bash supabase/tests/concurrency/corrections-race.sh && bash supabase/tests/concurrency/edit-race.sh && bash supabase/tests/concurrency/lexicon-race.sh && bash supabase/tests/concurrency/charge-render.sh && bash supabase/tests/concurrency/consent-race.sh && bash supabase/tests/concurrency/parent-race.sh",
     "functions:test": "deno test --node-modules-dir=none --allow-env --allow-net --permit-no-files supabase/functions",
     "functions:check": "deno check --node-modules-dir=none \"supabase/functions/**/*.ts\"",
     "functions:lint": "deno lint --rules-exclude=no-import-prefix supabase/functions",
