@@ -34,7 +34,11 @@ import type {
   SwitchOutcome,
   SweepStore,
   TransferStore,
+  WritingBegin,
+  WritingFinish,
+  WritingTestStore,
 } from "./ports.ts";
+import { isTemplate } from "./writing-test.ts";
 
 const BUCKET = "photos";
 
@@ -649,5 +653,72 @@ export function createParentConsentStore(keys: Keys, fetchImpl?: typeof fetch): 
       if (left !== null) throw new StoreError("confirmParent");
       return { outcome, attemptsLeft: null };
     },
+  };
+}
+
+const WRITING_BEGIN_OUTCOMES: readonly string[] = ["started", "consent_required", "test_in_progress", "test_limit"];
+const WRITING_FINISH_OUTCOMES: readonly string[] = ["accepted", "rejected", "test_not_found", "consent_required"];
+
+function identifiers(value: unknown, operation: string): string[] {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string" && UUID.test(item))) throw new StoreError(operation);
+  return value as string[];
+}
+
+export function createWritingTestStore(keys: Keys, fetchImpl?: typeof fetch): WritingTestStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    begin: async (userId, template) => {
+      const { data, error } = await client.rpc("begin_writing_test", { p_user_id: userId, p_template: template });
+      const found = first(data);
+      if (error || !found || !WRITING_BEGIN_OUTCOMES.includes(String(found.outcome))) throw new StoreError("beginWritingTest");
+      const outcome = found.outcome as WritingBegin["outcome"];
+      const expired = identifiers(found.expired, "beginWritingTest");
+      if (outcome !== "started") {
+        if (found.test_id !== null) throw new StoreError("beginWritingTest");
+        return { outcome, testId: null, expired };
+      }
+      if (typeof found.test_id !== "string" || !UUID.test(found.test_id)) throw new StoreError("beginWritingTest");
+      return { outcome, testId: found.test_id, expired };
+    },
+    pending: async (userId, testId) => {
+      const { data, error } = await client
+        .from("writing_tests")
+        .select("template")
+        .eq("id", testId)
+        .eq("user_id", userId)
+        .eq("status", "pending")
+        .maybeSingle();
+      if (error) throw new StoreError("pendingWritingTest");
+      const found = row(data);
+      if (found === null) return null;
+      if (!isTemplate(found.template)) throw new StoreError("pendingWritingTest");
+      return { template: found.template };
+    },
+    finish: async (userId, testId, counts) => {
+      const { data, error } = await client.rpc("finish_writing_test", {
+        p_user_id: userId,
+        p_test_id: testId,
+        p_sheet1_training: counts.sheet1Training,
+        p_sheet2_training: counts.sheet2Training,
+        p_sheet2_validation: counts.sheet2Validation,
+      });
+      const found = first(data);
+      if (error || !found || !WRITING_FINISH_OUTCOMES.includes(String(found.outcome))) throw new StoreError("finishWritingTest");
+      const redo = found.redo;
+      if (!Array.isArray(redo) || !redo.every((sheet) => sheet === 1 || sheet === 2)) throw new StoreError("finishWritingTest");
+      return { outcome: found.outcome as WritingFinish["outcome"], redo: redo as number[], replaced: identifiers(found.replaced, "finishWritingTest") };
+    },
+    fail: async (userId, testId) => {
+      const { data, error } = await client.rpc("fail_writing_test", { p_user_id: userId, p_test_id: testId });
+      if (error || typeof data !== "boolean") throw new StoreError("failWritingTest");
+      return data;
+    },
+    createUploadUrl: async (path) => {
+      const { data, error } = await client.storage.from(BUCKET).createSignedUploadUrl(path);
+      if (error || !data) throw new StoreError("createUploadUrl");
+      return { signedUrl: data.signedUrl, token: data.token };
+    },
+    downloadPhoto: (path) => pageReader(client).downloadPhoto(path),
+    removeTestFiles: (userId, testId) => removeFolder(client, BUCKET, `${userId}/writing-tests/${testId}`),
   };
 }

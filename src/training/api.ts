@@ -100,9 +100,9 @@ export async function grantConsent(client: TrainingClient): Promise<Done<Consent
   }
 }
 
-type Called = { kind: "done"; data: unknown } | { kind: "refused"; code: string | null; body: unknown } | { kind: "offline" } | { kind: "failed" };
+export type Called = { kind: "done"; data: unknown } | { kind: "refused"; code: string | null; body: unknown } | { kind: "offline" } | { kind: "failed" };
 
-async function call(client: TrainingClient, name: string, body?: Record<string, string>): Promise<Called> {
+export async function call(client: TrainingClient, name: string, body?: Record<string, string>): Promise<Called> {
   try {
     const { data, error } = body === undefined ? await client.functions.invoke(name) : await client.functions.invoke(name, { body });
     if (error instanceof FunctionsFetchError) {

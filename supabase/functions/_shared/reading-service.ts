@@ -1,4 +1,5 @@
 import type { Logger } from "./log.ts";
+import type { Sheet, WritingTemplate } from "./writing-test.ts";
 
 export const RECOGNIZE_TIMEOUT_MS = 135_000;
 
@@ -37,7 +38,10 @@ export type Arbitration = { pageId: string; userId: string; b1: string; b2: stri
 
 export type Arbitrated = { ok: true; tokens: number | null } | { ok: false; failure: ServiceFailure };
 
+export type Checked = { ok: true; lines: number; training: number; validation: number } | { ok: false; failure: ServiceFailure };
+
 export type ReadingService = {
+  checkWriting: (template: WritingTemplate, sheet: Sheet, image: Uint8Array, signal: AbortSignal, timeoutMs?: number) => Promise<Checked>;
   recognize: (pageId: string, image: Uint8Array, signal: AbortSignal, timeoutMs?: number) => Promise<Recognized>;
   arbitrate: (arbitration: Arbitration, signal: AbortSignal, timeoutMs?: number) => Promise<Arbitrated>;
 };
@@ -195,6 +199,20 @@ export function createReadingService(options: ServiceOptions): ReadingService {
       if (typeof answer !== "string") return { ok: false, failure: answer };
       if (parsed(answer)?.page_id !== pageId) return { ok: false, failure: { kind: "bad_response" } };
       return { ok: true, answer };
+    },
+    checkWriting: async (template, sheet, image, caller, timeoutMs) => {
+      const query = new URLSearchParams({ template, sheet: String(sheet) });
+      const sent = await post(`/check-writing?${query}`, "image/jpeg", image.slice(), within(options.recognizeTimeoutMs ?? RECOGNIZE_TIMEOUT_MS, timeoutMs), caller);
+      if ("failure" in sent) return { ok: false, failure: sent.failure };
+      if (sent.response.status !== 200) return { ok: false, failure: await refusalOf(sent.response) };
+      const text = await boundedText(sent.response, 4096).catch(() => null);
+      const found = text === null ? null : parsed(text);
+      const counts = [found?.lines, found?.training, found?.validation];
+      const bounded = found !== null && found.template === template && found.sheet === sheet &&
+        counts.every((count) => Number.isInteger(count) && (count as number) >= 0) &&
+        (found.lines as number) <= 60 && (found.training as number) <= 20 && (found.validation as number) <= 10;
+      if (!bounded) return { ok: false, failure: { kind: "bad_response" } };
+      return { ok: true, lines: found.lines as number, training: found.training as number, validation: found.validation as number };
     },
     arbitrate: async (arbitration, caller, timeoutMs) => {
       const body = [

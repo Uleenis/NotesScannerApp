@@ -18,9 +18,10 @@ type Props = {
   onRetake: () => void;
   onRotate: () => void;
   onRead: () => void;
+  actionLabel?: string;
 };
 
-export function PhotoReview({ title, photoUri, message, sending, turning, onRetake, onRotate, onRead }: Props) {
+export function PhotoReview({ title, photoUri, message, sending, turning, onRetake, onRotate, onRead, actionLabel }: Props) {
   const t = useStrings();
   const [area, setArea] = useState({ width: 0, height: 0 });
   const [shape, setShape] = useState(CAMERA_SHAPE);
@@ -63,7 +64,7 @@ export function PhotoReview({ title, photoUri, message, sending, turning, onReta
           <SecondaryButton disabled={sending} label={t.capture.retake} onPress={onRetake} />
         </View>
         <View style={styles.button}>
-          <PrimaryButton disabled={sending || turning} label={sending ? t.capture.sending : t.capture.read} onPress={onRead} />
+          <PrimaryButton disabled={sending || turning} label={sending ? t.capture.sending : (actionLabel ?? t.capture.read)} onPress={onRead} />
         </View>
       </View>
     </View>

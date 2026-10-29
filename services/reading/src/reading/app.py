@@ -15,6 +15,7 @@ from reading.photo import MAX_BYTES, open_photo
 from reading.recognition import Box, PageReader, Reading
 from reading.refusal import RefusalError, busy, invalid_request, too_large, unsupported
 from reading.secret import check_secret
+from reading.writing_test import count_sheet, read_lines
 
 GATE_HEADER = "X-Reading-Secret"
 PHOTO_TYPE = "image/jpeg"
@@ -22,6 +23,8 @@ JSON_TYPE = "application/json"
 MAX_IN_FLIGHT = 4
 MAX_ARBITRATION_BYTES = 12 * 1024 * 1024
 QUERY = re.compile(r"page_id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
+
+CHECK_QUERY = re.compile(r"template=(fr|en)&sheet=([12])")
 
 log = logging.getLogger("reading")
 
@@ -52,6 +55,13 @@ def page_of(request: Request) -> str:
     if found is None:
         raise invalid_request()
     return found.group(1)
+
+
+def sheet_of(request: Request) -> tuple[str, int]:
+    found = CHECK_QUERY.fullmatch(request.url.query)
+    if found is None:
+        raise invalid_request()
+    return found.group(1), int(found.group(2))
 
 
 def check_type(request: Request, expected: str = PHOTO_TYPE) -> None:
@@ -146,6 +156,46 @@ def create_app(secret: str, reader: PageReader, arbiter: PageArbiter, max_in_fli
             total,
         )
         return JSONResponse(answer(page_id, reading, alto))
+
+    @app.post("/check-writing")
+    async def check_writing(request: Request) -> JSONResponse:
+        if in_flight[0] >= max_in_flight:
+            return refusal(None, busy())
+        in_flight[0] += 1
+        try:
+            return await checked(request)
+        finally:
+            in_flight[0] -= 1
+
+    async def checked(request: Request) -> JSONResponse:
+        try:
+            template, sheet = sheet_of(request)
+            check_type(request)
+            photo = await run_in_threadpool(open_photo, await body_of(request))
+            reading = await run_in_threadpool(reader.read, photo)
+            counted = await run_in_threadpool(count_sheet, template, sheet, read_lines(reading))
+        except RefusalError as refused:
+            return refusal(None, refused)
+        except Exception:
+            log.error("failed code=reading_failed")
+            return JSONResponse({"error": "reading_failed"}, status_code=500)
+        log.info(
+            "checked template=%s sheet=%d lines=%d training=%d validation=%d",
+            template,
+            sheet,
+            counted.lines,
+            counted.training,
+            counted.validation,
+        )
+        return JSONResponse(
+            {
+                "template": template,
+                "sheet": sheet,
+                "lines": counted.lines,
+                "training": counted.training,
+                "validation": counted.validation,
+            }
+        )
 
     @app.post("/arbitrate")
     async def arbitrate(request: Request) -> JSONResponse:
