@@ -508,6 +508,18 @@ describe("the code of a parent", () => {
     await waitFor(() => expect(pathname()).toBe("/training/parent"));
   });
 
+  test("treats the fifth wrong code as a code that is gone, and offers a new one", async () => {
+    jest.mocked(trainingService.confirmParent).mockResolvedValue({ ok: false, reason: "wrong_code", attemptsLeft: 0 });
+    const pathname = await openCode();
+
+    await typeCode("123456");
+
+    expect(await screen.findByText(fr.training.errors.codeExpired)).toBeTruthy();
+    expect(screen.queryByText(fr.training.errors.wrongCode(0))).toBeNull();
+    await fireEvent.press(screen.getByText(fr.training.askAgain));
+    await waitFor(() => expect(pathname()).toBe("/training/parent"));
+  });
+
   test("goes to the consent when the base says the user does not need a parent", async () => {
     jest.mocked(trainingService.confirmParent).mockResolvedValue({ ok: false, reason: "not_under_age", attemptsLeft: null });
     const pathname = await openCode();

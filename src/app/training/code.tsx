@@ -53,13 +53,15 @@ export default function ParentCodeScreen() {
     }
   }
 
+  const gone = reason === "expired" || reason === "no_request" || (reason === "wrong_code" && attemptsLeft === 0);
+
   const message =
     reason === null
       ? null
-      : reason === "wrong_code"
-        ? t.training.errors.wrongCode(attemptsLeft)
-        : reason === "expired" || reason === "no_request"
-          ? t.training.errors.codeExpired
+      : gone
+        ? t.training.errors.codeExpired
+        : reason === "wrong_code"
+          ? t.training.errors.wrongCode(attemptsLeft)
           : reason === "not_registered"
             ? t.training.errors.notRegistered
             : reason === "offline"
@@ -82,7 +84,7 @@ export default function ParentCodeScreen() {
           disabled={checking}
         />
         {message === null ? null : <Text style={styles.error}>{message}</Text>}
-        {reason === "expired" || reason === "no_request" ? (
+        {gone ? (
           <Text accessibilityRole="link" onPress={() => router.replace("/training/parent")} style={styles.link}>
             {t.training.askAgain}
           </Text>
