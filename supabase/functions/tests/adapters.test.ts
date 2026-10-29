@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createParentConsentStore, createRenderStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createParentConsentStore, createRenderStore, createRevokeStore, createServerStore, createTransferStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -869,4 +869,52 @@ Deno.test("withdraw_parent_request is called with the owner and the request id",
   await createParentConsentStore(KEYS, fetch).withdraw(ALICE, PAGE_ID);
   assertEquals(calls[0].url.pathname, "/rest/v1/rpc/withdraw_parent_request");
   assertEquals(calls[0].body, { p_user_id: ALICE, p_request_id: PAGE_ID });
+});
+
+function trainingStorage(models: string[], photos: string[]) {
+  const modelStorage = storageWith(models, {}, "models");
+  const photoStorage = storageWith(photos, {}, "photos");
+  const fetcher = ((input: string | URL | Request, init?: RequestInit) =>
+    (String(input).includes("/models") ? modelStorage : photoStorage).fetch(input, init)) as typeof fetch;
+  return { fetch: fetcher, models: modelStorage, photos: photoStorage };
+}
+
+Deno.test("erasing the training files of an account removes its models and the folder writing-tests of its photos, and nothing else [4]", async () => {
+  const storage = trainingStorage(
+    [`${ALICE}/m-1.safetensors`, `${ALICE}/m-2.safetensors`, `${BOB}/m-1.safetensors`],
+    [`${ALICE}/writing-tests/t-1/1.jpg`, `${ALICE}/writing-tests/t-1/2.jpg`, `${ALICE}/page-1/original.jpg`, `${BOB}/writing-tests/t-1/1.jpg`],
+  );
+  await createRevokeStore(KEYS, storage.fetch).removeFiles(ALICE);
+  assertEquals([...storage.models.files], [`${BOB}/m-1.safetensors`]);
+  assertEquals([...storage.photos.files].sort(), [`${ALICE}/page-1/original.jpg`, `${BOB}/writing-tests/t-1/1.jpg`]);
+  assertEquals(storage.photos.lists.every((list) => list.prefix === `${ALICE}/writing-tests` || list.prefix.startsWith(`${ALICE}/writing-tests/`)), true);
+  assertEquals(storage.photos.headers.every((headers) => headers.get("authorization") === "Bearer secret-key"), true);
+});
+
+Deno.test("an account with no training file removes nothing [4]", async () => {
+  const storage = trainingStorage([`${BOB}/m-1.safetensors`], [`${ALICE}/page-1/original.jpg`]);
+  await createRevokeStore(KEYS, storage.fetch).removeFiles(ALICE);
+  assertEquals(storage.models.removals, []);
+  assertEquals(storage.photos.removals, []);
+});
+
+Deno.test("a training file that is still there after the removal is an error, never a pass [4]", async () => {
+  const modelStorage = storageWith([`${ALICE}/m-1.safetensors`], { keepFiles: true }, "models");
+  const error = await thrownBy(() => createRevokeStore(KEYS, modelStorage.fetch).removeFiles(ALICE));
+  assertEquals(error instanceof StoreError, true);
+});
+
+Deno.test("the withdrawal is called with the account id alone, as the service, and its answer is read back [4]", async () => {
+  const { fetch, calls } = stub(() => true);
+  assertEquals(await createRevokeStore(KEYS, fetch).revoke(ALICE), true);
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].url.pathname, "/rest/v1/rpc/revoke_training");
+  assertEquals(calls[0].body, { p_user_id: ALICE });
+  assertEquals(calls[0].headers.get("apikey"), "secret-key");
+  assertEquals(await createRevokeStore(KEYS, stub(() => false).fetch).revoke(ALICE), false);
+});
+
+Deno.test("a withdrawal that fails or answers something else is an error [4]", async () => {
+  assertEquals((await thrownBy(() => createRevokeStore(KEYS, answer(500, { message: "boom" })).revoke(ALICE))) instanceof StoreError, true);
+  assertEquals((await thrownBy(() => createRevokeStore(KEYS, stub(() => "yes").fetch).revoke(ALICE))) instanceof StoreError, true);
 });

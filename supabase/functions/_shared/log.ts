@@ -39,6 +39,8 @@ export type LogEvent =
   | "parent_consent_requested"
   | "parent_consent_confirmed"
   | "parent_email_failed"
+  | "training_revoked"
+  | "training_files_left"
   | "unexpected_error";
 
 export type LogFields = {

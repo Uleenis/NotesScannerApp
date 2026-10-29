@@ -113,6 +113,17 @@ export type TransferAccountDeps = {
   log: Logger;
 };
 
+export type RevokeStore = {
+  removeFiles: (userId: string) => Promise<void>;
+  revoke: (userId: string) => Promise<boolean>;
+};
+
+export type RevokeTrainingDeps = {
+  auth: Auth;
+  training: RevokeStore;
+  log: Logger;
+};
+
 export type DeleteAccountDeps = {
   auth: Auth;
   accounts: AccountStore;

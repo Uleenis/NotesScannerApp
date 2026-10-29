@@ -465,3 +465,6 @@ verify_jwt = true
 
 [functions.confirm-parent-consent]
 verify_jwt = true
+
+[functions.revoke-training]
+verify_jwt = true

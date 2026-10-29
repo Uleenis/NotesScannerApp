@@ -5,6 +5,8 @@ import type { PageType } from "../_shared/page-type.ts";
 import type { Arbitrated, Arbitration, Recognized, ReadingService } from "../_shared/reading-service.ts";
 import type {
   AccountStore,
+  RevokeStore,
+  RevokeTrainingDeps,
   Allowance,
   Auth,
   Bucket,
@@ -139,6 +141,9 @@ export class World {
   loseCopies = new Set<Bucket>();
   onCopy: (() => void) | null = null;
   beforeDeleteUser: (() => void) | null = null;
+  beforeRevoke: (() => void) | null = null;
+  activeConsents = new Set<string>();
+  revoked: string[] = [];
   beforeLibraryCall: (() => void) | null = null;
   photos = new Map<string, FakePhoto>();
   alto = new Map<string, Uint8Array>();
@@ -539,6 +544,22 @@ export class World {
     };
   }
 
+  trainingStore(): RevokeStore {
+    return {
+      removeFiles: async (userId) => {
+        await this.tick("removeTrainingFiles");
+        for (const path of this.filesOf("models", userId)) this.models.delete(path);
+        for (const path of this.filesOf("photos", userId)) if (path.startsWith(`${userId}/writing-tests/`)) this.photos.delete(path);
+      },
+      revoke: async (userId) => {
+        this.beforeRevoke?.();
+        await this.tick("revoke");
+        this.revoked.push(userId);
+        return this.activeConsents.delete(userId);
+      },
+    };
+  }
+
   transfers(): TransferStore {
     return {
       hasProcessingPage: async (userId) => {
@@ -819,6 +840,14 @@ export class World {
     return {
       auth: this.authPort(),
       accounts: this.accounts(),
+      log: this.logger(),
+    };
+  }
+
+  revokeDeps(): RevokeTrainingDeps {
+    return {
+      auth: this.authPort(),
+      training: this.trainingStore(),
       log: this.logger(),
     };
   }
