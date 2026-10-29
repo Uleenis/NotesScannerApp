@@ -96,6 +96,11 @@ export default function AccountScreen() {
           <AccountRow label={t.account.terms} onPress={() => openLink(legalLinks.terms)} />
           <AccountRow label={t.account.privacy} onPress={() => openLink(legalLinks.privacy)} last />
         </AccountGroup>
+        {registered ? (
+          <AccountGroup>
+            <AccountRow label={t.training.row} onPress={() => router.push("/training")} disabled={working} last />
+          </AccountGroup>
+        ) : null}
         <AccountGroup>
           <AccountRow label={t.myData.label} onPress={exportData} disabled={working} last />
         </AccountGroup>

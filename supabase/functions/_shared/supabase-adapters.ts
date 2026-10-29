@@ -29,6 +29,7 @@ import type {
   PhotoInfo,
   QueueReason,
   RenderStore,
+  RevokeStore,
   ServerStore,
   SwitchOutcome,
   SweepStore,
@@ -202,20 +203,37 @@ async function listFiles(client: SupabaseClient, bucket: Bucket, root: string): 
   return files;
 }
 
+async function removeFolder(client: SupabaseClient, bucket: Bucket, folder: string): Promise<void> {
+  const files = await listFiles(client, bucket, folder);
+  for (let start = 0; start < files.length; start += REMOVE_BATCH_SIZE) {
+    const { error } = await client.storage.from(bucket).remove(files.slice(start, start + REMOVE_BATCH_SIZE));
+    if (error) throw new StoreError("removeFiles");
+  }
+  if ((await listFiles(client, bucket, folder)).length > 0) throw new StoreError("filesRemain");
+}
+
 export function createAccountStore(keys: Keys, fetchImpl?: typeof fetch): AccountStore {
   const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
   return {
-    removeFiles: async (bucket, userId) => {
-      const files = await listFiles(client, bucket, userId);
-      for (let start = 0; start < files.length; start += REMOVE_BATCH_SIZE) {
-        const { error } = await client.storage.from(bucket).remove(files.slice(start, start + REMOVE_BATCH_SIZE));
-        if (error) throw new StoreError("removeFiles");
-      }
-      if ((await listFiles(client, bucket, userId)).length > 0) throw new StoreError("filesRemain");
-    },
+    removeFiles: (bucket, userId) => removeFolder(client, bucket, userId),
     deleteUser: async (userId) => {
       const { error } = await client.auth.admin.deleteUser(userId, false);
       if (error) throw new StoreError("deleteUser");
+    },
+  };
+}
+
+export function createRevokeStore(keys: Keys, fetchImpl?: typeof fetch): RevokeStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    removeFiles: async (userId) => {
+      await removeFolder(client, "models", userId);
+      await removeFolder(client, "photos", `${userId}/writing-tests`);
+    },
+    revoke: async (userId) => {
+      const { data, error } = await client.rpc("revoke_training", { p_user_id: userId });
+      if (error || typeof data !== "boolean") throw new StoreError("revokeTraining");
+      return data;
     },
   };
 }

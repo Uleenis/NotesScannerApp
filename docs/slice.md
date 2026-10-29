@@ -7,7 +7,7 @@ Paths below are from the repository root.
 - **Spec and plan of slice 5:** `../../02 Design/Tranche 5.md`, validated by the owner on 27/10/2026 with its eight decisions as proposed.
 - **Decisions:** `../Tranche 5/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Method:** `../../01 Steps/Méthode de travail.md`. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next:** branch 3, `t5/consent-screens`.
+- **Next:** branch 4, `t5/writing-test`.
 - **Order:** branches 1 to 11 in the order of the table. Branch 11 exists only if measure 19 (branch 10) passes; otherwise branch 10 is the last. Criterion 20 (phone) is checked after the last branch, through `../Tranche 5/Vérifications.md`. The last session writes `../Tranche 5/Bilan.md` and `../Tranche 5/Vérifications.md` and the status of `../../AGENTS.md`.
 - **After this slice:** 6, 8, pre-beta, 11 (`../../01 Steps/Périmètre du MVP.md`). A slice whose document is missing or not validated: stop and ask.
 - **Guarded files:** one patch for the slice, prepared in branch 5: `.claude/settings.json` denies reading `services/training/.env`, with its test in `tests/guardrails.test.ts`. It goes in `../Pour Tim.md`. The training image is not built in CI: its logic lives in the package of the reading service, tested by `check.sh`.
@@ -21,8 +21,8 @@ Paths below are from the repository root.
 |---|---|---|---|---|---|---|
 | 1 | `t5/consent` (birth year, country, table of ages, `consents`, rights) | 1, 2 | critical (consent of minors) | Opus 5.5, High | code Sonnet, security Opus | done, PR 89 |
 | 2 | `t5/parent` (request and confirmation of the parent's consent, the e-mail) | 3 | critical (secret, e-mail to a third party) | Opus 5.5, High | code Sonnet, security Opus | done, PR 90 |
-| 3 | `t5/consent-screens` (screens of age, consent, parent, withdrawal and erasure) | 4, 14 | sensitive (deletion) | Sonnet 5.5, High | code and security, Sonnet | next |
-| 4 | `t5/writing-test` (texts, photos, check route, screen) | 5 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | |
+| 3 | `t5/consent-screens` (screens of age, consent, parent, withdrawal and erasure) | 4, 14 | sensitive (deletion) | Sonnet 5.5, High | code and security, Sonnet | done, PR 91 |
+| 4 | `t5/writing-test` (texts, photos, check route, screen) | 5 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | next |
 | 5 | `t5/trainer` (image, jobs, three functions, harvest, training, replacement of the active model, sweep) | 6, 7, 8 | critical (secret, exposure of a service) | Opus 5.5, High | code Sonnet, security Opus | |
 | 6 | `t5/personal-reading` (reading with the personal model, rules tied to the model of A) | 9 | critical (loading a model) | Opus 5.5, High | code Sonnet, security Opus | |
 | 7 | `t5/measure` (measures 15 to 17, outside the repository) | 15, 16, 17 | ordinary | Sonnet 5.5, High | code, Sonnet | |
@@ -30,6 +30,13 @@ Paths below are from the repository root.
 | 9 | `t5/dates` (date check and its display, measure 18) | 11, 18 | ordinary | Sonnet 5.5, High | code, Sonnet | |
 | 10 | `t5/faults-measure` (measure 19, outside the repository) | 19 | ordinary | Sonnet 5.5, High | code, Sonnet | |
 | 11 | `t5/faults` (fault notification, only if measure 19 passes) | 12, 14 | ordinary | Sonnet 5.5, High | code, Sonnet | |
+
+## Notes carried from slice 5, branch 3
+
+- `t5/consent-screens` adds `revoke-training` and `public.revoke_training(uuid)` (migration `20261103120000_t5_revoke.sql`), the screens under `/training` (state and withdrawal, year of birth, consent, parent's e-mail, parent's code) and `src/training/`; contracts in `docs/architecture.md` ("Withdrawal of the consent", `src/training/`).
+- `revoke_training` today deletes the consent, the request to a parent, the personal models (`htr_models`) and resets the notebooks to `course`. Branch 4 must extend it (new migration, with its pgTAP test) to delete the `writing_tests` rows, and `revoke-training`'s file erase already covers the folder `writing-tests` of `photos`. Branch 5 must extend it to delete the training tasks and make `training-report` refuse a report that arrives after the withdrawal (the part of criterion 4 this branch could not hold), with a parallel test.
+- The client reads the state with the rights of the user (`profiles.birth_year`, the active `consents` row). Branch 8 builds the states of the account ("test à faire", "entraînement en cours", "en service") on top of `useTrainingState` (`src/training/queries.ts`); until then the state screen shows only who consented and the withdrawal.
+- After the fifth wrong parent code the request is gone: the code screen says the code is no longer valid and offers to ask again.
 
 ## Notes carried from slice 5, branch 2
 
