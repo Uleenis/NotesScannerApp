@@ -75,6 +75,6 @@ Paths below are from the repository root.
 - Cloud Run: a bad `READING_URL` or `READING_SECRET` in production reads every page with B1 alone, with one `reading_service_misconfigured` line per cold start; the deploy must check that A gets written.
 - Cloud Run: a cancelled recognition goes on in the service and holds its one-page lock; concurrency and instance count settle it. One user can keep the four places of the service busy with re-readings: add a per-user bound before Cloud Run.
 - The service key lives in the process that decodes photos, and ALTO files left behind are never swept: both are for the owner to decide before Cloud Run (`../Tranche 2/Décisions.md`).
-- Slice 5: retiring the active personal model leaves notebooks above `course` as they are, unless the withdrawal sets them back (spec of slice 5, "Retrait"). Reading loads `.safetensors` files only, through `kraken.models.load_models`; never `load_from_checkpoint`.
+- Slice 5: retiring the active personal model leaves notebooks above `course` as they are, unless the withdrawal sets them back (spec of slice 5, "Retrait"). Reading loads `.safetensors` files only, through `kraken.models.load_safetensors`; never `load_models` nor `load_from_checkpoint`.
 - `set-page-type` has no section in `supabase/config.toml`: `verify_jwt` defaults to true and the handler checks the token itself.
 - After a `supabase db reset`, the phone's Expo Go keeps a session for an anonymous account that no longer exists: clear Expo Go's data for the project before using the app on the local stack.

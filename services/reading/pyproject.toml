@@ -133,6 +133,8 @@ untyped_calls_exclude = ["skimage"]
 
 [[tool.mypy.overrides]]
 module = [
+    "coremltools",
+    "coremltools.*",
     "espeakng_loader",
     "kraken",
     "kraken.*",

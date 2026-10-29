@@ -116,11 +116,14 @@ def quiet_libraries() -> None:
 class Recognizer:
     def __init__(self, model_path: str, accelerator: str = "cpu") -> None:
         from kraken.configs import RecognitionInferenceConfig
-        from kraken.models import load_models
+        from kraken.models import load_safetensors
         from kraken.tasks import RecognitionTaskModel
 
         quiet_libraries()
-        self._model = RecognitionTaskModel(load_models(model_path, tasks=["recognition"]))
+        nets = load_safetensors(model_path, tasks=["recognition"])
+        if len(nets) != 1:
+            raise ValueError("not exactly one recognition model")
+        self._model = RecognitionTaskModel(nets)
         self._config = RecognitionInferenceConfig(num_line_workers=0, accelerator=accelerator)
 
     def words(self, tile: Image.Image) -> list[TileWord]:

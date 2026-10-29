@@ -3,10 +3,12 @@ import json
 import logging
 import os
 import struct
+import threading
+import time
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from reading.personal import ActiveModel, Models, entry_of
 from reading.recognition import Recognizer, TileWord
@@ -48,10 +50,19 @@ def active(data: bytes, user: str = USER, model: str = MODEL) -> ActiveModel:
 
 
 class FakeSource:
-    def __init__(self, models: dict[str, ActiveModel | None], files: dict[str, bytes], fail: bool = False) -> None:
+    def __init__(
+        self,
+        models: dict[str, ActiveModel | None],
+        files: dict[str, bytes],
+        fail: bool = False,
+        down: bool = False,
+        delay: float = 0.0,
+    ) -> None:
         self.models = models
         self.files = files
         self.fail = fail
+        self.down = down
+        self.delay = delay
         self.downloads: list[tuple[str, int]] = []
 
     def active_model(self, user_id: str) -> ActiveModel | None:
@@ -61,6 +72,9 @@ class FakeSource:
 
     def download_model(self, path: str, limit: int) -> bytes:
         self.downloads.append((path, limit))
+        time.sleep(self.delay)
+        if self.down:
+            raise StoreError(settled=False)
         if path not in self.files:
             raise StoreError(settled=True)
         return self.files[path]
@@ -253,6 +267,10 @@ def changed(**fields: object) -> dict[str, object]:
         pytest.param(weights(changed(num_classes=True)), id="classes not a number"),
         pytest.param(weights(changed(codec=["a"])), id="codec not a table"),
         pytest.param(weights({"x": 1}), id="an entry of nothing known"),
+        pytest.param(weights(changed(codec={"a": [1, 1, 1, 1, 1]})), id="a code too long"),
+        pytest.param(weights(changed(codec={"a": [4]})), id="a label beyond the classes"),
+        pytest.param(weights(changed(codec={"a": ["1"]})), id="a label not a number"),
+        pytest.param(weights(changed(codec={"a": 1})), id="a code not a list"),
     ],
 )
 def test_a_model_built_otherwise_than_the_generic_is_never_loaded(
@@ -302,3 +320,153 @@ def test_a_copy_of_the_generic_loads_through_kraken_as_a_personal_model(tmp_path
     assert isinstance(recognizer, Recognizer)
     assert model_id == MODEL
     assert list(folder.iterdir()) == []
+
+
+def written_tile() -> Image.Image:
+    tile = Image.new("RGB", (900, 120), (250, 250, 250))
+    ImageDraw.Draw(tile).text(
+        (20, 25), "copper lantern meadow", fill=(20, 20, 20), font=ImageFont.load_default(size=60)
+    )
+    return tile
+
+
+def test_a_personal_copy_of_the_generic_reads_like_it_once_its_file_is_erased(tmp_path: Path) -> None:
+    generic = Path(os.environ["READING_MODEL"])
+    data = generic.read_bytes()
+    model = active(data)
+    folder = tmp_path / "models"
+    folder.mkdir()
+    models = Models(
+        FakeSource({USER: model}, {model.path: data}), lambda path: Recognizer(str(path)), entry_of(generic), folder
+    )
+    recognizer, _ = models.for_user(USER, PAGE)
+    assert recognizer is not None
+    assert list(folder.iterdir()) == []
+    assert recognizer.words(written_tile()) == Recognizer(str(generic)).words(written_tile())
+
+
+def polyglot() -> bytes:
+    import kraken
+    from coremltools.models.utils import load_spec
+
+    spec = load_spec(str(Path(kraken.__file__).parent / "blla.mlmodel"))
+    user_defined = spec.description.metadata.userDefined
+    meta = json.loads(user_defined["kraken_meta"])
+    meta["model_type"] = ["recognition"]
+    user_defined["kraken_meta"] = json.dumps(meta)
+    generic = entry_of(Path(os.environ["READING_MODEL"]))
+    skip = 0x44 + (0x00 << 7) + (0x20 << 14)
+    length = skip + 5
+    head = '{"Ā ":"x","__metadata__":{"kraken_meta":' + json.dumps(json.dumps({"net": generic})) + "}}"
+    raw = head.encode()
+    assert length & 0xFF == 0x49
+    assert len(raw) <= length
+    coreml: bytes = spec.SerializeToString()
+    return struct.pack("<Q", length) + raw + b" " * (length - len(raw)) + coreml
+
+
+def test_a_file_that_is_also_a_coreml_model_never_loads_the_coreml_network(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    data = polyglot()
+    model = active(data)
+    generic = entry_of(Path(os.environ["READING_MODEL"]))
+    source = FakeSource({USER: model}, {model.path: data})
+    models = Models(source, lambda path: Recognizer(str(path)), generic, tmp_path)
+    unavailable(models, caplog, "load")
+
+
+def test_a_full_disk_reads_with_the_generic_and_says_so(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    data = weights()
+    model = active(data)
+    models, loader = models_of(FakeSource({USER: model}, {model.path: data}), tmp_path / "gone")
+    unavailable(models, caplog, "disk")
+    assert loader.paths == []
+
+
+def test_a_model_refused_once_is_not_downloaded_again(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    data = weights(changed(variant="large"))
+    model = active(data)
+    source = FakeSource({USER: model}, {model.path: data})
+    models, _ = models_of(source, tmp_path)
+    unavailable(models, caplog, "architecture")
+    caplog.clear()
+    unavailable(models, caplog, "architecture")
+    assert len(source.downloads) == 1
+
+
+def test_a_storage_out_of_reach_is_tried_again_on_the_next_page(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    data = weights()
+    model = active(data)
+    source = FakeSource({USER: model}, {model.path: data}, down=True)
+    models, _ = models_of(source, tmp_path)
+    unavailable(models, caplog, "store")
+    source.down = False
+    recognizer, model_id = models.for_user(USER, PAGE)
+    assert recognizer is not None
+    assert model_id == MODEL
+    assert len(source.downloads) == 2
+
+
+def test_a_model_its_owner_no_longer_has_leaves_memory(tmp_path: Path) -> None:
+    data = weights()
+    model = active(data)
+    source = FakeSource({USER: model}, {model.path: data})
+    models, loader = models_of(source, tmp_path)
+    models.for_user(USER, PAGE)
+    source.models[USER] = None
+    assert models.for_user(USER, PAGE) == (None, None)
+    source.models[USER] = model
+    models.for_user(USER, PAGE)
+    assert len(loader.paths) == 2
+
+
+def test_a_replaced_model_leaves_memory(tmp_path: Path) -> None:
+    first = weights()
+    second = weights(extra=b"retrained")
+    old = active(first)
+    new = active(second, model=OTHER)
+    source = FakeSource({USER: old}, {old.path: first, new.path: second})
+    models, loader = models_of(source, tmp_path)
+    models.for_user(USER, PAGE)
+    source.models[USER] = new
+    models.for_user(USER, PAGE)
+    source.models[USER] = old
+    models.for_user(USER, PAGE)
+    assert len(loader.paths) == 3
+
+
+def test_pages_of_one_owner_read_at_once_load_the_model_once(tmp_path: Path) -> None:
+    data = weights()
+    model = active(data)
+    source = FakeSource({USER: model}, {model.path: data}, delay=0.2)
+    models, loader = models_of(source, tmp_path)
+    found: list[tuple[object, str | None]] = []
+    threads = [threading.Thread(target=lambda: found.append(models.for_user(USER, PAGE))) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(source.downloads) == 1
+    assert len(loader.paths) == 1
+    assert len({id(recognizer) for recognizer, _ in found}) == 1
+    assert {model_id for _, model_id in found} == {MODEL}
+
+
+def test_a_cached_model_reads_while_another_owner_waits_for_a_download(tmp_path: Path) -> None:
+    data = weights()
+    first = active(data)
+    slow = active(data, user=OTHER, model=OTHER)
+    source = FakeSource({USER: first, OTHER: slow}, {first.path: data, slow.path: data})
+    models, _ = models_of(source, tmp_path)
+    models.for_user(USER, PAGE)
+    source.delay = 1.0
+    waiting = threading.Thread(target=lambda: models.for_user(OTHER, PAGE))
+    waiting.start()
+    time.sleep(0.1)
+    started = time.perf_counter()
+    assert models.for_user(USER, PAGE)[1] == MODEL
+    assert time.perf_counter() - started < 0.5
+    waiting.join()
