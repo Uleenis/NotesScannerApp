@@ -10,11 +10,12 @@ from fastapi.testclient import TestClient
 from reading.alto import alto_of
 from reading.app import GATE_HEADER, MAX_ARBITRATION_BYTES, answer, create_app
 from reading.arbiter import Arbitration, ArbitrationError, Outcome
-from reading.recognition import Reading, ReadLine, Word
+from reading.recognition import Reading, ReadLine, TileReader, Word
 from reading.refusal import too_complex
 
 SECRET = "a" * 24 + "-shared-secret-of-the-test"
 USER = "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+MODEL = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
 PAGE = "0b6f3c1e-8d2a-4c5b-9e7f-1a2b3c4d5e6f"
 PROBE = "PROBE-text-that-must-never-come-back"
 JSON = "application/json"
@@ -37,8 +38,13 @@ READING = Reading(
 
 
 class EmptyReader:
-    def read(self, photo: object) -> Reading:
+    def read(self, photo: object, recognizer: TileReader | None = None) -> Reading:
         return READING
+
+
+class GenericOnly:
+    def for_user(self, user_id: str, page_id: str) -> tuple[TileReader | None, str | None]:
+        return None, None
 
 
 class FakeArbiter:
@@ -64,7 +70,7 @@ def body(**changes: Any) -> dict[str, Any]:
         "page_id": PAGE,
         "user_id": USER,
         "b1": "lantern meadows\nsummit",
-        "a": answer(PAGE, READING, alto_of(READING)),
+        "a": answer(PAGE, READING, alto_of(READING), None),
         "duration_ms": 28000,
     }
     sent.update(changes)
@@ -86,7 +92,7 @@ def post(
 
 
 def client_of(arbiter: FakeArbiter, max_in_flight: int = 4) -> TestClient:
-    return TestClient(create_app(SECRET, EmptyReader(), arbiter, max_in_flight=max_in_flight))
+    return TestClient(create_app(SECRET, EmptyReader(), arbiter, GenericOnly(), max_in_flight=max_in_flight))
 
 
 def served(caplog: pytest.LogCaptureFixture) -> str:
@@ -107,6 +113,19 @@ def test_a_and_b1_of_a_page_are_arbitrated() -> None:
     )
 
 
+def test_the_model_that_read_a_is_handed_over() -> None:
+    arbiter = FakeArbiter()
+    status, _ = post(client_of(arbiter), body(a=answer(PAGE, READING, alto_of(READING), MODEL)))
+    assert status == 200
+    assert [received.model_id for received in arbiter.received] == [MODEL]
+
+
+def test_a_read_by_the_generic_is_handed_over_without_a_model() -> None:
+    arbiter = FakeArbiter()
+    assert post(client_of(arbiter), body())[0] == 200
+    assert [received.model_id for received in arbiter.received] == [None]
+
+
 def test_b2_is_handed_over_when_it_came_and_left_empty_when_it_did_not() -> None:
     arbiter = FakeArbiter()
     client = client_of(arbiter)
@@ -116,7 +135,7 @@ def test_b2_is_handed_over_when_it_came_and_left_empty_when_it_did_not() -> None
     assert [received.b2 for received in arbiter.received] == ["lantern meadow summit", None, None]
 
 
-@pytest.mark.parametrize("reason", ["page_not_found", "not_text", "already_read"])
+@pytest.mark.parametrize("reason", ["page_not_found", "not_text", "already_read", "model_not_found"])
 def test_a_refused_write_answers_its_reason(reason: str) -> None:
     status, answered = post(client_of(FakeArbiter(Outcome(reason, 0))), body())
     assert (status, answered) == (409, {"error": reason})
@@ -172,6 +191,12 @@ def changed_a(change: str) -> dict[str, Any]:
         del a["alto"]
     elif change == "no lines":
         del a["lines"]
+    elif change == "no model":
+        del a["model_id"]
+    elif change == "model not an identifier":
+        a["model_id"] = "medium"
+    elif change == "model in capitals":
+        a["model_id"] = MODEL.upper()
     return a
 
 
@@ -207,6 +232,9 @@ INVALID = [
             "alto of another reading",
             "no alto",
             "no lines",
+            "no model",
+            "model not an identifier",
+            "model in capitals",
         ]
     ],
     pytest.param(PROBE.encode(), id="not json"),

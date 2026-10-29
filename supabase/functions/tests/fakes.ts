@@ -142,6 +142,7 @@ export function fakeAnswer(pageId: string): string {
     height: 1600,
     lines: [{ row: 0, box: [10, 20, 400, 60], ink: [12, 22, 398, 58], words: [{ text: "First", box: [10, 20, 90, 60], confidence: 0.98 }] }],
     alto: "<alto/>",
+    model_id: null,
   });
 }
 
@@ -196,7 +197,7 @@ export class World {
   serviceConfigured = false;
   recognizeOutcomes: (Recognized | "hold")[] = [];
   arbitrateOutcomes: Arbitrated[] = [];
-  recognitions: { pageId: string; image: Uint8Array; signal: AbortSignal; timeoutMs: number | undefined }[] = [];
+  recognitions: { pageId: string; userId: string; image: Uint8Array; signal: AbortSignal; timeoutMs: number | undefined }[] = [];
   arbitrateTimeouts: (number | undefined)[] = [];
   arbitrations: Arbitration[] = [];
   held: ((outcome: Recognized | null) => void)[] = [];
@@ -772,9 +773,9 @@ export class World {
 
   readingService(): ReadingService {
     return {
-      recognize: async (pageId, image, signal, timeoutMs): Promise<Recognized> => {
+      recognize: async (pageId, userId, image, signal, timeoutMs): Promise<Recognized> => {
         this.calls.push("recognize");
-        this.recognitions.push({ pageId, image, signal, timeoutMs });
+        this.recognitions.push({ pageId, userId, image, signal, timeoutMs });
         const outcome = this.recognizeOutcomes.shift() ?? { ok: true, answer: fakeAnswer(pageId) };
         if (outcome === "hold") {
           const released = await new Promise<Recognized | null>((resolve) => {

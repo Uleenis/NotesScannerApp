@@ -65,9 +65,9 @@ insert into public.pages (id, user_id, notebook_id, status, page_type) values
 insert into public.page_alerts (user_id, page_id, kind, details) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a5000000-0000-0000-0000-000000000007', 'missing_line', '{"absent_from_b2": [9], "absent_from_b1": []}');
 
-select is(has_function_privilege('anon', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb, jsonb)', 'execute'), false, 'a visitor cannot write A');
-select is(has_function_privilege('authenticated', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb, jsonb)', 'execute'), false, 'a signed-in user cannot write A');
-select is(has_function_privilege('service_role', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb, jsonb)', 'execute'), true, 'the server can write A');
+select is(has_function_privilege('anon', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb, jsonb, uuid)', 'execute'), false, 'a visitor cannot write A');
+select is(has_function_privilege('authenticated', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb, jsonb, uuid)', 'execute'), false, 'a signed-in user cannot write A');
+select is(has_function_privilege('service_role', 'public.record_reading_a(uuid, uuid, text, text, text, integer, text, text, jsonb, jsonb, uuid)', 'execute'), true, 'the server can write A');
 select is(
   (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = 'record_reading_a'),
   1::bigint,

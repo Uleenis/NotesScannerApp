@@ -14,8 +14,10 @@ MAX_LETTER_PAIRS = 50_000_000
 
 @dataclass(frozen=True)
 class Model:
+    id: str
     status: str
     cer: Decimal | None
+    version: int
 
 
 @dataclass(frozen=True)
@@ -51,8 +53,12 @@ class AToken:
     confidence: float
 
 
-def gate_open(models: Sequence[Model]) -> bool:
-    return any(model.status == "active" and model.cer is not None and model.cer <= THRESHOLD for model in models)
+def in_service(model: Model) -> bool:
+    return model.status == "active" and model.cer is not None and model.cer <= THRESHOLD
+
+
+def gate_open(models: Sequence[Model], model_id: str | None) -> bool:
+    return model_id is not None and any(model.id == model_id and in_service(model) for model in models)
 
 
 def a_text(lines: Sequence[ReadLine]) -> str:

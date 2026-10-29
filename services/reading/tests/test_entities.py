@@ -187,7 +187,7 @@ class GateOpen:
         self.writes: list[ReadingA] = []
 
     def models(self, user_id: str) -> list[Model]:
-        return [Model("active", Decimal("0.05"))]
+        return [Model("1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", "active", Decimal("0.05"), 1)]
 
     def correction_level(self, page_id: str, user_id: str) -> str:
         return "journal"
@@ -211,7 +211,9 @@ def test_the_service_decides_with_its_rules_when_the_gate_opens() -> None:
     reading = Reading(640, 480, (ReadLine(0, box, box, words),), 0.0, 0.0)
     page = "0b6f3c1e-8d2a-4c5b-9e7f-1a2b3c4d5e6f"
     user = "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
-    arbiter_of(store, Path(FOLDER), None).arbitrate(Arbitration(page, user, b1, reading, 1))
+    arbiter_of(store, Path(FOLDER), None).arbitrate(
+        Arbitration(page, user, b1, reading, 1, model_id="1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f")
+    )
     assert store.writes[0].language == "fr"
     assert [(p.text, p.rule) for p in store.writes[0].tokens] == [
         ("Aujourd'hui", 9),

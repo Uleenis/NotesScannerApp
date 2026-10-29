@@ -7,6 +7,9 @@ from reading.recognition import ReadLine, Word
 from reading.refusal import RefusalError
 from reading.tokens import line_tokens
 
+MODEL = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
+OTHER_MODEL = "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a"
+
 L1 = (10, 10, 600, 60)
 L2 = (10, 70, 600, 120)
 L3 = (10, 130, 600, 180)
@@ -219,19 +222,37 @@ def test_the_threshold_is_twelve_point_nine_percent() -> None:
     ("models", "expected"),
     [
         pytest.param([], False, id="no personal model"),
-        pytest.param([Model("active", Decimal("0.129"))], True, id="active at the threshold"),
-        pytest.param([Model("active", Decimal("0.05"))], True, id="active below"),
-        pytest.param([Model("active", Decimal("0.1291"))], False, id="active above"),
-        pytest.param([Model("active", None)], False, id="active without a measure"),
-        pytest.param([Model("candidate", Decimal("0.05"))], False, id="candidate"),
-        pytest.param([Model("training", Decimal("0.05"))], False, id="training"),
-        pytest.param([Model("retired", Decimal("0.05"))], False, id="retired"),
+        pytest.param([Model(MODEL, "active", Decimal("0.129"), 1)], True, id="active at the threshold"),
+        pytest.param([Model(MODEL, "active", Decimal("0.05"), 1)], True, id="active below"),
+        pytest.param([Model(MODEL, "active", Decimal("0.1291"), 1)], False, id="active above"),
+        pytest.param([Model(MODEL, "active", None, 1)], False, id="active without a measure"),
+        pytest.param([Model(MODEL, "candidate", Decimal("0.05"), 1)], False, id="candidate"),
+        pytest.param([Model(MODEL, "training", Decimal("0.05"), 1)], False, id="training"),
+        pytest.param([Model(MODEL, "retired", Decimal("0.05"), 1)], False, id="retired"),
         pytest.param(
-            [Model("retired", Decimal("0.05")), Model("active", Decimal("0.12"))], True, id="retired and active"
+            [Model(OTHER_MODEL, "retired", Decimal("0.05"), 1), Model(MODEL, "active", Decimal("0.12"), 2)],
+            True,
+            id="retired and active",
         ),
     ],
 )
 def test_the_gate_opens_only_on_an_active_personal_model_at_most_at_the_threshold(
     models: list[Model], expected: bool
 ) -> None:
-    assert gate_open(models) is expected
+    assert gate_open(models, MODEL) is expected
+
+
+@pytest.mark.parametrize(
+    ("models", "model_id"),
+    [
+        pytest.param([Model(MODEL, "active", Decimal("0.05"), 1)], None, id="a read by the generic"),
+        pytest.param([Model(MODEL, "active", Decimal("0.05"), 1)], OTHER_MODEL, id="a read by another model"),
+        pytest.param(
+            [Model(OTHER_MODEL, "retired", Decimal("0.05"), 1), Model(MODEL, "active", Decimal("0.05"), 2)],
+            OTHER_MODEL,
+            id="a read by the retired model",
+        ),
+    ],
+)
+def test_the_gate_stays_closed_unless_the_model_in_service_read_a(models: list[Model], model_id: str | None) -> None:
+    assert gate_open(models, model_id) is False

@@ -15,6 +15,7 @@ from reading.store import ReadingA, Store, StoreError
 
 MODEL = "medium"
 MODEL_VERSION = "1"
+PERSONAL = "personal"
 MAX_LISTED_LINES = 50
 
 log = logging.getLogger("reading")
@@ -28,6 +29,7 @@ class Arbitration:
     reading: Reading
     duration_ms: int
     b2: str | None = None
+    model_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -96,7 +98,11 @@ class Arbiter:
         except StoreError as error:
             log.error("arbitration failed page=%s step=gate settled=%s", page, error.settled)
             raise ArbitrationError from error
-        opened = gate_open(models)
+        model = next((found for found in models if found.id == arbitration.model_id), None)
+        if arbitration.model_id is not None and model is None:
+            log.info("arbitration refused page=%s reason=model_not_found", page)
+            return Outcome("model_not_found", 0)
+        opened = gate_open(models, arbitration.model_id)
         placed = with_places(positions_of(arbitration.b1, arbitration.reading.lines), arbitration.b1)
         language = self._language.language_of(arbitration.b1)
         second = self._second(arbitration)
@@ -134,8 +140,9 @@ class Arbiter:
             page_id=page,
             user_id=arbitration.user_id,
             raw_text=a_text(arbitration.reading.lines),
-            model=MODEL,
-            model_version=MODEL_VERSION,
+            model=MODEL if model is None else PERSONAL,
+            model_version=MODEL_VERSION if model is None else str(model.version),
+            model_id=None if model is None else model.id,
             duration_ms=arbitration.duration_ms,
             alto_path=path,
             language=language,

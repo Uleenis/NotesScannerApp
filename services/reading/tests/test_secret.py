@@ -14,7 +14,7 @@ from PIL import Image
 from reading.__main__ import KEY_VARIABLE, URL_VARIABLE
 from reading.app import GATE_HEADER, create_app
 from reading.arbiter import Arbitration, Outcome
-from reading.recognition import Reading
+from reading.recognition import Reading, TileReader
 from reading.secret import GATE_VARIABLE, SecretError, load_secret
 
 SECRET = "s" * 24 + "-shared-secret-of-the-test"
@@ -22,7 +22,7 @@ OTHER = "o" * 24 + "-shared-secret-of-the-test"
 
 
 class EmptyReader:
-    def read(self, photo: Image.Image) -> Reading:
+    def read(self, photo: Image.Image, recognizer: TileReader | None = None) -> Reading:
         return Reading(width=photo.width, height=photo.height, lines=(), segment_seconds=0.0, recognize_seconds=0.0)
 
 
@@ -31,7 +31,12 @@ class NoArbiter:
         raise AssertionError("no arbitration behind the gate")
 
 
-app = create_app(SECRET, EmptyReader(), NoArbiter())
+class GenericOnly:
+    def for_user(self, user_id: str, page_id: str) -> tuple[TileReader | None, str | None]:
+        return None, None
+
+
+app = create_app(SECRET, EmptyReader(), NoArbiter(), GenericOnly())
 client = TestClient(app)
 
 API_ROUTES = [route for route in app.routes if isinstance(route, APIRoute)]
@@ -113,7 +118,7 @@ def test_no_valid_secret_no_service(environ: dict[str, str]) -> None:
     with pytest.raises(SecretError):
         load_secret(environ)
     with pytest.raises(SecretError):
-        create_app(environ.get(GATE_VARIABLE, ""), EmptyReader(), NoArbiter())
+        create_app(environ.get(GATE_VARIABLE, ""), EmptyReader(), NoArbiter(), GenericOnly())
 
 
 def test_a_valid_secret_is_loaded() -> None:

@@ -61,7 +61,7 @@ class TileReader(Protocol):
 
 
 class PageReader(Protocol):
-    def read(self, photo: Image.Image) -> Reading: ...
+    def read(self, photo: Image.Image, recognizer: TileReader | None = None) -> Reading: ...
 
 
 def words_of(
@@ -116,10 +116,11 @@ def quiet_libraries() -> None:
 class Recognizer:
     def __init__(self, model_path: str, accelerator: str = "cpu") -> None:
         from kraken.configs import RecognitionInferenceConfig
+        from kraken.models import load_models
         from kraken.tasks import RecognitionTaskModel
 
         quiet_libraries()
-        self._model = RecognitionTaskModel.load_model(model_path)
+        self._model = RecognitionTaskModel(load_models(model_path, tasks=["recognition"]))
         self._config = RecognitionInferenceConfig(num_line_workers=0, accelerator=accelerator)
 
     def words(self, tile: Image.Image) -> list[TileWord]:
@@ -148,7 +149,8 @@ class Reader:
         self._deadline = deadline_seconds
         self._lock = threading.Lock()
 
-    def read(self, photo: Image.Image) -> Reading:
+    def read(self, photo: Image.Image, recognizer: TileReader | None = None) -> Reading:
+        chosen = self._recognizer if recognizer is None else recognizer
         with self._lock:
             started = time.perf_counter()
             lines = self._segmenter.lines(photo)
@@ -157,7 +159,7 @@ class Reader:
             for line in lines:
                 if time.perf_counter() - started > self._deadline:
                     raise too_complex()
-                read.append(read_line(line, self._recognizer.words(line.image), photo.width, photo.height))
+                read.append(read_line(line, chosen.words(line.image), photo.width, photo.height))
             recognized = time.perf_counter()
         return Reading(
             width=photo.width,

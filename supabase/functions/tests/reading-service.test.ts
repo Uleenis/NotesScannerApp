@@ -8,6 +8,7 @@ import { ALICE, JPEG_BYTES, PAGE_ID } from "./fakes.ts";
 const SECRET = "reading-secret-".repeat(3);
 const BASE = "http://notes-reading:8080";
 const B1 = "ZEBRA-CANARY-PAGE-TEXT et la suite";
+const MODEL_ID = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
 
 type Seen = { url: URL; method: string | undefined; headers: Headers; body: BodyInit | null | undefined; redirect: RequestRedirect | undefined; signal: AbortSignal | null | undefined };
 
@@ -35,6 +36,7 @@ function answerOf(pageId: string = PAGE_ID): string {
     height: 1600,
     lines: [{ row: 0, box: [10, 20, 400, 60], ink: [12, 22, 398, 58], words: [{ text: "Bonjour", box: [10, 20, 90, 60], confidence: 1.0 }] }],
     alto: "<alto/>",
+    model_id: null,
   });
 }
 
@@ -46,15 +48,15 @@ function service(fetcher: typeof fetch, options: Partial<{ maxAnswerBytes: numbe
   return createReadingService({ url: BASE, secret: SECRET, fetch: fetcher, ...options });
 }
 
-Deno.test("/recognize gets the photo as it is, its page id and the secret, and nothing of B1 [12]", async () => {
+Deno.test("/recognize gets the photo as it is, its page id, its owner and the secret, and nothing of B1 [12]", async () => {
   const { fetch, seen } = recorder(() => reply(200, answerOf()));
-  const result = await service(fetch).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal);
+  const result = await service(fetch).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal);
   assertEquals(result, { ok: true, answer: answerOf() });
   assertEquals(seen.length, 1);
   assertEquals(seen[0].method, "POST");
   assertEquals(seen[0].url.origin, BASE);
   assertEquals(seen[0].url.pathname, "/recognize");
-  assertEquals([...seen[0].url.searchParams], [["page_id", PAGE_ID]]);
+  assertEquals([...seen[0].url.searchParams], [["page_id", PAGE_ID], ["user_id", ALICE]]);
   assertEquals(seen[0].headers.get("content-type"), "image/jpeg");
   assertEquals(seen[0].headers.get("x-reading-secret"), SECRET);
   assertEquals(seen[0].headers.get("authorization"), null);
@@ -92,15 +94,33 @@ Deno.test("/arbitrate also gets B2 when there is one, and no field for it when t
 Deno.test("an answer of /recognize for another page, or that is not a JSON object, is a bad response", async () => {
   for (const body of [answerOf(ALICE), "not json", "[1, 2]", "null", JSON.stringify({ width: 1 })]) {
     const { fetch } = recorder(() => reply(200, body));
-    const result = await service(fetch).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal);
+    const result = await service(fetch).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal);
     assertEquals(result, { ok: false, failure: { kind: "bad_response" } }, body);
   }
 });
 
 Deno.test("an answer of /recognize above the bound is a bad response", async () => {
   const { fetch } = recorder(() => reply(200, answerOf()));
-  const result = await service(fetch, { maxAnswerBytes: 64 }).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal);
+  const result = await service(fetch, { maxAnswerBytes: 64 }).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal);
   assertEquals(result, { ok: false, failure: { kind: "bad_response" } });
+});
+
+Deno.test("an answer of /recognize names the personal model that read it, or none", async () => {
+  const personal = JSON.stringify({ ...JSON.parse(answerOf()), model_id: MODEL_ID });
+  const { fetch } = recorder(() => reply(200, personal));
+  assertEquals(await service(fetch).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal), { ok: true, answer: personal });
+});
+
+Deno.test("an answer of /recognize without a model, or with a model that is not an id, is a bad response", async () => {
+  const { model_id: _, ...without } = JSON.parse(answerOf());
+  for (const answer of [without, { ...without, model_id: "medium" }, { ...without, model_id: MODEL_ID.toUpperCase() }, { ...without, model_id: 1 }]) {
+    const { fetch } = recorder(() => reply(200, JSON.stringify(answer)));
+    assertEquals(
+      await service(fetch).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal),
+      { ok: false, failure: { kind: "bad_response" } },
+      JSON.stringify(answer.model_id),
+    );
+  }
 });
 
 Deno.test("a refusal of the service keeps its status and a known code only", async () => {
@@ -113,24 +133,29 @@ Deno.test("a refusal of the service keeps its status and a known code only", asy
   ];
   for (const [status, body, failure] of cases) {
     const { fetch } = recorder(() => reply(status, body));
-    assertEquals(await service(fetch).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal), { ok: false, failure }, body);
+    assertEquals(await service(fetch).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal), { ok: false, failure }, body);
   }
   const refused = recorder(() => reply(409, JSON.stringify({ error: "already_read" })));
   assertEquals(
     await service(refused.fetch).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, b2: null, answer: answerOf(), durationMs: 1 }, new AbortController().signal),
     { ok: false, failure: { kind: "http_error", status: 409, code: "already_read" } },
   );
+  const unknownModel = recorder(() => reply(409, JSON.stringify({ error: "model_not_found" })));
+  assertEquals(
+    await service(unknownModel.fetch).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, b2: null, answer: answerOf(), durationMs: 1 }, new AbortController().signal),
+    { ok: false, failure: { kind: "http_error", status: 409, code: "model_not_found" } },
+  );
 });
 
 Deno.test("a network failure, a timeout and a cancellation are told apart", async () => {
   const broken = (() => Promise.reject(new TypeError("connection refused"))) as typeof fetch;
-  assertEquals(await service(broken).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal), { ok: false, failure: { kind: "network" } });
+  assertEquals(await service(broken).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal), { ok: false, failure: { kind: "network" } });
 
   const hanging = ((_input: string | URL | Request, init?: RequestInit) =>
     new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
     })) as typeof fetch;
-  assertEquals(await service(hanging, { recognizeTimeoutMs: 10 }).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal), {
+  assertEquals(await service(hanging, { recognizeTimeoutMs: 10 }).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal), {
     ok: false,
     failure: { kind: "timeout" },
   });
@@ -140,7 +165,7 @@ Deno.test("a network failure, a timeout and a cancellation are told apart", asyn
   );
 
   const controller = new AbortController();
-  const pending = service(hanging).recognize(PAGE_ID, JPEG_BYTES, controller.signal);
+  const pending = service(hanging).recognize(PAGE_ID, ALICE, JPEG_BYTES, controller.signal);
   controller.abort();
   assertEquals(await pending, { ok: false, failure: { kind: "cancelled" } });
 });
@@ -238,7 +263,7 @@ Deno.test("a proxy of the environment would see the secret over http: B1 reads a
 
 Deno.test("a trailing slash in the address does not change the routes", async () => {
   const { fetch, seen } = recorder(() => reply(200, answerOf()));
-  await createReadingService({ url: `${BASE}/`, secret: SECRET, fetch }).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal);
+  await createReadingService({ url: `${BASE}/`, secret: SECRET, fetch }).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal);
   assertEquals(seen[0].url.pathname, "/recognize");
 });
 
@@ -248,13 +273,13 @@ Deno.test("the time left to A shortens a call, never lengthens it", async () => 
       init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
     })) as typeof fetch;
   const started = Date.now();
-  assertEquals(await service(hanging).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal, 10), { ok: false, failure: { kind: "timeout" } });
+  assertEquals(await service(hanging).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal, 10), { ok: false, failure: { kind: "timeout" } });
   assertEquals(
     await service(hanging).arbitrate({ pageId: PAGE_ID, userId: ALICE, b1: B1, b2: null, answer: answerOf(), durationMs: 1 }, new AbortController().signal, 10),
     { ok: false, failure: { kind: "timeout" } },
   );
   assert(Date.now() - started < 5_000);
-  assertEquals(await service(hanging, { recognizeTimeoutMs: 10 }).recognize(PAGE_ID, JPEG_BYTES, new AbortController().signal, 60_000), {
+  assertEquals(await service(hanging, { recognizeTimeoutMs: 10 }).recognize(PAGE_ID, ALICE, JPEG_BYTES, new AbortController().signal, 60_000), {
     ok: false,
     failure: { kind: "timeout" },
   });
