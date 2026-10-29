@@ -16,7 +16,8 @@ cleanup() {
   sql -c "select set_config('storage.allow_delete_query', 'true', false);
     delete from storage.objects where bucket_id = 'models' and name like '${USER_PREFIX}%';
     delete from auth.users where id::text like '${USER_PREFIX}%';
-    drop table if exists private.training_race_results;" > /dev/null
+    drop table if exists private.training_race_results;
+    drop table if exists private.training_race_attempts;" > /dev/null
 }
 
 trap cleanup EXIT
@@ -105,14 +106,16 @@ sql -c "insert into public.training_tasks (user_id, status, attempts, attempt_id
   select c.user_id, 'claimed', 1, gen_random_uuid(), now() from public.consents c where c.user_id::text like '${USER_PREFIX}-0000-0000-0003-%';
   insert into storage.objects (bucket_id, name, metadata)
   select 'models', k.user_id::text || '/' || k.attempt_id::text || '.safetensors', jsonb_build_object('size', 60000000)
-  from public.training_tasks k where k.user_id::text like '${USER_PREFIX}-0000-0000-0003-%';" > /dev/null
+  from public.training_tasks k where k.user_id::text like '${USER_PREFIX}-0000-0000-0003-%';
+  create table private.training_race_attempts as
+  select k.user_id, k.attempt_id from public.training_tasks k where k.user_id::text like '${USER_PREFIX}-0000-0000-0003-%';" > /dev/null
 
 install_script report <<EOS
 insert into private.training_race_results (step, outcome, removed)
 select 'report', r.outcome, cardinality(r.remove)
 from public.report_training_task(
-  (select k.attempt_id from public.training_tasks k
-   where k.user_id = ('${USER_PREFIX}-0000-0000-0003-' || lpad((:client_id)::text, 12, '0'))::uuid),
+  (select a.attempt_id from private.training_race_attempts a
+   where a.user_id = ('${USER_PREFIX}-0000-0000-0003-' || lpad((:client_id)::text, 12, '0'))::uuid),
   'trained', 0.10, 0.30, 0, 1, 80, 500, repeat('a', 64)
 ) r;
 EOS
