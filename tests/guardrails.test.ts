@@ -64,6 +64,8 @@ const SHELL_RULES = [
   "*functions\\.env*",
   "*reading/.env*",
   "*reading\\.env*",
+  "*training/.env*",
+  "*training\\.env*",
   "*docker*inspect*",
   "*docker*exec*",
   "*compose*config*",
@@ -107,6 +109,7 @@ const GUARDED_FILES = [
 const SECRET_FILES = [
   "./supabase/functions/.env",
   "./services/reading/.env",
+  "./services/training/.env",
 ];
 
 const DENIED_TOOLS = [
@@ -196,6 +199,9 @@ describe("guardrails", () => {
     "docker logs notes-reading",
     "cat services/reading/src/reading/app.py",
     "git add services/reading/pyproject.toml services/reading/uv.lock",
+    "npm run trainer:start",
+    "docker logs notes-training",
+    "cat services/training/compose.yaml",
   ])("still allows %s", (command) => {
     expect(denied(command)).toBe(false);
   });
@@ -239,6 +245,12 @@ describe("guardrails", () => {
     "docker inspect notes-reading",
     "docker container inspect notes-reading",
     "docker exec notes-reading env",
+    "cat services/training/.env",
+    "Get-Content services\\training\\.env",
+    "docker run --env-file services/training/.env notes-training:local env",
+    "docker inspect notes-training",
+    "docker exec notes-training env",
+    "docker compose -f services/training/compose.yaml config",
     "docker compose -f services/reading/compose.yaml config",
     "npx supabase db push",
     "npx supabase --debug db push",
