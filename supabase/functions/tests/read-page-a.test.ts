@@ -45,13 +45,14 @@ Deno.test("the photo goes to the service and to Gemini at the same time", async 
   assertEquals(order, ["claim", "recognize", "gemini", "markRead", "arbitrate"]);
 });
 
-Deno.test("/recognize gets the stored photo and the page id, never B1 [12]", async () => {
+Deno.test("/recognize gets the stored photo, the page id and its owner, never B1 [12]", async () => {
   const world = withService();
   world.readyPage();
   await call(world);
   await world.settle();
   assertEquals(world.recognitions.length, 1);
   assertEquals(world.recognitions[0].pageId, PAGE_ID);
+  assertEquals(world.recognitions[0].userId, ALICE);
   assertEquals(world.recognitions[0].image, JPEG_BYTES);
   assertEquals(world.geminiImages, [JPEG_BYTES]);
 });

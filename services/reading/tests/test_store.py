@@ -1,5 +1,5 @@
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from decimal import Decimal
 
@@ -9,6 +9,7 @@ import pytest
 from reading.arbiter import Arbiter, Arbitration
 from reading.arbitration import Alert, Model, Position
 from reading.language import Lingua
+from reading.personal import ActiveModel
 from reading.recognition import Reading, ReadLine, Word
 from reading.store import ReadingA, StoreError, SupabaseStore
 
@@ -17,6 +18,9 @@ KEY = "k" * 40 + "-service-key-of-the-test"
 USER = "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
 PAGE = "0b6f3c1e-8d2a-4c5b-9e7f-1a2b3c4d5e6f"
 PATH = f"{USER}/{PAGE}/a-0123456789abcdef0123456789abcdef.xml"
+MODEL = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
+OLDER = "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a"
+WEIGHTS = b"weights-of-the-test"
 
 Handler = Callable[[httpx2.Request], httpx2.Response]
 
@@ -72,12 +76,16 @@ def test_every_call_carries_the_service_key() -> None:
 
 
 def test_the_models_of_the_user_are_read_with_their_status_and_measure() -> None:
-    store, recorder = store_of(answer(200, [{"status": "active", "cer": 0.129}, {"status": "retired", "cer": None}]))
-    assert store.models(USER) == [Model("active", Decimal("0.129")), Model("retired", None)]
+    rows = [
+        {"id": MODEL, "status": "active", "cer": 0.129, "version": 2},
+        {"id": OLDER, "status": "retired", "cer": None, "version": 1},
+    ]
+    store, recorder = store_of(answer(200, rows))
+    assert store.models(USER) == [Model(MODEL, "active", Decimal("0.129"), 2), Model(OLDER, "retired", None, 1)]
     sent = recorder.requests[0]
     assert sent.method == "GET"
     assert sent.url.path == "/rest/v1/htr_models"
-    assert dict(sent.url.params) == {"select": "status,cer", "user_id": f"eq.{USER}"}
+    assert dict(sent.url.params) == {"select": "id,status,cer,version", "user_id": f"eq.{USER}"}
 
 
 @pytest.mark.parametrize("level", ["course", "journal", "grammar"])
@@ -139,6 +147,7 @@ def test_reading_a_is_written_by_the_server_function_in_one_call() -> None:
         "p_raw_text": "Le chut\ndort",
         "p_model": "medium",
         "p_model_version": "1",
+        "p_model_id": None,
         "p_duration_ms": 28000,
         "p_alto_path": PATH,
         "p_language": "fr",
@@ -195,13 +204,85 @@ def test_the_alerts_of_a_page_go_with_its_reading_when_there_are_any() -> None:
     assert sent["p_alerts"] == [{"kind": "missing_line", "details": {"absent_from_b2": [0], "absent_from_b1": []}}]
 
 
+def test_the_model_that_read_a_goes_with_its_reading() -> None:
+    store, recorder = store_of(answer(200, [{"recorded": True, "reason": "recorded"}]))
+    store.record(replace(WRITE, model="personal", model_version="3", model_id=MODEL))
+    sent = json.loads(recorder.requests[0].content)
+    assert (sent["p_model"], sent["p_model_version"], sent["p_model_id"]) == ("personal", "3", MODEL)
+
+
+def test_the_active_model_of_the_user_is_read_with_its_file_and_fingerprint() -> None:
+    row = {"id": MODEL, "storage_path": f"{USER}/{MODEL}.safetensors", "sha256": "a" * 64}
+    store, recorder = store_of(answer(200, [row]))
+    assert store.active_model(USER) == ActiveModel(MODEL, f"{USER}/{MODEL}.safetensors", "a" * 64)
+    sent = recorder.requests[0]
+    assert (sent.method, sent.url.path) == ("GET", "/rest/v1/htr_models")
+    assert dict(sent.url.params) == {
+        "select": "id,storage_path,sha256",
+        "user_id": f"eq.{USER}",
+        "status": "eq.active",
+    }
+
+
+def test_a_user_without_an_active_model_has_none() -> None:
+    store, _ = store_of(answer(200, []))
+    assert store.active_model(USER) is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"id": MODEL}, id="not a list"),
+        pytest.param([{"id": MODEL, "storage_path": None, "sha256": None}], id="no file"),
+        pytest.param([{"id": MODEL, "storage_path": "x", "sha256": "a" * 64}] * 2, id="two rows"),
+        pytest.param([{"storage_path": "x", "sha256": "a" * 64}], id="no id"),
+    ],
+)
+def test_an_active_model_of_another_shape_is_an_unsettled_failure(body: object) -> None:
+    store, _ = store_of(answer(200, body))
+    with pytest.raises(StoreError) as raised:
+        store.active_model(USER)
+    assert raised.value.settled is False
+
+
+def test_a_model_file_is_downloaded_from_its_private_bucket() -> None:
+    store, recorder = store_of(lambda _: httpx2.Response(200, content=WEIGHTS))
+    assert store.download_model(f"{USER}/{MODEL}.safetensors", 1024) == WEIGHTS
+    sent = recorder.requests[0]
+    assert (sent.method, sent.url.path) == ("GET", f"/storage/v1/object/models/{USER}/{MODEL}.safetensors")
+    assert sent.headers["authorization"] == f"Bearer {KEY}"
+
+
+def test_a_missing_model_file_is_a_settled_failure() -> None:
+    store, _ = store_of(answer(404, {"error": "not_found"}))
+    with pytest.raises(StoreError) as raised:
+        store.download_model(f"{USER}/{MODEL}.safetensors", 1024)
+    assert raised.value.settled is True
+
+
+def test_a_model_file_announced_beyond_the_bound_is_not_read() -> None:
+    store, _ = store_of(lambda _: httpx2.Response(200, content=WEIGHTS, headers={"Content-Length": "99999"}))
+    with pytest.raises(StoreError):
+        store.download_model(f"{USER}/{MODEL}.safetensors", 1024)
+
+
+def test_a_model_file_streamed_beyond_the_bound_is_cut() -> None:
+    def chunks() -> Iterator[bytes]:
+        for _ in range(8):
+            yield b"x" * 200
+
+    store, _ = store_of(lambda _: httpx2.Response(200, content=chunks()))
+    with pytest.raises(StoreError):
+        store.download_model(f"{USER}/{MODEL}.safetensors", 1024)
+
+
 def test_a_page_with_no_alert_sends_no_field_for_them() -> None:
     store, recorder = store_of(answer(200, [{"recorded": True, "reason": "recorded"}]))
     store.record(WRITE)
     assert "p_alerts" not in json.loads(recorder.requests[0].content)
 
 
-@pytest.mark.parametrize("reason", ["page_not_found", "not_text", "already_read"])
+@pytest.mark.parametrize("reason", ["page_not_found", "not_text", "already_read", "model_not_found"])
 def test_a_refusal_of_the_server_function_is_returned(reason: str) -> None:
     store, _ = store_of(answer(200, [{"recorded": False, "reason": reason}]))
     assert store.record(WRITE) == reason

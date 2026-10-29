@@ -43,6 +43,7 @@ class ReadingIn(Strict):
     height: Annotated[int, Field(ge=1, le=MAX_SIDE)]
     lines: Annotated[list[LineIn], Field(max_length=MAX_LINES)]
     alto: str
+    model_id: Identifier | None
 
 
 class ArbitrationIn(Strict):
@@ -96,4 +97,5 @@ def arbitration_of(body: bytes) -> Arbitration:
         reading=reading,
         duration_ms=sent.duration_ms,
         b2=sent.b2,
+        model_id=sent.a.model_id,
     )

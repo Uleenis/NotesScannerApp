@@ -11,6 +11,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from reading.alto import alto_of
 from reading.arbiter import PageArbiter
 from reading.contract import arbitration_of
+from reading.personal import ModelChooser
 from reading.photo import MAX_BYTES, open_photo
 from reading.recognition import Box, PageReader, Reading
 from reading.refusal import RefusalError, busy, invalid_request, too_large, unsupported
@@ -22,7 +23,8 @@ PHOTO_TYPE = "image/jpeg"
 JSON_TYPE = "application/json"
 MAX_IN_FLIGHT = 4
 MAX_ARBITRATION_BYTES = 12 * 1024 * 1024
-QUERY = re.compile(r"page_id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
+IDENTIFIER = r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+QUERY = re.compile(rf"page_id={IDENTIFIER}&user_id={IDENTIFIER}")
 
 CHECK_QUERY = re.compile(r"template=(fr|en)&sheet=([12])")
 
@@ -50,11 +52,11 @@ class SecretGate:
         return len(values) == 1 and hmac.compare_digest(values[0], self._secret)
 
 
-def page_of(request: Request) -> str:
+def page_of(request: Request) -> tuple[str, str]:
     found = QUERY.fullmatch(request.url.query)
     if found is None:
         raise invalid_request()
-    return found.group(1)
+    return found.group(1), found.group(2)
 
 
 def sheet_of(request: Request) -> tuple[str, int]:
@@ -86,7 +88,7 @@ def listed(box: Box) -> list[int]:
     return list(box)
 
 
-def answer(page_id: str, reading: Reading, alto: str) -> dict[str, object]:
+def answer(page_id: str, reading: Reading, alto: str, model_id: str | None) -> dict[str, object]:
     return {
         "page_id": page_id,
         "width": reading.width,
@@ -103,6 +105,7 @@ def answer(page_id: str, reading: Reading, alto: str) -> dict[str, object]:
             for line in reading.lines
         ],
         "alto": alto,
+        "model_id": model_id,
     }
 
 
@@ -111,7 +114,9 @@ def refusal(page_id: str | None, refused: RefusalError) -> JSONResponse:
     return JSONResponse({"error": refused.code}, status_code=refused.status)
 
 
-def create_app(secret: str, reader: PageReader, arbiter: PageArbiter, max_in_flight: int = MAX_IN_FLIGHT) -> FastAPI:
+def create_app(
+    secret: str, reader: PageReader, arbiter: PageArbiter, models: ModelChooser, max_in_flight: int = MAX_IN_FLIGHT
+) -> FastAPI:
     check_secret(secret)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     in_flight = [0]
@@ -134,11 +139,12 @@ def create_app(secret: str, reader: PageReader, arbiter: PageArbiter, max_in_fli
     async def recognized(request: Request) -> JSONResponse:
         page_id = None
         try:
-            page_id = page_of(request)
+            page_id, user_id = page_of(request)
             check_type(request)
             photo = await run_in_threadpool(open_photo, await body_of(request))
+            recognizer, model_id = await run_in_threadpool(models.for_user, user_id, page_id)
             started = time.perf_counter()
-            reading = await run_in_threadpool(reader.read, photo)
+            reading = await run_in_threadpool(reader.read, photo, recognizer)
             alto = await run_in_threadpool(alto_of, reading)
             total = time.perf_counter() - started
         except RefusalError as refused:
@@ -147,15 +153,17 @@ def create_app(secret: str, reader: PageReader, arbiter: PageArbiter, max_in_fli
             log.error("failed page=%s code=reading_failed", page_id)
             return JSONResponse({"error": "reading_failed"}, status_code=500)
         log.info(
-            "recognized page=%s lines=%d words=%d segment_seconds=%.2f recognize_seconds=%.2f total_seconds=%.2f",
+            "recognized page=%s model=%s lines=%d words=%d segment_seconds=%.2f recognize_seconds=%.2f "
+            "total_seconds=%.2f",
             page_id,
+            "generic" if model_id is None else "personal",
             len(reading.lines),
             sum(len(line.words) for line in reading.lines),
             reading.segment_seconds,
             reading.recognize_seconds,
             total,
         )
-        return JSONResponse(answer(page_id, reading, alto))
+        return JSONResponse(answer(page_id, reading, alto, model_id))
 
     @app.post("/check-writing")
     async def check_writing(request: Request) -> JSONResponse:

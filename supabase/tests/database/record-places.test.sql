@@ -19,12 +19,14 @@ language sql as $$
     page,
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     E'Bonjour Paul',
-    'medium',
-    'zenodo-21788410',
+    'personal',
+    '1',
     28000,
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/' || page::text || '/a.xml',
     'fr',
-    tokens
+    tokens,
+    '[]'::jsonb,
+    'c4000000-0000-0000-0000-000000000001'
   ) r;
 $$;
 
@@ -32,6 +34,9 @@ select pg_temp.make_user('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
 insert into public.notebooks (id, user_id, name) values
   ('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'First');
+
+insert into public.htr_models (id, user_id, name, version, status, storage_path, cer, sha256) values
+  ('c4000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'personal', 1, 'active', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/c4000000-0000-0000-0000-000000000001.safetensors', 0.1, repeat('a', 64));
 
 insert into public.pages (id, user_id, notebook_id, status, page_type) values
   ('a4000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'read', 'text'),

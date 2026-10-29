@@ -62,20 +62,24 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def is_safetensors(path: Path) -> bool:
+def header_of(path: Path) -> dict[str, object] | None:
     size = path.stat().st_size
     if size < 10 or size > MAX_MODEL_BYTES:
-        return False
+        return None
     with path.open("rb") as file:
         (length,) = struct.unpack("<Q", file.read(8))
         if length < 2 or length > MAX_HEADER_BYTES or 8 + length > size:
-            return False
+            return None
         header = file.read(length)
     try:
         parsed = json.loads(header)
-    except (UnicodeDecodeError, ValueError):
-        return False
-    return isinstance(parsed, dict)
+    except (UnicodeDecodeError, ValueError, RecursionError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def is_safetensors(path: Path) -> bool:
+    return header_of(path) is not None
 
 
 def checked_model(path: Path, sha256: str) -> Path:

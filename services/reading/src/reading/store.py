@@ -9,7 +9,8 @@ from reading.arbitration import Alert, Model, Position
 
 ALTO_BUCKET = "alto"
 ALTO_TYPE = "application/xml"
-REASONS = {"page_not_found", "not_text", "already_read"}
+MODELS_BUCKET = "models"
+REASONS = {"page_not_found", "not_text", "already_read", "model_not_found"}
 LEVELS = {"course", "journal", "grammar"}
 DEFAULT_LEVEL = "course"
 SETTLED = {400, 401, 403, 404, 409}
@@ -30,6 +31,14 @@ class ReadingA:
     language: str | None
     tokens: list[Position]
     alerts: list[Alert] = field(default_factory=list)
+    model_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ActiveModel:
+    id: str
+    path: str
+    sha256: str
 
 
 class StoreError(Exception):
@@ -115,13 +124,59 @@ class SupabaseStore:
         return response
 
     def models(self, user_id: str) -> list[Model]:
-        response = self._send("GET", "/rest/v1/htr_models", params={"select": "status,cer", "user_id": f"eq.{user_id}"})
+        response = self._send(
+            "GET", "/rest/v1/htr_models", params={"select": "id,status,cer,version", "user_id": f"eq.{user_id}"}
+        )
         try:
             return [
-                Model(str(row["status"]), None if row["cer"] is None else Decimal(str(row["cer"])))
+                Model(
+                    str(row["id"]),
+                    str(row["status"]),
+                    None if row["cer"] is None else Decimal(str(row["cer"])),
+                    int(row["version"]),
+                )
                 for row in response.json()
             ]
         except (ValueError, KeyError, TypeError, ArithmeticError) as error:
+            raise StoreError(settled=False) from error
+
+    def active_model(self, user_id: str) -> ActiveModel | None:
+        response = self._send(
+            "GET",
+            "/rest/v1/htr_models",
+            params={"select": "id,storage_path,sha256", "user_id": f"eq.{user_id}", "status": "eq.active"},
+        )
+        try:
+            rows = response.json()
+        except ValueError as error:
+            raise StoreError(settled=False) from error
+        if not isinstance(rows, list) or len(rows) > 1:
+            raise StoreError(settled=False)
+        if not rows:
+            return None
+        row = rows[0]
+        fields = [row.get(name) if isinstance(row, dict) else None for name in ("id", "storage_path", "sha256")]
+        if not all(isinstance(value, str) for value in fields):
+            raise StoreError(settled=False)
+        return ActiveModel(*(str(value) for value in fields))
+
+    def download_model(self, path: str, limit: int) -> bytes:
+        try:
+            with self._client.stream("GET", f"/storage/v1/object/{MODELS_BUCKET}/{quote(path)}") as response:
+                if response.status_code in SETTLED:
+                    raise StoreError(settled=True)
+                if response.status_code != 200:
+                    raise StoreError(settled=False)
+                lengths = response.headers.get_list("content-length")
+                if any(not length.isdigit() or int(length) > limit for length in lengths):
+                    raise StoreError(settled=False)
+                received = bytearray()
+                for chunk in response.iter_bytes():
+                    received += chunk
+                    if len(received) > limit:
+                        raise StoreError(settled=False)
+                return bytes(received)
+        except httpx2.HTTPError as error:
             raise StoreError(settled=False) from error
 
     def correction_level(self, page_id: str, user_id: str) -> str:
@@ -159,6 +214,7 @@ class SupabaseStore:
             "p_raw_text": write.raw_text,
             "p_model": write.model,
             "p_model_version": write.model_version,
+            "p_model_id": write.model_id,
             "p_duration_ms": write.duration_ms,
             "p_alto_path": write.alto_path,
             "p_language": write.language,

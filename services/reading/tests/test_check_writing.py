@@ -8,7 +8,7 @@ from PIL import Image
 
 from reading.app import GATE_HEADER, create_app
 from reading.arbiter import Arbitration, Outcome
-from reading.recognition import Reading, ReadLine, Word
+from reading.recognition import Reading, ReadLine, TileReader, Word
 from reading.refusal import too_complex
 from reading.writing_test import template_lines
 
@@ -21,9 +21,11 @@ class FakeReader:
         self.lines = lines or []
         self.error = error
         self.photos: list[Image.Image] = []
+        self.recognizers: list[TileReader | None] = []
 
-    def read(self, photo: Image.Image) -> Reading:
+    def read(self, photo: Image.Image, recognizer: TileReader | None = None) -> Reading:
         self.photos.append(photo)
+        self.recognizers.append(recognizer)
         if self.error is not None:
             raise self.error
         return Reading(
@@ -48,6 +50,11 @@ class NoArbiter:
         raise AssertionError("no arbitration while checking a writing test")
 
 
+class NoModels:
+    def for_user(self, user_id: str, page_id: str) -> tuple[TileReader | None, str | None]:
+        raise AssertionError("a writing test is read by the generic")
+
+
 def jpeg() -> bytes:
     out = io.BytesIO()
     Image.new("RGB", (640, 480), 200).save(out, format="JPEG")
@@ -55,7 +62,7 @@ def jpeg() -> bytes:
 
 
 def client_of(reader: FakeReader) -> TestClient:
-    return TestClient(create_app(SECRET, reader, NoArbiter()))
+    return TestClient(create_app(SECRET, reader, NoArbiter(), NoModels()))
 
 
 def post(

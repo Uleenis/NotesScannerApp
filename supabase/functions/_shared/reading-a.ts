@@ -36,11 +36,11 @@ function triedAgain(failure: ServiceFailure): boolean {
   return retryable(failure) && failure.kind !== "timeout";
 }
 
-async function recognize(deps: ReadingADeps, pageId: string, image: Uint8Array, signal: AbortSignal, deadline: number): Promise<Recognition> {
+async function recognize(deps: ReadingADeps, userId: string, pageId: string, image: Uint8Array, signal: AbortSignal, deadline: number): Promise<Recognition> {
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     const started = deps.clock.now();
     if (started >= deadline) return null;
-    const result = await deps.service.recognize(pageId, image, signal, deadline - started);
+    const result = await deps.service.recognize(pageId, userId, image, signal, deadline - started);
     if (result.ok) return { answer: result.answer, durationMs: deps.clock.now() - started };
     if (result.failure.kind === "cancelled") return null;
     deps.log.event("recognize_attempt_failed", { pageId, attempt, ...failureFields(result.failure) });
@@ -122,7 +122,7 @@ export function startReadingA(deps: ReadingADeps, userId: string, pageId: string
   });
   const sentAt = deps.clock.now();
   deps.log.event("a_sent", { pageId });
-  const recognition = recognize(deps, pageId, image, controller.signal, sentAt + A_BUDGET_MS).catch((error: unknown): Recognition => {
+  const recognition = recognize(deps, userId, pageId, image, controller.signal, sentAt + A_BUDGET_MS).catch((error: unknown): Recognition => {
     deps.log.event("unexpected_error", { errorName: errorName(error) });
     return null;
   });

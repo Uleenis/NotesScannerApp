@@ -17,6 +17,8 @@ from reading.tokens import line_tokens
 
 USER = "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
 PAGE = "0b6f3c1e-8d2a-4c5b-9e7f-1a2b3c4d5e6f"
+MODEL = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
+OLDER = "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a"
 B1_PROBE = "Zanzibarque"
 A_PROBE = "Zanzibarqe"
 B2_PROBE = "Zanzibarquo"
@@ -40,8 +42,14 @@ READING = Reading(
 )
 
 
-def arbitration(b1: str = f"Le {B1_PROBE} dort", reading: Reading = READING, b2: str | None = None) -> Arbitration:
-    return Arbitration(page_id=PAGE, user_id=USER, b1=b1, reading=reading, duration_ms=28000, b2=b2)
+def arbitration(
+    b1: str = f"Le {B1_PROBE} dort", reading: Reading = READING, b2: str | None = None, model_id: str | None = None
+) -> Arbitration:
+    return Arbitration(page_id=PAGE, user_id=USER, b1=b1, reading=reading, duration_ms=28000, b2=b2, model_id=model_id)
+
+
+def in_service(cer: str = "0.1", status: str = "active", model_id: str = MODEL) -> Model:
+    return Model(model_id, status, Decimal(cer), 3)
 
 
 class FakeStore:
@@ -175,16 +183,63 @@ def test_a_is_uploaded_then_written_with_its_positions_and_language() -> None:
 
 def test_with_the_gate_closed_the_rules_are_never_asked_and_no_position_has_a_rule() -> None:
     rules = FakeRules()
-    store = FakeStore(models=[Model("active", Decimal("0.2")), Model("candidate", Decimal("0.05"))])
-    Arbiter(store, FakeLanguage(), rules).arbitrate(arbitration())
+    store = FakeStore(models=[in_service("0.2"), in_service("0.05", "candidate", OLDER)])
+    Arbiter(store, FakeLanguage(), rules).arbitrate(arbitration(model_id=MODEL))
     assert rules.calls == []
     assert all(p.rule is None and p.channel is None for p in store.writes[0].tokens)
 
 
+@pytest.mark.parametrize(
+    ("models", "model_id"),
+    [
+        pytest.param([in_service()], None, id="a read by the generic"),
+        pytest.param(
+            [in_service("0.1", "retired"), in_service("0.05", model_id=OLDER)], MODEL, id="a read by a retired model"
+        ),
+        pytest.param([in_service("0.2")], MODEL, id="a read by a model above the threshold"),
+        pytest.param([in_service("0.1", "candidate")], MODEL, id="a read by a candidate"),
+    ],
+)
+def test_the_rules_stay_silent_unless_a_was_read_by_a_model_in_service(
+    models: list[Model], model_id: str | None
+) -> None:
+    rules = FakeRules()
+    store = FakeStore(models=models)
+    assert Arbiter(store, FakeLanguage(), rules).arbitrate(arbitration(model_id=model_id)).reason == "recorded"
+    assert rules.calls == []
+    assert all(p.rule is None and p.channel is None for p in store.writes[0].tokens)
+
+
+def test_a_read_by_the_generic_is_written_as_the_generic() -> None:
+    store = FakeStore(models=[in_service()])
+    Arbiter(store, FakeLanguage(), FakeRules()).arbitrate(arbitration(model_id=None))
+    write = store.writes[0]
+    assert (write.model, write.model_version, write.model_id) == ("medium", "1", None)
+
+
+def test_a_read_by_a_personal_model_is_written_with_that_model() -> None:
+    store = FakeStore(models=[in_service("0.2")])
+    Arbiter(store, FakeLanguage(), FakeRules()).arbitrate(arbitration(model_id=MODEL))
+    write = store.writes[0]
+    assert (write.model, write.model_version, write.model_id) == ("personal", "3", MODEL)
+
+
+def test_a_read_by_a_model_the_user_no_longer_has_writes_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO)
+    rules = FakeRules()
+    store = FakeStore(models=[in_service(model_id=OLDER)])
+    outcome = Arbiter(store, FakeLanguage(), rules).arbitrate(arbitration(model_id=MODEL))
+    assert outcome.reason == "model_not_found"
+    assert store.calls == ["models"]
+    assert rules.calls == []
+    assert f"arbitration refused page={PAGE} reason=model_not_found" in logged(caplog)
+    assert MODEL not in logged(caplog)
+
+
 def test_with_the_gate_closed_neither_phonemes_nor_entities_are_asked() -> None:
-    store = FakeStore(models=[Model("active", Decimal("0.13"))])
+    store = FakeStore(models=[in_service("0.13")])
     untouchable = Untouchable()
-    Arbiter(store, FakeLanguage("fr"), Rules(untouchable, untouchable)).arbitrate(arbitration())
+    Arbiter(store, FakeLanguage("fr"), Rules(untouchable, untouchable)).arbitrate(arbitration(model_id=MODEL))
     write = store.writes[0]
     assert [(p.text, p.rule, p.channel) for p in write.tokens] == [
         ("Le", None, None),
@@ -196,8 +251,8 @@ def test_with_the_gate_closed_neither_phonemes_nor_entities_are_asked() -> None:
 
 def test_with_the_gate_open_the_rules_decide_each_position() -> None:
     rules = FakeRules()
-    store = FakeStore(models=[Model("active", Decimal("0.129"))], level="journal")
-    Arbiter(store, FakeLanguage("en"), rules).arbitrate(arbitration())
+    store = FakeStore(models=[in_service("0.129")], level="journal")
+    Arbiter(store, FakeLanguage("en"), rules).arbitrate(arbitration(model_id=MODEL))
     [(positions, b1, a, language, level, b2, missing)] = rules.calls
     assert (b1, a, language, level) == (f"Le {B1_PROBE} dort", f"Le {A_PROBE}", "en", "journal")
     assert (b2, missing) == (None, frozenset())
@@ -211,8 +266,8 @@ def test_with_the_gate_open_the_rules_decide_each_position() -> None:
 
 
 def test_with_the_gate_open_the_rules_write_the_words_and_their_channels() -> None:
-    store = FakeStore(models=[Model("active", Decimal("0.1"))])
-    Arbiter(store, FakeLanguage("fr"), Rules(Ports(), Ports())).arbitrate(arbitration())
+    store = FakeStore(models=[in_service("0.1")])
+    Arbiter(store, FakeLanguage("fr"), Rules(Ports(), Ports())).arbitrate(arbitration(model_id=MODEL))
     assert [(p.text, p.rule, p.channel) for p in store.writes[0].tokens] == [
         ("Le", 9, "none"),
         (B1_PROBE, 8, "layer"),
@@ -222,31 +277,31 @@ def test_with_the_gate_open_the_rules_write_the_words_and_their_channels() -> No
 
 def test_with_the_gate_open_a_french_page_goes_through_the_entities() -> None:
     ports = Ports()
-    store = FakeStore(models=[Model("active", Decimal("0.1"))])
-    Arbiter(store, FakeLanguage("fr"), Rules(ports, ports)).arbitrate(arbitration())
+    store = FakeStore(models=[in_service("0.1")])
+    Arbiter(store, FakeLanguage("fr"), Rules(ports, ports)).arbitrate(arbitration(model_id=MODEL))
     assert ports.entity_texts == [f"Le {B1_PROBE} dort", f"Le {A_PROBE}"]
 
 
 @pytest.mark.parametrize("language", ["en", "es", None])
 def test_with_the_gate_open_a_page_not_in_french_never_goes_through_the_entities(language: str | None) -> None:
     ports = Ports()
-    store = FakeStore(models=[Model("active", Decimal("0.1"))])
-    Arbiter(store, FakeLanguage(language), Rules(ports, ports)).arbitrate(arbitration())
+    store = FakeStore(models=[in_service("0.1")])
+    Arbiter(store, FakeLanguage(language), Rules(ports, ports)).arbitrate(arbitration(model_id=MODEL))
     assert ports.entity_texts == []
     assert len(store.writes) == 1
 
 
 def test_a_correction_level_out_of_reach_stops_before_anything_is_uploaded() -> None:
-    store = FakeStore(models=[Model("active", Decimal("0.1"))], fail={"level": StoreError(settled=False)})
+    store = FakeStore(models=[in_service("0.1")], fail={"level": StoreError(settled=False)})
     with pytest.raises(ArbitrationError):
-        Arbiter(store, FakeLanguage(), FakeRules()).arbitrate(arbitration())
+        Arbiter(store, FakeLanguage(), FakeRules()).arbitrate(arbitration(model_id=MODEL))
     assert store.calls == ["models", "level"]
 
 
 def test_failing_rules_stop_before_anything_is_uploaded() -> None:
-    store = FakeStore(models=[Model("active", Decimal("0.1"))])
+    store = FakeStore(models=[in_service("0.1")])
     with pytest.raises(AssertionError):
-        Arbiter(store, FakeLanguage("fr"), Rules(Untouchable(), Untouchable())).arbitrate(arbitration())
+        Arbiter(store, FakeLanguage("fr"), Rules(Untouchable(), Untouchable())).arbitrate(arbitration(model_id=MODEL))
     assert store.calls == ["models", "level"]
 
 
@@ -330,18 +385,23 @@ def test_an_empty_a_writes_positions_without_anchors() -> None:
 
 
 @pytest.mark.parametrize(
-    "store",
+    ("store", "model_id"),
     [
-        pytest.param(FakeStore(), id="recorded"),
-        pytest.param(FakeStore(reason="not_text"), id="refused"),
-        pytest.param(FakeStore(fail={"record": StoreError(settled=False)}), id="failed"),
-        pytest.param(FakeStore(models=[Model("active", Decimal("0.1"))], level="journal"), id="gate open"),
+        pytest.param(FakeStore(), None, id="recorded"),
+        pytest.param(FakeStore(reason="not_text"), None, id="refused"),
+        pytest.param(FakeStore(fail={"record": StoreError(settled=False)}), None, id="failed"),
+        pytest.param(FakeStore(models=[in_service("0.1")], level="journal"), MODEL, id="gate open"),
+        pytest.param(FakeStore(), MODEL, id="model not found"),
     ],
 )
-def test_the_logs_carry_no_text_of_the_page(store: FakeStore, caplog: pytest.LogCaptureFixture) -> None:
+def test_the_logs_carry_no_text_of_the_page(
+    store: FakeStore, model_id: str | None, caplog: pytest.LogCaptureFixture
+) -> None:
     caplog.set_level(logging.DEBUG)
     with contextlib.suppress(ArbitrationError):
-        Arbiter(store, FakeLanguage(), Rules(Ports(), Ports())).arbitrate(arbitration(b2=f"Le {B2_PROBE} dort"))
+        Arbiter(store, FakeLanguage(), Rules(Ports(), Ports())).arbitrate(
+            arbitration(b2=f"Le {B2_PROBE} dort", model_id=model_id)
+        )
     text = logged(caplog)
     assert PAGE in text
     assert B1_PROBE not in text
@@ -387,8 +447,10 @@ def test_a_b1_whose_words_cannot_be_placed_is_written_without_any_place() -> Non
 
 def test_the_rules_are_given_b2_and_the_lines_it_lacks() -> None:
     rules = FakeRules()
-    store = FakeStore(models=[Model("active", Decimal("0.1"))])
-    Arbiter(store, FakeLanguage("fr"), rules).arbitrate(arbitration(b1="Jour 27\nLe chat dort", b2="Le chat dort"))
+    store = FakeStore(models=[in_service("0.1")])
+    Arbiter(store, FakeLanguage("fr"), rules).arbitrate(
+        arbitration(b1="Jour 27\nLe chat dort", b2="Le chat dort", model_id=MODEL)
+    )
     [(_, _, _, _, _, b2, missing)] = rules.calls
     assert (b2, missing) == ("Le chat dort", frozenset({0}))
 
@@ -437,8 +499,10 @@ def test_a_b2_the_entities_refuse_is_left_out_and_the_page_is_decided_without_it
 ) -> None:
     caplog.set_level(logging.INFO)
     rules = FakeRules(refuse_second=True)
-    store = FakeStore(models=[Model("active", Decimal("0.1"))])
-    Arbiter(store, FakeLanguage("fr"), rules).arbitrate(arbitration(b1="Jour 27\nLe chat dort", b2="Le chat dort"))
+    store = FakeStore(models=[in_service("0.1")])
+    Arbiter(store, FakeLanguage("fr"), rules).arbitrate(
+        arbitration(b1="Jour 27\nLe chat dort", b2="Le chat dort", model_id=MODEL)
+    )
     assert [(call[5], call[6]) for call in rules.calls] == [("Le chat dort", frozenset({0})), (None, frozenset())]
     [write] = store.writes
     assert all(p.reading_b2 is None for p in write.tokens)

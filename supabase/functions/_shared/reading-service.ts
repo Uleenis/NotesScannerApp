@@ -26,6 +26,7 @@ const KNOWN_CODES = [
   "page_not_found",
   "not_text",
   "already_read",
+  "model_not_found",
 ];
 
 export type ServiceFailureKind = "network" | "timeout" | "http_error" | "bad_response" | "cancelled";
@@ -42,7 +43,7 @@ export type Checked = { ok: true; lines: number; training: number; validation: n
 
 export type ReadingService = {
   checkWriting: (template: WritingTemplate, sheet: Sheet, image: Uint8Array, signal: AbortSignal, timeoutMs?: number) => Promise<Checked>;
-  recognize: (pageId: string, image: Uint8Array, signal: AbortSignal, timeoutMs?: number) => Promise<Recognized>;
+  recognize: (pageId: string, userId: string, image: Uint8Array, signal: AbortSignal, timeoutMs?: number) => Promise<Recognized>;
   arbitrate: (arbitration: Arbitration, signal: AbortSignal, timeoutMs?: number) => Promise<Arbitrated>;
 };
 
@@ -69,6 +70,12 @@ export class ReadingServiceConfigError extends Error {
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function namesAModel(answer: Record<string, unknown>): boolean {
+  return "model_id" in answer && (answer.model_id === null || (typeof answer.model_id === "string" && MODEL_ID.test(answer.model_id)));
 }
 
 function parsed(text: string): Record<string, unknown> | null {
@@ -190,14 +197,15 @@ export function createReadingService(options: ServiceOptions): ReadingService {
   }
 
   return {
-    recognize: async (pageId, image, caller, timeoutMs) => {
-      const query = new URLSearchParams({ page_id: pageId });
+    recognize: async (pageId, userId, image, caller, timeoutMs) => {
+      const query = new URLSearchParams({ page_id: pageId, user_id: userId });
       const sent = await post(`/recognize?${query}`, "image/jpeg", image.slice(), within(options.recognizeTimeoutMs ?? RECOGNIZE_TIMEOUT_MS, timeoutMs), caller);
       if ("failure" in sent) return { ok: false, failure: sent.failure };
       if (sent.response.status !== 200) return { ok: false, failure: await refusalOf(sent.response) };
       const answer = await bodyOf(sent, caller);
       if (typeof answer !== "string") return { ok: false, failure: answer };
-      if (parsed(answer)?.page_id !== pageId) return { ok: false, failure: { kind: "bad_response" } };
+      const found = parsed(answer);
+      if (found?.page_id !== pageId || !namesAModel(found)) return { ok: false, failure: { kind: "bad_response" } };
       return { ok: true, answer };
     },
     checkWriting: async (template, sheet, image, caller, timeoutMs) => {

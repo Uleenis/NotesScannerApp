@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -53,13 +54,17 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     logging.getLogger("httpx2").setLevel(logging.WARNING)
 
+    from reading.personal import Models, entry_of
     from reading.recognition import Reader, Recognizer
     from reading.segmentation import Segmenter
 
     reader = Reader(Segmenter(), Recognizer(model))
+    models = Models(
+        store, lambda path: Recognizer(str(path)), entry_of(Path(model)), Path(tempfile.mkdtemp(prefix="models-"))
+    )
     arbiter = arbiter_of(store, Path(ner), os.environ.get(ESPEAK_VARIABLE) or None)
     uvicorn.run(
-        create_app(secret, reader, arbiter),
+        create_app(secret, reader, arbiter, models),
         host="0.0.0.0",  # noqa: S104
         port=int(os.environ.get("PORT", "8080")),
         access_log=False,
