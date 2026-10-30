@@ -222,11 +222,15 @@ begin
   ),
   removed as (
     delete from public.page_alerts a
-    using public.pages p
-    where a.kind = 'date_incoherent'
-      and p.id = a.page_id
-      and p.notebook_id = p_notebook_id
-      and not exists (select 1 from fresh f where f.page_id = a.page_id)
+    where a.id in (
+      select x.id
+      from public.page_alerts x
+      join public.pages p on p.id = x.page_id
+      where x.kind = 'date_incoherent'
+        and p.notebook_id = p_notebook_id
+        and not exists (select 1 from fresh f where f.page_id = x.page_id)
+      for update of x skip locked
+    )
     returning 1
   ),
   missing as (
@@ -332,3 +336,6 @@ create trigger notebooks_queue_dates
   for each row
   when (old.correction_level is distinct from new.correction_level)
   execute function private.dates_notebook_changed();
+
+insert into private.dates_pending (notebook_id)
+select n.id from public.notebooks n where n.correction_level = 'journal';

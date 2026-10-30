@@ -288,6 +288,21 @@ describe("the alerts next to the title", () => {
     expect(screen.queryByText(fr.document.alertDateIncoherent)).toBeNull();
   });
 
+  test("reads the alerts again after an edit, so a fixed date loses its alert", async () => {
+    let fixed = false;
+    jest.mocked(pageService.alerts).mockImplementation(async () => (fixed ? [] : ["date_incoherent"]));
+    await openPage();
+    expect(await screen.findByText(fr.document.alertDateIncoherent)).toBeTruthy();
+    await fireEvent.press(await screen.findByText(fr.document.edit));
+    await screen.findByLabelText(fr.document.editField);
+    await type(`${TEXT} Fin`);
+    fixed = true;
+    await save();
+    await saved();
+
+    await waitFor(() => expect(screen.queryByText(fr.document.alertDateIncoherent)).toBeNull());
+  });
+
   test("shows an alert that is written after the page is on screen", async () => {
     jest.mocked(pageService.alerts).mockResolvedValueOnce([]).mockResolvedValue(["missing_line"]);
     await openPage();

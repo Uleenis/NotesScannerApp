@@ -175,6 +175,7 @@ export function useCorrectWord(pageId: string) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] }),
         queryClient.invalidateQueries({ queryKey: ["page-words", userId, pageId] }),
+        queryClient.invalidateQueries({ queryKey: ["page-alerts", userId, pageId] }),
       ]);
     },
   });
@@ -189,6 +190,7 @@ export function useEditPage(pageId: string) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["page", userId, pageId] }),
         queryClient.invalidateQueries({ queryKey: ["page-words", userId, pageId] }),
+        queryClient.invalidateQueries({ queryKey: ["page-alerts", userId, pageId] }),
         refreshPages(queryClient, userId),
       ]);
     },

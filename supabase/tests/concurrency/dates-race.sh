@@ -119,7 +119,13 @@ select pg_sleep(0.02);
 commit;
 EOS
 
-run_log="$(docker exec "$DB_CONTAINER" pgbench -U postgres -n -f /tmp/dates-correct.sql@3 -f /tmp/dates-move.sql@1 -f /tmp/dates-text.sql@1 -c "$CLIENTS" -j 4 -t "$ROUNDS" postgres 2>&1 || true)"
+docker exec -i "$DB_CONTAINER" sh -c "cat > /tmp/dates-delete.sql" <<EOS
+\set pick random(0, 23)
+\set roll random(0, 11)
+select outcome from public.delete_page((select id from public.pages where user_id = '${USER_ID}' and :roll = 0 order by id offset :pick limit 1), '${USER_ID}');
+EOS
+
+run_log="$(docker exec "$DB_CONTAINER" pgbench -U postgres -n -f /tmp/dates-correct.sql@3 -f /tmp/dates-move.sql@1 -f /tmp/dates-text.sql@1 -f /tmp/dates-delete.sql@1 -c "$CLIENTS" -j 4 -t "$ROUNDS" postgres 2>&1 || true)"
 
 check "no parallel write fails" "0" "$(printf '%s\n' "$run_log" | grep -c 'ERROR' || true)"
 
