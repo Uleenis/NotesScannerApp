@@ -273,6 +273,14 @@ def changed(**fields: object) -> dict[str, object]:
         pytest.param(weights(changed(codec={"a": 1})), id="a code not a list"),
         pytest.param(weights(changed(seg_type="polygons")), id="a kind of segmentation outside the two"),
         pytest.param(weights(changed(seg_type=["bbox"])), id="a kind of segmentation not a word"),
+        pytest.param(weights(changed(seg_type=None)), id="no kind of segmentation"),
+        pytest.param(weights(changed(seg_type=True)), id="a kind of segmentation not a string"),
+        pytest.param(weights(changed(seg_type="BBOX")), id="a kind of segmentation in another case"),
+        pytest.param(weights(changed(seg_type="bbox ")), id="a kind of segmentation with a space"),
+        pytest.param(
+            weights({key: value for key, value in GENERIC_ENTRY.items() if key != "seg_type"}),
+            id="a kind of segmentation left out",
+        ),
     ],
 )
 def test_a_model_built_otherwise_than_the_generic_is_never_loaded(
