@@ -271,6 +271,16 @@ def changed(**fields: object) -> dict[str, object]:
         pytest.param(weights(changed(codec={"a": [4]})), id="a label beyond the classes"),
         pytest.param(weights(changed(codec={"a": ["1"]})), id="a label not a number"),
         pytest.param(weights(changed(codec={"a": 1})), id="a code not a list"),
+        pytest.param(weights(changed(seg_type="polygons")), id="a kind of segmentation outside the two"),
+        pytest.param(weights(changed(seg_type=["bbox"])), id="a kind of segmentation not a word"),
+        pytest.param(weights(changed(seg_type=None)), id="no kind of segmentation"),
+        pytest.param(weights(changed(seg_type=True)), id="a kind of segmentation not a string"),
+        pytest.param(weights(changed(seg_type="BBOX")), id="a kind of segmentation in another case"),
+        pytest.param(weights(changed(seg_type="bbox ")), id="a kind of segmentation with a space"),
+        pytest.param(
+            weights({key: value for key, value in GENERIC_ENTRY.items() if key != "seg_type"}),
+            id="a kind of segmentation left out",
+        ),
     ],
 )
 def test_a_model_built_otherwise_than_the_generic_is_never_loaded(
@@ -280,6 +290,15 @@ def test_a_model_built_otherwise_than_the_generic_is_never_loaded(
     models, loader = models_of(FakeSource({USER: model}, {model.path: data}), tmp_path)
     unavailable(models, caplog, "architecture")
     assert loader.paths == []
+
+
+def test_a_model_trained_by_ketos_on_lines_is_loaded(tmp_path: Path) -> None:
+    data = weights(changed(seg_type="bbox"))
+    model = active(data)
+    models, _ = models_of(FakeSource({USER: model}, {model.path: data}), tmp_path)
+    recognizer, model_id = models.for_user(USER, PAGE)
+    assert isinstance(recognizer, Loaded)
+    assert model_id == MODEL
 
 
 def test_a_file_holding_two_models_is_never_loaded(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

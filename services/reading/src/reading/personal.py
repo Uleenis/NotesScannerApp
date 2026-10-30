@@ -21,8 +21,9 @@ MAX_REFUSED = 64
 SETTLED = ("file", "architecture", "load")
 IDENTIFIER = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 FINGERPRINT = re.compile(r"[0-9a-f]{64}")
-FIXED = ("_tasks", "_model", "variant", "height", "seg_type", "one_channel_mode", "legacy_polygons")
+FIXED = ("_tasks", "_model", "variant", "height", "one_channel_mode", "legacy_polygons")
 FREE = ("_kraken_min_version", "num_classes", "codec", "accuracy", "metrics")
+SEGMENTATIONS = ("baselines", "bbox")
 
 log = logging.getLogger("reading")
 
@@ -78,9 +79,11 @@ def labels(codec: dict[str, object], classes: int) -> bool:
 
 def fits(entry: dict[str, object], generic: dict[str, object]) -> bool:
     fixed = [key for key in FIXED if key in generic]
-    if not set(entry) <= {*fixed, *FREE}:
+    if not set(entry) <= {*fixed, *FREE, "seg_type"}:
         return False
     if not all(key in entry and same(entry[key], generic[key]) for key in fixed):
+        return False
+    if entry.get("seg_type") not in SEGMENTATIONS:
         return False
     classes = entry.get("num_classes")
     if type(classes) is not int or not 2 <= classes <= MAX_CLASSES:
