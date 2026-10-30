@@ -1,9 +1,9 @@
 import { field } from "@/capture/api";
 import type { PagesClient } from "./pages";
 
-export type ShownAlert = "missing_line" | "math_incomplete";
+export type ShownAlert = "date_incoherent" | "missing_line" | "math_incomplete";
 
-const SHOWN: readonly string[] = ["missing_line", "math_incomplete"];
+const SHOWN: readonly string[] = ["date_incoherent", "missing_line", "math_incomplete"];
 
 export async function listAlerts(client: PagesClient, pageId: string): Promise<ShownAlert[]> {
   const { data, error } = await client.from("page_alerts").select("kind").eq("page_id", pageId).order("kind");

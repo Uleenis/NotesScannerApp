@@ -220,6 +220,7 @@ export const fr: Strings = {
     editRefused: "Cette page ne peut pas être modifiée pour le moment.",
     alertMissingLine: "Une ligne de ta feuille n'a peut-être pas été recopiée.",
     alertMathIncomplete: "Un énoncé de ta feuille n'a peut-être pas été recopié.",
+    alertDateIncoherent: "La date de cette page ne suit pas celles du carnet.",
   },
   search: {
     title: "Rechercher",
