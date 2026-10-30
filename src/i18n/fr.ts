@@ -77,7 +77,7 @@ export const fr: Strings = {
       failed: "Le niveau n'a pas pu être changé. Réessaie.",
       blocked: {
         not_started:
-          "Journal et Grammaire demandent que l'app connaisse ton écriture. Tu peux commencer dans « Ton écriture », dans ton compte.",
+          "Journal et Grammaire demandent que l'app connaisse ton écriture. Avec un compte, tu peux commencer dans « Ton écriture ».",
         parent_pending: "Journal et Grammaire demandent que l'app connaisse ton écriture. L'accord de ton parent est attendu d'abord.",
         test_needed: "Journal et Grammaire demandent que l'app connaisse ton écriture. Fais d'abord le test d'écriture dans « Ton écriture ».",
         training: "L'app apprend encore ton écriture. Journal et Grammaire s'ouvriront quand elle sera prête.",

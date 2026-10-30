@@ -91,3 +91,26 @@ $$;
 
 revoke all on function public.training_stage() from public, anon, authenticated, service_role;
 grant execute on function public.training_stage() to authenticated;
+
+create function private.reset_levels_without_model() returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not private.model_in_service(new.id, new.user_id) then
+    update public.notebooks
+    set correction_level = 'course'
+    where user_id = new.user_id and correction_level <> 'course';
+  end if;
+  return null;
+end;
+$$;
+
+revoke all on function private.reset_levels_without_model() from public, anon, authenticated, service_role;
+
+create trigger htr_models_reset_levels
+  after insert or update of status, cer on public.htr_models
+  for each row
+  when (new.status = 'active' and new.user_id is not null)
+  execute function private.reset_levels_without_model();

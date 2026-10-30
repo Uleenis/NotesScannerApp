@@ -75,7 +75,7 @@ export const en = {
       failed: "The level could not be changed. Try again.",
       blocked: {
         not_started:
-          "Journal and Grammar need the app to know your handwriting. You can start in “Your handwriting”, in your account.",
+          "Journal and Grammar need the app to know your handwriting. With an account, you can start in “Your handwriting”.",
         parent_pending: "Journal and Grammar need the app to know your handwriting. Your parent's agreement is awaited first.",
         test_needed: "Journal and Grammar need the app to know your handwriting. Do the writing test in “Your handwriting” first.",
         training: "The app is still learning your handwriting. Journal and Grammar will open when it is ready.",

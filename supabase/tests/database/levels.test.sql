@@ -1,6 +1,6 @@
 begin;
 
-select plan(35);
+select plan(40);
 
 create function pg_temp.make_user(uid uuid, born_before integer) returns void
 language plpgsql as $$
@@ -239,6 +239,65 @@ select is(
    where routine_schema = 'public' and routine_name = 'training_stage' and grantee in ('anon', 'public', 'PUBLIC')),
   0::bigint,
   'nobody but signed-in users holds the right to ask for the stage'
+);
+
+
+select pg_temp.make_user('d8000000-0000-0000-0000-000000000008', 30);
+select pg_temp.make_user('d8000000-0000-0000-0000-000000000009', 30);
+
+insert into public.consents (user_id, kind, version, granted_by) values
+  ('d8000000-0000-0000-0000-000000000008', 'training', 'training-1', 'user'),
+  ('d8000000-0000-0000-0000-000000000009', 'training', 'training-1', 'user');
+
+insert into public.htr_models (id, user_id, name, version, status, storage_path, cer) values
+  ('d9000000-0000-0000-0000-000000000008', 'd8000000-0000-0000-0000-000000000008', 'personal', 1, 'active',
+   'd8000000-0000-0000-0000-000000000008/1.safetensors', 0.1),
+  ('d9000000-0000-0000-0000-000000000009', 'd8000000-0000-0000-0000-000000000009', 'personal', 1, 'active',
+   'd8000000-0000-0000-0000-000000000009/1.safetensors', 0.1);
+
+insert into public.notebooks (id, user_id, name, correction_level) values
+  ('db000000-0000-0000-0000-000000000008', 'd8000000-0000-0000-0000-000000000008', 'Replaced by a worse one', 'journal'),
+  ('db000000-0000-0000-0000-000000000009', 'd8000000-0000-0000-0000-000000000009', 'Replaced by a better one', 'grammar');
+
+select pg_temp.as_server();
+
+update public.htr_models set status = 'retired' where id = 'd9000000-0000-0000-0000-000000000008';
+select is(
+  (select correction_level from public.notebooks where id = 'db000000-0000-0000-0000-000000000008'),
+  'journal',
+  'retiring the active model alone does not reset the levels, its replacement is about to come'
+);
+insert into public.htr_models (id, user_id, name, version, status, storage_path, cer) values
+  ('d9000000-0000-0000-0000-000000000010', 'd8000000-0000-0000-0000-000000000008', 'personal', 2, 'active',
+   'd8000000-0000-0000-0000-000000000008/2.safetensors', 0.135);
+select is(
+  (select correction_level from public.notebooks where id = 'db000000-0000-0000-0000-000000000008'),
+  'course',
+  'a replacement above 12.9 % puts the notebooks of the user back at the course level'
+);
+
+update public.htr_models set status = 'retired' where id = 'd9000000-0000-0000-0000-000000000009';
+insert into public.htr_models (id, user_id, name, version, status, storage_path, cer) values
+  ('d9000000-0000-0000-0000-000000000011', 'd8000000-0000-0000-0000-000000000009', 'personal', 2, 'active',
+   'd8000000-0000-0000-0000-000000000009/2.safetensors', 0.12);
+select is(
+  (select correction_level from public.notebooks where id = 'db000000-0000-0000-0000-000000000009'),
+  'grammar',
+  'a replacement in service leaves the levels as they are'
+);
+
+update public.htr_models set cer = 0.2 where id = 'd9000000-0000-0000-0000-000000000011';
+select is(
+  (select correction_level from public.notebooks where id = 'db000000-0000-0000-0000-000000000009'),
+  'course',
+  'a measure of the active model that rises above 12.9 % puts the notebooks back at the course level'
+);
+
+reset role;
+select is(
+  (select count(*) from public.notebooks where user_id = 'd8000000-0000-0000-0000-000000000001' and correction_level <> 'course'),
+  0::bigint,
+  'the levels of another user are never touched'
 );
 
 select * from finish();
