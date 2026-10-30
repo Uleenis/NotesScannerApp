@@ -40,6 +40,7 @@ export type LogEvent =
   | "parent_consent_confirmed"
   | "parent_email_failed"
   | "training_revoked"
+  | "correction_level_set"
   | "training_files_left"
   | "writing_test_started"
   | "writing_test_checked"

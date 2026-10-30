@@ -1,7 +1,7 @@
 import { archiveFileName, archiveReadme } from "@/export/data/readme";
 import { strings } from "@/i18n";
 
-const FILES = ["README.txt", "export.json", "profile.json", "usage.json", "notebooks.json", "pages/<id>/page.json", "pages/<id>/text.txt", "original.jpg", "prepared.jpg"];
+const FILES = ["README.txt", "export.json", "profile.json", "usage.json", "notebooks.json", "training.json", "writing-tests/<id>/1.jpg", "pages/<id>/page.json", "pages/<id>/text.txt", "original.jpg", "prepared.jpg"];
 
 describe("archiveReadme", () => {
   test("describes every file of the archive in English then in French", () => {
@@ -19,7 +19,7 @@ describe("archiveReadme", () => {
   test("keeps one line per file in the lists", () => {
     const lines = archiveReadme().split("\n").filter((line) => line.startsWith("- "));
 
-    expect(lines).toHaveLength(16);
+    expect(lines).toHaveLength(20);
   });
 });
 

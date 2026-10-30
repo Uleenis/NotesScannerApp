@@ -13,6 +13,25 @@ export function useTrainingState() {
   });
 }
 
+export function trainingStageQuery(userId: string | null) {
+  return {
+    queryKey: ["training-stage", userId] as const,
+    queryFn: () => trainingService.stage(),
+    staleTime: 0,
+  };
+}
+
+export function useTrainingStage() {
+  const auth = useAuth();
+  return useQuery({
+    ...trainingStageQuery(auth.userId),
+    enabled: auth.status === "ready" && !auth.isAnonymous && auth.userId !== null,
+  });
+}
+
 export function refreshTraining(queryClient: QueryClient, userId: string | null): Promise<void> {
-  return queryClient.invalidateQueries({ queryKey: ["training", userId] });
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["training", userId] }),
+    queryClient.invalidateQueries({ queryKey: ["training-stage", userId] }),
+  ]).then(() => undefined);
 }

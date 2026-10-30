@@ -7,7 +7,7 @@ Paths below are from the repository root.
 - **Spec and plan of slice 5:** `../../02 Design/Tranche 5.md`, validated by the owner on 27/10/2026 with its eight decisions as proposed.
 - **Decisions:** `../Tranche 5/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Method:** `../../01 Steps/Méthode de travail.md`. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next:** branch 8, `t5/levels`.
+- **Next:** branch 9, `t5/dates`.
 - **Order:** branches 1 to 11 in the order of the table. Branch 11 exists only if measure 19 (branch 10) passes; otherwise branch 10 is the last. Criterion 20 (phone) is checked after the last branch, through `../Tranche 5/Vérifications.md`. The last session writes `../Tranche 5/Bilan.md` and `../Tranche 5/Vérifications.md` and the status of `../../AGENTS.md`.
 - **After this slice:** 6, 8, pre-beta, 11 (`../../01 Steps/Périmètre du MVP.md`). A slice whose document is missing or not validated: stop and ask.
 - **Guarded files:** one patch for the slice, prepared in branch 5 (`../Tranche 5/trainer-guardrails.patch`, `../Pour Tim.md` action 7): `.claude/settings.json` denies reading `services/training/.env`, with its tests in `tests/guardrails.test.ts`. The training image is not built in CI: its logic lives in the package of the reading service, tested by `check.sh`.
@@ -25,11 +25,18 @@ Paths below are from the repository root.
 | 4 | `t5/writing-test` (texts, photos, check route, screen) | 5 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | done, PR 92 |
 | 5 | `t5/trainer` (image, jobs, three functions, harvest, training, replacement of the active model, sweep) | 6, 7, 8 | critical (secret, exposure of a service) | Opus 5.5, High | code Sonnet, security Opus | done, PR 93 |
 | 6 | `t5/personal-reading` (reading with the personal model, rules tied to the model of A) | 9 | critical (loading a model) | Opus 5.5, High | code Sonnet, security Opus | done, PR 96 |
-| 7 | `t5/measure` (measures 15 to 17, outside the repository) | 15, 16, 17 | ordinary | Sonnet 5.5, High | code, Sonnet | done, measures 15 and 16 made, 17 waits for the owner's photos |
-| 8 | `t5/levels` (level of a notebook, state in the account, export and deletion) | 10, 13, 14 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | |
+| 7 | `t5/measure` (measures 15 to 17, outside the repository) | 15, 16, 17 | ordinary | Sonnet 5.5, High | code, Sonnet | done, PR 97, measures 15 and 16 made, 17 waits for the owner's photos |
+| 8 | `t5/levels` (level of a notebook, state in the account, export and deletion) | 10, 13, 14 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | done, PR 98 |
 | 9 | `t5/dates` (date check and its display, measure 18) | 11, 18 | ordinary | Sonnet 5.5, High | code, Sonnet | |
 | 10 | `t5/faults-measure` (measure 19, outside the repository) | 19 | ordinary | Sonnet 5.5, High | code, Sonnet | |
 | 11 | `t5/faults` (fault notification, only if measure 19 passes) | 12, 14 | ordinary | Sonnet 5.5, High | code, Sonnet | |
+
+## Notes carried from slice 5, branch 8
+
+- `t5/levels` adds `private.has_model_in_service`, `set_correction_level` (server only), `training_stage()` (signed-in users) and the trigger `htr_models_reset_levels` (migration `20261107120000_t5_levels.sql`), the function `set-correction-level`, the menu item "Correction level" (`src/notebooks/use-level-item.ts`), the stage on `/training`, and `training.json` and the test photos in the export; contracts in `docs/architecture.md` ("Correction levels", `src/export/data/`).
+- Branch 9 (dates): the alerts `date_incoherent` are shown only for notebooks at `journal`, and must be cleared when a notebook leaves `journal`; the level now also falls back to `course` when the active model leaves service, so the recalculation has to run on that change too (the trigger `htr_models_reset_levels` resets the level; clearing the alerts is branch 9's).
+- Branch 11 (faults): "Grammaire" needs rules in service: use the same `private.model_in_service` through the model that read A (`readings.htr_model_id`), not the level alone.
+- Set aside after review (PR 98): `htr_models` still gives `authenticated` a whole-table `select` (owner only, since slice 2; a column grant would hide the path and hash); the disk estimate of the data export ignores the two photos of a writing test; a failed training task leaves the stage "training" until the cadence makes another.
 
 ## Notes carried from slice 5, branch 7
 

@@ -43,6 +43,8 @@ import type {
   UploadOutcome,
   ReportOutcome,
   WritingBegin,
+  LevelOutcome,
+  LevelStore,
   WritingFinish,
   WritingTestStore,
 } from "./ports.ts";
@@ -246,6 +248,19 @@ export function createRevokeStore(keys: Keys, fetchImpl?: typeof fetch): RevokeS
       const { data, error } = await client.rpc("revoke_training", { p_user_id: userId });
       if (error || typeof data !== "boolean") throw new StoreError("revokeTraining");
       return data;
+    },
+  };
+}
+
+const LEVEL_OUTCOMES: readonly string[] = ["set", "notebook_not_found", "requires_model"];
+
+export function createLevelStore(keys: Keys, fetchImpl?: typeof fetch): LevelStore {
+  const client: SupabaseClient = createClient(keys.url, keys.secretKey, { auth: NO_SESSION, global: { fetch: fetchImpl } });
+  return {
+    set: async (userId, notebookId, level) => {
+      const { data, error } = await client.rpc("set_correction_level", { p_user_id: userId, p_notebook_id: notebookId, p_level: level });
+      if (error || typeof data !== "string" || !LEVEL_OUTCOMES.includes(data)) throw new StoreError("setCorrectionLevel");
+      return data as LevelOutcome;
     },
   };
 }

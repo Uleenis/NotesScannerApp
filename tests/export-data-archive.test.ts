@@ -63,8 +63,8 @@ function json(entries: Map<string, Entry>, name: string): any {
 function world(extra: Record<string, Row[]> = {}) {
   const tables: Record<string, Row[]> = {
     profiles: [
-      { id: ME, interface_language: "fr", tier: "free" },
-      { id: OTHER, interface_language: "en", tier: "subscriber" },
+      { id: ME, interface_language: "fr", tier: "free", birth_year: 1990, country: "FR" },
+      { id: OTHER, interface_language: "en", tier: "subscriber", birth_year: 2001, country: "DE" },
     ],
     notebooks: [
       { id: "nb1", user_id: ME, name: "Histoire", position: 0, correction_level: "course" },
@@ -171,6 +171,7 @@ describe("writeMyData", () => {
         `pages/${page(2)}/original.jpg`,
         `pages/${page(2)}/page.json`,
         "profile.json",
+        "training.json",
         "usage.json",
       ].sort(),
     );
@@ -199,7 +200,7 @@ describe("writeMyData", () => {
     expect(second.readings).toEqual([]);
     expect(second.images).toEqual([{ kind: "original", file: "original.jpg" }]);
 
-    expect(json(d.fake.entries, "profile.json")).toEqual({ id: ME, email: "me@example.test", is_anonymous: false, interface_language: "fr", tier: "free" });
+    expect(json(d.fake.entries, "profile.json")).toEqual({ id: ME, email: "me@example.test", is_anonymous: false, interface_language: "fr", tier: "free", birth_year: 1990, country: "FR" });
     expect(json(d.fake.entries, "usage.json")).toEqual({
       allowance: { used: 4, max: 15, remaining: 11, resets_at: "2026-11-01T00:00:00Z" },
       charges: [{ id: "c1", page_id: page(1), charged_at: "2026-10-01T10:00:00Z" }],
@@ -442,7 +443,7 @@ describe("writeMyData", () => {
     const plan = await planned(fake.client);
 
     expect(await writeMyData(plan, d.value, { cancelled: false }, () => undefined)).toEqual({ status: "shared" });
-    expect([...d.fake.entries.keys()].sort()).toEqual(["README.txt", "export.json", "notebooks.json", "profile.json", "usage.json"]);
+    expect([...d.fake.entries.keys()].sort()).toEqual(["README.txt", "export.json", "notebooks.json", "profile.json", "training.json", "usage.json"]);
   });
 
   test("an anonymous account without allowance is written with a null allowance", async () => {
@@ -517,5 +518,150 @@ describe("planMyData", () => {
     const fake = fakeArchiveClient(world());
 
     expect(await planMyData(fake.client, identity, { cancelled: true })).toEqual({ status: "cancelled" });
+  });
+});
+
+const TEST_1 = "cccccccc-0000-0000-0000-000000000001";
+const TEST_2 = "cccccccc-0000-0000-0000-000000000002";
+const TEST_3 = "cccccccc-0000-0000-0000-000000000003";
+const TEST_9 = "cccccccc-0000-0000-0000-000000000009";
+
+function trainingWorld() {
+  return world({
+    consents: [
+      { id: "k1", user_id: ME, kind: "training", version: "training-1", granted_by: "parent", parent_email: "parent@example.test", granted_at: "2026-10-01T10:00:00Z", revoked_at: null },
+      { id: "k2", user_id: OTHER, kind: "training", version: "training-1", granted_by: "user", parent_email: null, granted_at: "2026-10-02T10:00:00Z", revoked_at: null },
+    ],
+    writing_tests: [
+      { id: TEST_1, user_id: ME, template: "fr", status: "accepted", training_lines: 30, validation_lines: 10, redo: [], created_at: "2026-10-03T10:00:00Z", checked_at: "2026-10-03T10:05:00Z" },
+      { id: TEST_2, user_id: ME, template: "fr", status: "rejected", training_lines: 3, validation_lines: 1, redo: [1], created_at: "2026-10-02T10:00:00Z", checked_at: "2026-10-02T10:05:00Z" },
+      { id: TEST_3, user_id: ME, template: "fr", status: "pending", training_lines: null, validation_lines: null, redo: [], created_at: "2026-10-04T10:00:00Z", checked_at: null },
+      { id: TEST_9, user_id: OTHER, template: "en", status: "accepted", training_lines: 30, validation_lines: 10, redo: [], created_at: "2026-10-03T10:00:00Z", checked_at: "2026-10-03T10:05:00Z" },
+    ],
+    htr_models: [
+      { id: "m1", user_id: ME, name: "personal", version: 1, status: "active", cer: 0.101, alphabet_size: 98, sample_count: 400, faults_correct: 6, created_at: "2026-10-05T10:00:00Z", storage_path: `${ME}/m1.safetensors`, sha256: "a".repeat(64) },
+      { id: "m9", user_id: OTHER, name: "personal", version: 1, status: "active", cer: 0.2, alphabet_size: 90, sample_count: 300, faults_correct: 1, created_at: "2026-10-05T10:00:00Z", storage_path: `${OTHER}/m9.safetensors`, sha256: "b".repeat(64) },
+    ],
+  });
+}
+
+describe("the data of the training in the archive", () => {
+  test("holds the consents, the writing tests and the list of the models of the account, in training.json [13]", async () => {
+    const fake = fakeArchiveClient(trainingWorld());
+    const d = deps({ client: fake.client });
+    const plan = await planned(fake.client);
+
+    await writeMyData(plan, d.value, { cancelled: false }, () => undefined);
+
+    const training = json(d.fake.entries, "training.json");
+    expect(training.consents).toEqual([
+      { id: "k1", kind: "training", version: "training-1", granted_by: "parent", parent_email: "parent@example.test", granted_at: "2026-10-01T10:00:00Z", revoked_at: null },
+    ]);
+    expect(training.writing_tests.map((test: Row) => [test.id, test.status, test.template, test.training_lines, test.validation_lines])).toEqual([
+      [TEST_2, "rejected", "fr", 3, 1],
+      [TEST_1, "accepted", "fr", 30, 10],
+      [TEST_3, "pending", "fr", null, null],
+    ]);
+    expect(training.models).toEqual([
+      { id: "m1", name: "personal", version: 1, status: "active", cer: 0.101, alphabet_size: 98, sample_count: 400, faults_correct: 6, created_at: "2026-10-05T10:00:00Z" },
+    ]);
+  });
+
+  test("never carries a file path, a hash or an identifier of the account, and nothing of another account [13]", async () => {
+    const fake = fakeArchiveClient(trainingWorld());
+    const d = deps({ client: fake.client });
+    const plan = await planned(fake.client);
+
+    await writeMyData(plan, d.value, { cancelled: false }, () => undefined);
+
+    const text = JSON.stringify(json(d.fake.entries, "training.json"));
+    expect(text).not.toContain("safetensors");
+    expect(text).not.toContain("storage_path");
+    expect(text).not.toContain("sha256");
+    expect(text).not.toContain('"user_id"');
+    expect(text).not.toContain(OTHER);
+    expect(text).not.toContain(TEST_9);
+    expect(text).not.toContain("m9");
+    for (const query of fake.queries.filter((one) => ["consents", "writing_tests", "htr_models"].includes(one.table))) {
+      expect(query.filters).toEqual([["user_id", ME]]);
+    }
+  });
+
+  test("copies the two photos of the tests that still have them, as writing-tests/<id>/1.jpg and 2.jpg [13]", async () => {
+    const fake = fakeArchiveClient(trainingWorld());
+    const d = deps({ client: fake.client });
+    const plan = await planned(fake.client);
+
+    await writeMyData(plan, d.value, { cancelled: false }, () => undefined);
+
+    const kept = [...d.fake.entries.keys()].filter((name) => name.startsWith("writing-tests/")).sort();
+    expect(kept).toEqual([`writing-tests/${TEST_1}/1.jpg`, `writing-tests/${TEST_1}/2.jpg`, `writing-tests/${TEST_3}/1.jpg`, `writing-tests/${TEST_3}/2.jpg`]);
+    expect([...(d.fake.entries.get(`writing-tests/${TEST_1}/1.jpg`) as Uint8Array)]).toEqual([1, 2, 3]);
+    expect(d.photos.filter((path) => path.includes("/writing-tests/")).sort()).toEqual([
+      `${ME}/writing-tests/${TEST_1}/1.jpg`,
+      `${ME}/writing-tests/${TEST_1}/2.jpg`,
+      `${ME}/writing-tests/${TEST_3}/1.jpg`,
+      `${ME}/writing-tests/${TEST_3}/2.jpg`,
+    ]);
+    expect(d.photos.every((path) => path.startsWith(`${ME}/`))).toBe(true);
+    expect(d.disposed.filter((path) => path.includes("/writing-tests/"))).toHaveLength(4);
+  });
+
+  test("lists each photo of a test in training.json and counts the files in export.json [13]", async () => {
+    const fake = fakeArchiveClient(trainingWorld());
+    const d = deps({
+      client: fake.client,
+      photo: async (path) => (path.endsWith("/2.jpg") && path.includes(TEST_3) ? null : { chunks: () => [new Uint8Array([7])], dispose: () => undefined }),
+    });
+    const plan = await planned(fake.client);
+
+    await writeMyData(plan, d.value, { cancelled: false }, () => undefined);
+
+    const tests = json(d.fake.entries, "training.json").writing_tests as Row[];
+    expect(tests.find((test) => test.id === TEST_1)?.photos).toEqual([
+      { sheet: 1, file: "1.jpg" },
+      { sheet: 2, file: "2.jpg" },
+    ]);
+    expect(tests.find((test) => test.id === TEST_3)?.photos).toEqual([
+      { sheet: 1, file: "1.jpg" },
+      { sheet: 2, file: null },
+    ]);
+    expect(tests.find((test) => test.id === TEST_2)?.photos).toEqual([]);
+    expect(json(d.fake.entries, "export.json")).toMatchObject({ photos: 3 + 4, photos_missing: 1 });
+  });
+
+  test("fails the export, fetching nothing, when a test has an id that is not an identifier [13]", async () => {
+    const strange = world({
+      writing_tests: [
+        { id: `../${OTHER}`, user_id: ME, template: "fr", status: "accepted", training_lines: 30, validation_lines: 10, redo: [], created_at: "2026-10-03T10:00:00Z", checked_at: "2026-10-03T10:05:00Z" },
+      ],
+    });
+    const fake = fakeArchiveClient(strange);
+    const d = deps({ client: fake.client });
+    const plan = await planned(fake.client);
+
+    const result = await writeMyData(plan, d.value, { cancelled: false }, () => undefined);
+
+    expect(result).toEqual({ status: "error" });
+    expect(d.photos.filter((path) => path.includes("/writing-tests/"))).toEqual([]);
+  });
+
+  test("an account that never trained still gets an empty training.json [13]", async () => {
+    const d = deps();
+    const plan = await planned(d.client.client);
+
+    await writeMyData(plan, d.value, { cancelled: false }, () => undefined);
+
+    expect(json(d.fake.entries, "training.json")).toEqual({ consents: [], writing_tests: [], models: [] });
+  });
+
+  test("a read of the training tables that fails fails the export and erases the archive [13]", async () => {
+    const fake = fakeArchiveClient(trainingWorld(), { failTable: "writing_tests" });
+    const d = deps({ client: fake.client });
+    const plan = await planned(fake.client);
+
+    expect(await writeMyData(plan, d.value, { cancelled: false }, () => undefined)).toEqual({ status: "error" });
+    expect(d.fake.state.discarded).toBe(true);
+    expect(d.shared).toEqual([]);
   });
 });

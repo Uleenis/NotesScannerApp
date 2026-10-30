@@ -30,10 +30,10 @@ insert into public.consents (user_id, kind, version, granted_by) values
   ('a7a7a7a7-0000-0000-0000-000000000001', 'training', 'training-1', 'user'),
   ('a7a7a7a7-0000-0000-0000-000000000002', 'training', 'training-1', 'user');
 
-insert into public.htr_models (id, user_id, name, version, status, storage_path) values
-  ('b7b7b7b7-0000-0000-0000-000000000001', 'a7a7a7a7-0000-0000-0000-000000000001', 'personal', 1, 'retired', 'a7a7a7a7-0000-0000-0000-000000000001/b7b7b7b7-0000-0000-0000-000000000001.safetensors'),
-  ('b7b7b7b7-0000-0000-0000-000000000002', 'a7a7a7a7-0000-0000-0000-000000000001', 'personal', 2, 'active', 'a7a7a7a7-0000-0000-0000-000000000001/b7b7b7b7-0000-0000-0000-000000000002.safetensors'),
-  ('b7b7b7b7-0000-0000-0000-000000000003', 'a7a7a7a7-0000-0000-0000-000000000002', 'personal', 1, 'active', 'a7a7a7a7-0000-0000-0000-000000000002/b7b7b7b7-0000-0000-0000-000000000003.safetensors');
+insert into public.htr_models (id, user_id, name, version, status, storage_path, cer) values
+  ('b7b7b7b7-0000-0000-0000-000000000001', 'a7a7a7a7-0000-0000-0000-000000000001', 'personal', 1, 'retired', 'a7a7a7a7-0000-0000-0000-000000000001/b7b7b7b7-0000-0000-0000-000000000001.safetensors', 0.1),
+  ('b7b7b7b7-0000-0000-0000-000000000002', 'a7a7a7a7-0000-0000-0000-000000000001', 'personal', 2, 'active', 'a7a7a7a7-0000-0000-0000-000000000001/b7b7b7b7-0000-0000-0000-000000000002.safetensors', 0.1),
+  ('b7b7b7b7-0000-0000-0000-000000000003', 'a7a7a7a7-0000-0000-0000-000000000002', 'personal', 1, 'active', 'a7a7a7a7-0000-0000-0000-000000000002/b7b7b7b7-0000-0000-0000-000000000003.safetensors', 0.1);
 
 insert into public.notebooks (id, user_id, name, correction_level) values
   ('c7c7c7c7-0000-0000-0000-000000000001', 'a7a7a7a7-0000-0000-0000-000000000001', 'Journal', 'journal'),

@@ -132,9 +132,53 @@ function writeAccount(sink: ArchiveSink, deps: ArchiveDeps, identity: ArchiveIde
       is_anonymous: identity.isAnonymous,
       interface_language: field(profile, "interface_language") ?? null,
       tier: field(profile, "tier") ?? null,
+      birth_year: field(profile, "birth_year") ?? null,
+      country: field(profile, "country") ?? null,
     }),
   );
   sink.addText("usage.json", json({ allowance: usageOf(deps.allowance), charges }));
+}
+
+const TEST_SHEETS = [1, 2] as const;
+const TESTS_WITH_PHOTOS = ["pending", "accepted"];
+
+async function writeTestPhotos(
+  sink: ArchiveSink,
+  deps: ArchiveDeps,
+  control: ExportControl,
+  identity: ArchiveIdentity,
+  tests: Row[],
+  counts: Counts,
+): Promise<{ sheet: number; file: string | null }[][]> {
+  if (!tests.every((row) => isIdentifier(row.id))) {
+    throw new ArchiveReadError();
+  }
+  const listed: { sheet: number; file: string | null }[][] = [];
+  for (const test of tests) {
+    const photos: { sheet: number; file: string | null }[] = [];
+    listed.push(photos);
+    if (!TESTS_WITH_PHOTOS.includes(test.status as string)) {
+      continue;
+    }
+    for (const sheet of TEST_SHEETS) {
+      tick(control);
+      counts.photos += 1;
+      const source = await deps.photo(`${identity.userId}/writing-tests/${test.id as string}/${sheet}.jpg`);
+      try {
+        tick(control);
+        if (source === null) {
+          counts.missing += 1;
+          photos.push({ sheet, file: null });
+          continue;
+        }
+        sink.addBinary(`writing-tests/${test.id as string}/${sheet}.jpg`, source.chunks());
+      } finally {
+        source?.dispose();
+      }
+      photos.push({ sheet, file: `${sheet}.jpg` });
+    }
+  }
+  return listed;
 }
 
 type PageData = Record<PageTable, Map<string, Row[]>>;
@@ -220,17 +264,25 @@ async function writeContents(
   progress: (done: number, total: number) => void,
 ): Promise<void> {
   const { identity, pages } = plan;
-  const [profiles, charges, notebooks, chapters, lexicon] = await Promise.all([
+  const [profiles, charges, notebooks, chapters, lexicon, consents, tests, models] = await Promise.all([
     ownRows(deps.client, "profiles", identity.userId),
     ownRows(deps.client, "page_charges", identity.userId),
     ownRows(deps.client, "notebooks", identity.userId),
     ownRows(deps.client, "chapters", identity.userId),
     ownRows(deps.client, "lexicon_entries", identity.userId),
+    ownRows(deps.client, "consents", identity.userId),
+    ownRows(deps.client, "writing_tests", identity.userId),
+    ownRows(deps.client, "htr_models", identity.userId),
   ]);
   tick(control);
   writeAccount(sink, deps, identity, profiles[0], charges);
   sink.addText("notebooks.json", json({ notebooks, chapters, lexicon }));
   const counts: Counts = { photos: 0, missing: 0 };
+  const testPhotos = await writeTestPhotos(sink, deps, control, identity, tests, counts);
+  sink.addText(
+    "training.json",
+    json({ consents, writing_tests: tests.map((test, index) => ({ ...test, photos: testPhotos[index] })), models }),
+  );
   progress(0, pages.length);
   for (let from = 0; from < pages.length; from += PAGES_PER_GROUP) {
     tick(control);

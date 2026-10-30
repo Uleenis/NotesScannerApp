@@ -125,6 +125,20 @@ export type RevokeTrainingDeps = {
   log: Logger;
 };
 
+export type CorrectionLevel = "course" | "journal" | "grammar";
+
+export type LevelOutcome = "set" | "notebook_not_found" | "requires_model";
+
+export type LevelStore = {
+  set: (userId: string, notebookId: string, level: CorrectionLevel) => Promise<LevelOutcome>;
+};
+
+export type SetCorrectionLevelDeps = {
+  auth: Auth;
+  levels: LevelStore;
+  log: Logger;
+};
+
 export type WritingBegin = {
   outcome: "started" | "consent_required" | "test_in_progress" | "test_limit";
   testId: string | null;

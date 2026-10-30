@@ -13,6 +13,7 @@ import { useExportItem } from "@/export/use-export";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
 import { useChapters, useDeleteNotebook, useNotebook } from "@/notebooks/queries";
+import { useLevelItem } from "@/notebooks/use-level-item";
 import type { DeleteResult } from "@/notebooks/removal";
 import { usePages } from "@/pages/queries";
 import { colors, typography } from "@/theme";
@@ -25,6 +26,7 @@ export default function NotebookScreen() {
   const chapters = useChapters();
   const deletion = useDeleteNotebook();
   const exportItem = useExportItem();
+  const levelItem = useLevelItem(id);
 
   if (notebook.data === null) {
     return <Redirect href="/" />;
@@ -76,6 +78,7 @@ export default function NotebookScreen() {
         ...exportEntries,
         { label: t.notebook.newChapter, onPress: () => router.push({ pathname: "/new-chapter", params: { notebook: id } }) },
         { label: t.notebook.rename, onPress: () => router.push({ pathname: "/rename", params: { kind: "notebook", id } }) },
+        levelItem,
         {
           label: t.notebook.delete,
           destructive: true,

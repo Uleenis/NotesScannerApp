@@ -6,7 +6,7 @@ export const MAX_ARCHIVE_BYTES = 3_500_000_000;
 const IDENTIFIER = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
 const ENTRY_NAME = new RegExp(
-  `^(?:README\\.txt|export\\.json|profile\\.json|usage\\.json|notebooks\\.json|pages/${IDENTIFIER}/(?:page\\.json|text\\.txt|original\\.jpg|prepared\\.jpg))$`,
+  `^(?:README\\.txt|export\\.json|profile\\.json|usage\\.json|notebooks\\.json|training\\.json|writing-tests/${IDENTIFIER}/[12]\\.jpg|pages/${IDENTIFIER}/(?:page\\.json|text\\.txt|original\\.jpg|prepared\\.jpg))$`,
 );
 
 const IDENTIFIER_ONLY = new RegExp(`^${IDENTIFIER}$`);
