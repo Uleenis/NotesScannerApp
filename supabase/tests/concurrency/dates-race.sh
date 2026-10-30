@@ -127,7 +127,8 @@ EOS
 
 run_log="$(docker exec "$DB_CONTAINER" pgbench -U postgres -n -f /tmp/dates-correct.sql@3 -f /tmp/dates-move.sql@1 -f /tmp/dates-text.sql@1 -f /tmp/dates-delete.sql@1 -c "$CLIENTS" -j 4 -t "$ROUNDS" postgres 2>&1 || true)"
 
-check "no parallel write fails" "0" "$(printf '%s\n' "$run_log" | grep -c 'ERROR' || true)"
+check "no parallel write fails but on a page that was deleted meanwhile" "0" "$(printf '%s
+' "$run_log" | grep 'ERROR' | grep -vc 'page_not_found' || true)"
 
 check "the run raised alerts, so the comparison is not empty" "t" "$(sql -c "select count(*) > 0 from public.page_alerts where user_id = '${USER_ID}' and kind = 'date_incoherent'")"
 
