@@ -83,6 +83,7 @@ export default function RootLayout() {
             <Stack.Screen name="rename" options={{ presentation: "modal" }} />
             <Stack.Screen name="sign-in" options={{ presentation: "modal", headerShown: false }} />
             <Stack.Screen name="training" options={{ presentation: "modal", headerShown: false }} />
+            <Stack.Screen name="measure" options={{ presentation: "modal" }} />
           </Stack>
           <ActionSheetHost />
           <ExportHost />

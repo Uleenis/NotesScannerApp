@@ -448,6 +448,17 @@ export const en = {
       "Every file is UTF-8 text, except the photos. The .json files are JSON.",
     ],
   },
+  measure: {
+    row: "Crop measure",
+    title: "Crop measure",
+    note: "For development builds only. Scans or imports pages with the system scanner, then shares them as one ZIP archive. Nothing is uploaded.",
+    scan: "Open the scanner",
+    share: "Share the archive",
+    scanned: (count: number) => `${count} ${count === 1 ? "page" : "pages"} ready`,
+    unavailable: "The system scanner is not available on this phone.",
+    failed: "The scanner did not work. Try again.",
+    shareFailed: "The archive could not be shared. Scan the pages again.",
+  },
 };
 
 export type Strings = typeof en;

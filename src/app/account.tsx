@@ -115,6 +115,11 @@ export default function AccountScreen() {
         <AccountGroup>
           <AccountRow label={t.account.delete} onPress={askToDelete} disabled={working} danger last />
         </AccountGroup>
+        {__DEV__ ? (
+          <AccountGroup>
+            <AccountRow label={t.measure.row} onPress={() => router.push("/measure")} disabled={working} last />
+          </AccountGroup>
+        ) : null}
         <Text style={styles.note}>{t.account.deleteNote}</Text>
         {message === null ? null : <Text style={styles.error}>{message}</Text>}
       </ScrollView>
