@@ -6,6 +6,7 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 
 - App: Expo SDK 57, React Native 0.86, React 19, TypeScript strict. Expo has changed: read the versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing app code.
 - Backend: Supabase (Postgres, Auth, Storage, Edge Functions in TypeScript on Deno), Paris region.
+- Development build: `expo-dev-client`, Android built locally on the PC without EAS (`docs/architecture.md`, `modules/document-scanner/`); Expo Go no longer runs the app.
 - Reading model: `gemini-3.6-flash`, prompt V0, default temperature, `thinkingBudget: 0`, called only from Edge Functions.
 - Reading service: Python 3.13 in `services/reading/` (FastAPI, Kraken 7.1.1, PyTorch for the processor only), one Docker image. It runs on the PC next to the local Supabase stack until Cloud Run, in the pre-beta slice (after slice 8, with the paid accounts).
 
@@ -17,7 +18,8 @@ iOS app that turns photos of handwritten notes into faithful digital text. It ne
 - `src/auth/`: the anonymous account, the account provider, sign-up and sign-in by e-mail code, the transfer of an anonymous account.
 - `src/lib/`: the Supabase client and its config, secure session storage, legal links, opening a link, the action menu.
 - `src/notebooks/`: reading, creating and caching notebooks, and their correction level (`level.ts`, the menu item `use-level-item.ts`).
-- `src/capture/`: usage limits before the camera, preparing and sending a page.
+- `src/capture/`: usage limits before the camera, the system scanner (`scanner.ts`) and the measurement export of the development build (`measure.ts`), preparing and sending a page.
+- `modules/document-scanner/`: the local Expo module of the system scanner (ML Kit on Android, VisionKit on iOS). The native folders `android/` and `ios/` are made by `npx expo prebuild` and never tracked.
 - `src/pages/`: what a user sees of a page: lists, text, photo, title, formulas (`formulas.ts`, `tex.ts` with MathJax), words and corrections (`words.ts`), the edit mode (`edit.ts`), alerts, the size of a photo read from its JPEG header (`photo-pixels.ts`).
 - `src/search/`: the search: the calls to `search_pages` and `suggest_words`, the box of a position, the excerpt and the suggestion text helpers; the screen is `src/app/search.tsx`.
 - `src/render/`: the rich rendering of a page: the parser of the accepted marks, the call to `render-page`, the saved choice of display and when to ask; its switch and body are in `src/components/reading/`.

@@ -450,4 +450,15 @@ export const fr: Strings = {
       "Tous les fichiers sont du texte UTF-8, sauf les photos. Les fichiers .json sont du JSON.",
     ],
   },
+  measure: {
+    row: "Mesure du recadrage",
+    title: "Mesure du recadrage",
+    note: "Réservé aux builds de développement. Scanne ou importe des pages avec le scanner du système, puis les partage en une archive ZIP. Rien n'est envoyé.",
+    scan: "Ouvrir le scanner",
+    share: "Partager l'archive",
+    scanned: (count: number) => `${count} page${count > 1 ? "s" : ""} prête${count > 1 ? "s" : ""}`,
+    unavailable: "Le scanner du système n'est pas disponible sur ce téléphone.",
+    failed: "Le scanner n'a pas marché. Réessaie.",
+    shareFailed: "L'archive n'a pas pu être partagée. Scanne de nouveau les pages.",
+  },
 };
