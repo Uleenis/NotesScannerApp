@@ -1,14 +1,14 @@
 # Current slice
 
-Slice 5 — Entraînement. Slices 1 to 4, 7 and 9 and Correctifs 1 and 2 are done; their Bilans are in `../Tranche N/Bilan.md`, `../Correctifs N/Bilan.md` and `../../05 Shipped/Tranche 1 - Lecture B1.md`.
+Slice 5 — Entraînement, built (branches 1 to 10; branch 11 does not exist). Slices 1 to 5, 7 and 9 and Correctifs 1 and 2 are done; their Bilans are in `../Tranche N/Bilan.md`, `../Correctifs N/Bilan.md` and `../../05 Shipped/Tranche 1 - Lecture B1.md`.
 
 Paths below are from the repository root.
 
 - **Spec and plan of slice 5:** `../../02 Design/Tranche 5.md`, validated by the owner on 27/10/2026 with its eight decisions as proposed.
 - **Decisions:** `../Tranche 5/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Method:** `../../01 Steps/Méthode de travail.md`. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next:** branch 10, `t5/faults-measure`.
-- **Order:** branches 1 to 11 in the order of the table. Branch 11 exists only if measure 19 (branch 10) passes; otherwise branch 10 is the last. Criterion 20 (phone) is checked after the last branch, through `../Tranche 5/Vérifications.md`. The last session writes `../Tranche 5/Bilan.md` and `../Tranche 5/Vérifications.md` and the status of `../../AGENTS.md`.
+- **Next:** none. Slice 5 is closed: measure 19 failed, so branch 10 was the last; `../Tranche 5/Bilan.md`, `../Tranche 5/Vérifications.md` and the status of `../../AGENTS.md` are written. A new session stops and asks which slice comes next (6, 8, pre-beta, 11).
+- **Order:** branches 1 to 11 in the order of the table. Branch 11 exists only if measure 19 (branch 10) passes; otherwise branch 10 is the last. Criterion 20 (phone) is checked by the owner through `../Tranche 5/Vérifications.md`; measure 17 waits for the owner's photos (`../Pour Tim.md` action 7).
 - **After this slice:** 6, 8, pre-beta, 11 (`../../01 Steps/Périmètre du MVP.md`). A slice whose document is missing or not validated: stop and ask.
 - **Guarded files:** one patch for the slice, prepared in branch 5 (`../Tranche 5/trainer-guardrails.patch`, `../Pour Tim.md` action 7): `.claude/settings.json` denies reading `services/training/.env`, with its tests in `tests/guardrails.test.ts`. The training image is not built in CI: its logic lives in the package of the reading service, tested by `check.sh`.
 - **The owner's:** the Resend key in the function secrets, local and production (branch 2); `TRAINING_SECRET` in `supabase/functions/.env` and `services/training/.env` (branch 5); checking that Docker sees the GPU (branch 5); applying the guarded-file patch; writing and photographing the writing test for measure 17 (branch 7).
@@ -28,8 +28,14 @@ Paths below are from the repository root.
 | 7 | `t5/measure` (measures 15 to 17, outside the repository) | 15, 16, 17 | ordinary | Sonnet 5.5, High | code, Sonnet | done, PR 97, measures 15 and 16 made, 17 waits for the owner's photos |
 | 8 | `t5/levels` (level of a notebook, state in the account, export and deletion) | 10, 13, 14 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | done, PR 98 |
 | 9 | `t5/dates` (date check and its display, measure 18) | 11, 18 | ordinary | Sonnet 5.5, High | code, Sonnet | done, PR 99, measure 18 held |
-| 10 | `t5/faults-measure` (measure 19, outside the repository) | 19 | ordinary | Sonnet 5.5, High | code, Sonnet | |
-| 11 | `t5/faults` (fault notification, only if measure 19 passes) | 12, 14 | ordinary | Sonnet 5.5, High | code, Sonnet | |
+| 10 | `t5/faults-measure` (measure 19, outside the repository) | 19 | ordinary | Sonnet 5.5, High | code, Sonnet | done, PR 100, measure 19 failed |
+| 11 | `t5/faults` (fault notification, only if measure 19 passes) | 12, 14 | ordinary | Sonnet 5.5, High | code, Sonnet | not built, measure 19 failed |
+
+## Notes carried from slice 5, branch 10
+
+- Measure 19 (`04 Testing/T5 mesures/m19/`, `run.py`, results in `resultats.md`) failed. Rule played: A and B1 equal on their raw forms, not a proper noun (the NER label of B1, A or B2) and without a digit, not in `private.dictionary_words`, exactly one dictionary word at a Levenshtein distance of 1. On the 18 linear pages with the pinned chain, A and B1 write 3 of the 14 known faults as written, and 1 is notified with the right form (2 needed); 0 false notifications (3 allowed). The 24-line model and a run without the proper-noun gate give the same counts.
+- Branch 11 does not exist: the fault notification is out of the MVP (decision 8 of the spec) and the question to reopen it after the beta, from the users' own corrections, is in `../Pour Tim.md`, question 3. Criterion 12 has no object. `fault_suggestion` was never created: no migration, table, string or screen of slice 5 refers to it.
+- Still open for the owner: the two photos of measure 17, the phone checks of criterion 20, and questions 1 to 3 of `../Pour Tim.md`.
 
 ## Notes carried from slice 5, branch 9
 
