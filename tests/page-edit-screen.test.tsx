@@ -263,6 +263,46 @@ describe("the alerts next to the title", () => {
     expect(await screen.findByText(fr.document.alertMathIncomplete)).toBeTruthy();
   });
 
+  test("says that the date of the page does not follow the notebook", async () => {
+    jest.mocked(pageService.alerts).mockResolvedValue(["date_incoherent"]);
+    await openPage();
+
+    expect(await screen.findByText(fr.document.alertDateIncoherent)).toBeTruthy();
+    expect(screen.queryByText(fr.document.alertMissingLine)).toBeNull();
+  });
+
+  test("shows the date alert next to another one", async () => {
+    jest.mocked(pageService.alerts).mockResolvedValue(["date_incoherent", "missing_line"]);
+    await openPage();
+
+    expect(await screen.findByText(fr.document.alertDateIncoherent)).toBeTruthy();
+    expect(await screen.findByText(fr.document.alertMissingLine)).toBeTruthy();
+  });
+
+  test("does not show the date alert on a page of math", async () => {
+    jest.mocked(pageService.alerts).mockResolvedValue(["date_incoherent"]);
+    pages.change("page-1", { pageType: "math", text: "$x = 1$" });
+    await renderRouter("./src/app", { initialUrl: "/page/page-1" });
+    await waitFor(() => expect(pageService.alerts).toHaveBeenCalledWith("page-1"));
+
+    expect(screen.queryByText(fr.document.alertDateIncoherent)).toBeNull();
+  });
+
+  test("reads the alerts again after an edit, so a fixed date loses its alert", async () => {
+    let fixed = false;
+    jest.mocked(pageService.alerts).mockImplementation(async () => (fixed ? [] : ["date_incoherent"]));
+    await openPage();
+    expect(await screen.findByText(fr.document.alertDateIncoherent)).toBeTruthy();
+    await fireEvent.press(await screen.findByText(fr.document.edit));
+    await screen.findByLabelText(fr.document.editField);
+    await type(`${TEXT} Fin`);
+    fixed = true;
+    await save();
+    await saved();
+
+    await waitFor(() => expect(screen.queryByText(fr.document.alertDateIncoherent)).toBeNull());
+  });
+
   test("shows an alert that is written after the page is on screen", async () => {
     jest.mocked(pageService.alerts).mockResolvedValueOnce([]).mockResolvedValue(["missing_line"]);
     await openPage();
@@ -292,6 +332,14 @@ describe("the alerts next to the title", () => {
     await openPage();
 
     expect(await screen.findByText(en.document.alertMissingLine)).toBeTruthy();
+  });
+
+  test("says the date alert in English when the phone is", async () => {
+    jest.mocked(useLocales).mockReturnValue([phoneLocale("en")]);
+    jest.mocked(pageService.alerts).mockResolvedValue(["date_incoherent"]);
+    await openPage();
+
+    expect(await screen.findByText(en.document.alertDateIncoherent)).toBeTruthy();
   });
 });
 

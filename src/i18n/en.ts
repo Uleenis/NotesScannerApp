@@ -218,6 +218,7 @@ export const en = {
     editRefused: "This page cannot be edited right now.",
     alertMissingLine: "A line of your page may not have been copied.",
     alertMathIncomplete: "A statement of your page may not have been copied.",
+    alertDateIncoherent: "The date of this page does not follow the ones in the notebook.",
   },
   search: {
     title: "Search",

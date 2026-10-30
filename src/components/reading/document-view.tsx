@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 
 import { useStrings } from "@/i18n";
+import type { Strings } from "@/i18n/en";
+import type { ShownAlert } from "@/pages/alerts";
 import { dateParts } from "@/pages/dates";
 import { cleanView, stripUnderline } from "@/pages/clean";
 import { displayPieces } from "@/pages/display";
@@ -26,6 +28,12 @@ import { RichBody } from "./rich-body";
 import { WordEditor } from "./word-editor";
 
 const NO_WORDS: ReadonlySet<number> = new Set();
+
+const ALERT_TEXT: Record<ShownAlert, (t: Strings) => string> = {
+  date_incoherent: (t) => t.document.alertDateIncoherent,
+  missing_line: (t) => t.document.alertMissingLine,
+  math_incomplete: (t) => t.document.alertMathIncomplete,
+};
 
 const BLOCK_SPACING = typography.documentBody.lineHeight * 0.4;
 
@@ -145,7 +153,7 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
   const showRich = rich !== null && rich.length > 0;
   const waitingForRich = wantsRich && (rendering.status === "waiting" || rendering.status === "loading");
   const fellBack = wantsRich && (rendering.status === "fallback" || (rendering.status === "ready" && !showRich));
-  const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "missing_line" ? page.pageType === "text" : page.pageType === "math"));
+  const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "math_incomplete" ? page.pageType === "math" : page.pageType === "text"));
 
   function edit(index: number, touchedY: number | null) {
     setFailed(false);
@@ -263,7 +271,7 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
             {showRich ? null : title}
             {shownAlerts.map((kind) => (
               <Text key={kind} style={[styles.secondary, styles.alert]}>
-                {kind === "missing_line" ? t.document.alertMissingLine : t.document.alertMathIncomplete}
+                {ALERT_TEXT[kind](t)}
               </Text>
             ))}
             {page.pageType === "unsupported_script" ? (

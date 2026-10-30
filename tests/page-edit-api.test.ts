@@ -75,7 +75,7 @@ describe("listAlerts", () => {
 
   test("leaves out a kind the screen does not show", async () => {
     const { client } = reader({ data: [{ kind: "date_incoherent" }, { kind: "missing_line" }, { kind: "something" }], error: null });
-    expect(await listAlerts(client, "page-1")).toEqual(["missing_line"]);
+    expect(await listAlerts(client, "page-1")).toEqual(["date_incoherent", "missing_line"]);
   });
 
   test.each([
