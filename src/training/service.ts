@@ -1,8 +1,9 @@
 import { getSupabase } from "@/lib/supabase";
-import { confirmParent, fetchTrainingState, grantConsent, requestParent, revokeTraining, saveAge } from "./api";
+import { confirmParent, fetchTrainingStage, fetchTrainingState, grantConsent, requestParent, revokeTraining, saveAge } from "./api";
 
 export const trainingService = {
   state: (userId: string) => fetchTrainingState(getSupabase(), userId),
+  stage: () => fetchTrainingStage(getSupabase()),
   saveAge: (userId: string, birthYear: number, country: string) => saveAge(getSupabase(), userId, birthYear, country),
   grantConsent: () => grantConsent(getSupabase()),
   requestParent: (email: string) => requestParent(getSupabase(), email),

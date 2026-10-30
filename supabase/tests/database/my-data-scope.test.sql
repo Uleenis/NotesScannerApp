@@ -1,10 +1,13 @@
 begin;
 
-select plan(15);
+select plan(18);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
-  insert into auth.users (id, email) values (uid, uid::text || '@example.test');
+  insert into auth.users (id, email, email_confirmed_at) values (uid, uid::text || '@example.test', now());
+  update public.profiles
+  set birth_year = extract(year from now() at time zone 'Europe/Paris')::integer - 30, country = 'FR'
+  where id = uid;
 $$;
 
 create function pg_temp.login(uid uuid) returns void
@@ -61,13 +64,25 @@ insert into public.page_gaps (user_id, page_id, gap_index, text) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '44444444-4444-4444-4444-444444444444', 0, 'ajout'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '55555555-5555-5555-5555-555555555555', 0, 'secret');
 
+insert into public.consents (user_id, kind, version, granted_by) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'training', 'training-1', 'user'),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'training', 'training-1', 'user');
+
+insert into public.writing_tests (user_id, template, status, training_lines, validation_lines) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'fr', 'accepted', 30, 10),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'en', 'accepted', 30, 10);
+
+insert into public.htr_models (user_id, name, version, status, storage_path, cer) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'personal', 1, 'active', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/1.safetensors', 0.1),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'personal', 1, 'active', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/1.safetensors', 0.1);
+
 insert into public.page_alerts (user_id, page_id, kind, details) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '44444444-4444-4444-4444-444444444444', 'missing_line', '{"line": 3}'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '55555555-5555-5555-5555-555555555555', 'math_incomplete', '{"statements": []}');
 
 select pg_temp.login('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
-select is((select count(*) from (select id, interface_language, tier from public.profiles) q), 1::bigint, 'the export reads one profile, the account''s own');
+select is((select count(*) from (select id, interface_language, tier, birth_year, country from public.profiles) q), 1::bigint, 'the export reads one profile, the account''s own');
 select is((select count(*) from (select id, name, position, correction_level from public.notebooks) q), 1::bigint, 'the export reads only the notebooks of the account');
 select is((select count(*) from (select id, notebook_id, name, position from public.chapters) q), 1::bigint, 'the export reads only the chapters of the account');
 select is((select count(*) from (select notebook_id, form_key, form, occurrences, confirmed from public.lexicon_entries) q), 1::bigint, 'the export reads only the lexicon of the account');
@@ -96,6 +111,21 @@ select is(
 );
 select is((select count(*) from (select page_id, gap_index, text from public.page_gaps) q), 1::bigint, 'the export reads only the edited text of the account');
 select is((select count(*) from (select id, page_id, kind, details, created_at from public.page_alerts) q), 1::bigint, 'the export reads only the alerts of the account');
+select is(
+  (select count(*) from (select id, kind, version, granted_by, parent_email, granted_at, revoked_at from public.consents) q),
+  1::bigint,
+  'the export reads only the consents of the account'
+);
+select is(
+  (select count(*) from (select id, template, status, training_lines, validation_lines, redo, created_at, checked_at from public.writing_tests) q),
+  1::bigint,
+  'the export reads only the writing tests of the account'
+);
+select is(
+  (select count(*) from (select id, name, version, status, cer, alphabet_size, sample_count, faults_correct, created_at from public.htr_models) q),
+  1::bigint,
+  'the export reads only the models of the account, not the generic one'
+);
 
 select is(
   (select count(*) from public.readings where page_id = '55555555-5555-5555-5555-555555555555'),

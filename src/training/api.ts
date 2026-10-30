@@ -7,9 +7,15 @@ export const CONSENT_VERSION = "training-1";
 
 const SIX_DIGITS = /^[0-9]{6}$/;
 
-export type TrainingClient = Pick<SupabaseClient, "from" | "functions">;
+export type TrainingClient = Pick<SupabaseClient, "from" | "functions" | "rpc">;
+
+type FunctionClient = Pick<SupabaseClient, "functions">;
 
 export type TrainingState = { birthYear: number | null; consent: "none" | "user" | "parent" };
+
+export const TRAINING_STAGES = ["not_started", "parent_pending", "test_needed", "training", "in_service", "not_precise"] as const;
+
+export type TrainingStage = (typeof TRAINING_STAGES)[number];
 
 type Done<Reason extends string> = { ok: true } | { ok: false; reason: Reason };
 
@@ -63,6 +69,15 @@ export async function fetchTrainingState(client: TrainingClient, userId: string)
   };
 }
 
+export async function fetchTrainingStage(client: Pick<SupabaseClient, "rpc">): Promise<TrainingStage> {
+  const { data, error } = await client.rpc("training_stage");
+  const stage = TRAINING_STAGES.find((known) => known === data);
+  if (error || stage === undefined) {
+    throw new Error("training_stage");
+  }
+  return stage;
+}
+
 function writeFailure<Reason extends string>(error: unknown, known: Record<string, Reason>, fallback: Reason, offline: Reason): Reason {
   if (looksLikeNetworkFailure(error)) {
     return offline;
@@ -102,7 +117,7 @@ export async function grantConsent(client: TrainingClient): Promise<Done<Consent
 
 export type Called = { kind: "done"; data: unknown } | { kind: "refused"; code: string | null; body: unknown } | { kind: "offline" } | { kind: "failed" };
 
-export async function call(client: TrainingClient, name: string, body?: Record<string, string>): Promise<Called> {
+export async function call(client: FunctionClient, name: string, body?: Record<string, string>): Promise<Called> {
   try {
     const { data, error } = body === undefined ? await client.functions.invoke(name) : await client.functions.invoke(name, { body });
     if (error instanceof FunctionsFetchError) {

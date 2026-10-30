@@ -66,6 +66,23 @@ export const en = {
     deleteBody: "Its chapters, pages, photos and readings are deleted, with no way back. The pages already read still count this month.",
     deleteBusy: "A page of this notebook is being read. Try again in a moment.",
     deleteFailed: "The notebook could not be deleted. Try again.",
+    level: {
+      label: "Correction level",
+      names: { course: "Course", journal: "Journal", grammar: "Grammar" },
+      current: (name: string) => `${name} (current)`,
+      loadFailed: "The level of this notebook could not be loaded. Try again.",
+      offline: "No connection. Try again.",
+      failed: "The level could not be changed. Try again.",
+      blocked: {
+        not_started:
+          "Journal and Grammar need the app to know your handwriting. You can start in “Your handwriting”, in your account.",
+        parent_pending: "Journal and Grammar need the app to know your handwriting. Your parent's agreement is awaited first.",
+        test_needed: "Journal and Grammar need the app to know your handwriting. Do the writing test in “Your handwriting” first.",
+        training: "The app is still learning your handwriting. Journal and Grammar will open when it is ready.",
+        in_service: "The level could not be changed. Try again.",
+        not_precise: "Your handwriting is not read precisely enough yet for Journal and Grammar.",
+      },
+    },
   },
   chapter: {
     menuLabel: "Chapter options",
@@ -344,6 +361,15 @@ export const en = {
       wrongCode: (attemptsLeft: number | null) =>
         attemptsLeft === null ? "This code is not right." : `This code is not right. ${attemptsLeft} ${attemptsLeft === 1 ? "try" : "tries"} left.`,
     },
+    stageLabel: "Reading your handwriting",
+    stages: {
+      not_started: "Not started.",
+      parent_pending: "Waiting for your parent's agreement.",
+      test_needed: "The writing test is to do.",
+      training: "The app is learning your handwriting.",
+      in_service: "Your pages are read with a model made for your handwriting.",
+      not_precise: "Your model is not precise enough yet.",
+    },
     writing: {
       row: "Writing test",
       title: "Writing test",
@@ -417,7 +443,7 @@ export const en = {
     readme: [
       "Notes Scanner: export of your data",
       "This archive was built on your phone from your account. It holds what the app keeps for you, except the files only the servers use.",
-      "- README.txt: this file.\n- export.json: the date of the export, the version of the format and the counts of notebooks, chapters, pages and photos. A photo that is no longer stored is counted as missing.\n- profile.json: your account identifier, e-mail address, interface language and plan.\n- usage.json: your page allowance and the list of the pages that were charged, with their dates.\n- notebooks.json: your notebooks, your chapters and the lexicon of each notebook (the unusual words found in its pages).\n- pages/<id>/page.json: one page. Its row (status, type, language, dates, notebook and chapter), its raw readings (B1, B2 and A) with the model, its version and the version of the instructions, its words with their positions (a box [left, top, right, bottom] in pixels of the page image), your corrections, the text you added by hand in edit mode, and its alerts. \"images\" says which photo files exist.\n- pages/<id>/text.txt: the text the page shows.\n- pages/<id>/original.jpg and prepared.jpg: the photo you took and the version prepared for reading.",
+      "- README.txt: this file.\n- export.json: the date of the export, the version of the format and the counts of notebooks, chapters, pages and photos. A photo that is no longer stored is counted as missing.\n- profile.json: your account identifier, e-mail address, interface language, plan, year of birth and country.\n- usage.json: your page allowance and the list of the pages that were charged, with their dates.\n- notebooks.json: your notebooks, your chapters and the lexicon of each notebook (the unusual words found in its pages).\n- training.json: your consents to the training on your handwriting, your writing tests (status, line counts and which photos are kept) and the list of your personal models (without their files).\n- writing-tests/<id>/1.jpg and 2.jpg: the two photos of a writing test, while they are kept.\n- pages/<id>/page.json: one page. Its row (status, type, language, dates, notebook and chapter), its raw readings (B1, B2 and A) with the model, its version and the version of the instructions, its words with their positions (a box [left, top, right, bottom] in pixels of the page image), your corrections, the text you added by hand in edit mode, and its alerts. \"images\" says which photo files exist.\n- pages/<id>/text.txt: the text the page shows.\n- pages/<id>/original.jpg and prepared.jpg: the photo you took and the version prepared for reading.",
       "Every file is UTF-8 text, except the photos. The .json files are JSON.",
     ],
   },

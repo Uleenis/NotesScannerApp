@@ -185,8 +185,8 @@ select throws_ok(
 );
 
 select lives_ok(
-  $$insert into public.htr_models (user_id, name, version, status, storage_path)
-    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'personal', 2, 'active', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/2.safetensors')$$,
+  $$insert into public.htr_models (user_id, name, version, status, storage_path, cer)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'personal', 2, 'active', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/2.safetensors', 0.1)$$,
   'the server activates a personal model'
 );
 

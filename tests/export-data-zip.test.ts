@@ -72,6 +72,16 @@ describe("openZip", () => {
     expect(mockState.created).toBe(1);
   });
 
+  test("accepts the training file and the two sheets of a writing test", () => {
+    const sink = openZip(target());
+    sink.addText("training.json", "{}");
+    sink.addBinary(`writing-tests/${PAGE}/1.jpg`, [new Uint8Array([1])]);
+    sink.addBinary(`writing-tests/${PAGE}/2.jpg`, [new Uint8Array([2])]);
+    sink.finish();
+
+    expect(Object.keys(archive()).sort()).toEqual(["training.json", `writing-tests/${PAGE}/1.jpg`, `writing-tests/${PAGE}/2.jpg`]);
+  });
+
   test("counts the bytes it wrote", () => {
     const sink = openZip(target());
     sink.addBinary(`pages/${PAGE}/prepared.jpg`, [new Uint8Array(1000)]);
@@ -90,6 +100,13 @@ describe("openZip", () => {
     ["an unknown file in a page folder", `pages/${PAGE}/run.sh`],
     ["a nested path in a page folder", `pages/${PAGE}/x/page.json`],
     ["an empty name", ""],
+    ["a writing test folder that is not an identifier", "writing-tests/..%2f/1.jpg"],
+    ["an upper case writing test identifier", `writing-tests/${PAGE.toUpperCase()}/1.jpg`],
+    ["a third sheet of a writing test", `writing-tests/${PAGE}/3.jpg`],
+    ["a file of a writing test that is not a photo", `writing-tests/${PAGE}/1.json`],
+    ["a nested path in a writing test folder", `writing-tests/${PAGE}/x/1.jpg`],
+    ["a writing test file outside its folder", "writing-tests/1.jpg"],
+    ["a second training file", "training2.json"],
   ])("refuses %s", (_, name) => {
     const sink = openZip(target());
     expect(() => sink.addText(name, "x")).toThrow();

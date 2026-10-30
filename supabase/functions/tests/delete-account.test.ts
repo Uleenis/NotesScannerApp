@@ -163,3 +163,19 @@ Deno.test("delete-account serves two accounts one after the other without mixing
   assertEquals(world.photos.size + world.alto.size + world.models.size, 0);
   assert(!world.pages.has(OTHER_PAGE_ID));
 });
+
+Deno.test("delete-account erases the writing-test photos and every model of the caller, and no one else's [13]", async () => {
+  const world = twoAccounts();
+  const photo = { bytes: new Uint8Array([1]), mimeType: "image/jpeg", size: 1 };
+  for (const userId of [ALICE, BOB]) {
+    world.photos.set(`${userId}/writing-tests/dddddddd-dddd-4ddd-8ddd-dddddddddddd/1.jpg`, photo);
+    world.photos.set(`${userId}/writing-tests/dddddddd-dddd-4ddd-8ddd-dddddddddddd/2.jpg`, photo);
+    world.models.set(`${userId}/2.safetensors`, new Uint8Array([3]));
+  }
+  const response = await call(world, TOKEN_ALICE);
+  assertEquals(response.status, 200);
+  assertEquals(world.filesOf("photos", ALICE), []);
+  assertEquals(world.filesOf("models", ALICE), []);
+  assertEquals(world.filesOf("photos", BOB).filter((path) => path.includes("/writing-tests/")).length, 2);
+  assertEquals(world.filesOf("models", BOB).length, 2);
+});

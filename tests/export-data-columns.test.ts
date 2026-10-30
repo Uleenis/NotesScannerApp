@@ -16,7 +16,9 @@ test("no exported table is left out of the database test", () => {
   expect(Object.keys(EXPORTED_COLUMNS).sort()).toEqual(
     [
       "chapters",
+      "consents",
       "corrections",
+      "htr_models",
       "lexicon_entries",
       "notebooks",
       "page_alerts",
@@ -28,8 +30,13 @@ test("no exported table is left out of the database test", () => {
       "pages",
       "profiles",
       "readings",
+      "writing_tests",
     ].sort(),
   );
+});
+
+test("the app never reads the file path or the hash of a model", () => {
+  expect(EXPORTED_COLUMNS.htr_models).not.toMatch(/storage_path|sha256/);
 });
 
 test("the app never reads a column that carries an account identifier", () => {

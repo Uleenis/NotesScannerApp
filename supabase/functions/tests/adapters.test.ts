@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { createAccountStore, createAuth, createCallerStore, createLibraryStore, createPageTypeStore, createParentConsentStore, createRenderStore, createRevokeStore, createServerStore, createTransferStore, createWritingTestStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
+import { createAccountStore, createAuth, createCallerStore, createLevelStore, createLibraryStore, createPageTypeStore, createParentConsentStore, createRenderStore, createRevokeStore, createServerStore, createTransferStore, createWritingTestStore, readKeys, StoreError } from "../_shared/supabase-adapters.ts";
 import { ALICE, BOB, PAGE_ID } from "./fakes.ts";
 
 const KEYS = { url: "http://db.test", publishableKey: "publishable-key", secretKey: "secret-key" };
@@ -919,6 +919,22 @@ Deno.test("a withdrawal that fails or answers something else is an error [4]", a
   assertEquals((await thrownBy(() => createRevokeStore(KEYS, stub(() => "yes").fetch).revoke(ALICE))) instanceof StoreError, true);
 });
 
+Deno.test("set_correction_level is called as the service with the owner, the notebook and the level, and its answer is read back [10]", async () => {
+  for (const outcome of ["set", "notebook_not_found", "requires_model"]) {
+    const { fetch, calls } = stub(() => outcome);
+    assertEquals(await createLevelStore(KEYS, fetch).set(ALICE, PAGE_ID, "journal"), outcome);
+    assertEquals(calls[0].url.pathname, "/rest/v1/rpc/set_correction_level");
+    assertEquals(calls[0].body, { p_user_id: ALICE, p_notebook_id: PAGE_ID, p_level: "journal" });
+    assertEquals(calls[0].headers.get("apikey"), "secret-key");
+  }
+});
+
+Deno.test("a change of level that fails or answers something else is an error [10]", async () => {
+  assertEquals((await thrownBy(() => createLevelStore(KEYS, answer(500, { message: "boom" })).set(ALICE, PAGE_ID, "course"))) instanceof StoreError, true);
+  assertEquals((await thrownBy(() => createLevelStore(KEYS, stub(() => "maybe").fetch).set(ALICE, PAGE_ID, "course"))) instanceof StoreError, true);
+  assertEquals((await thrownBy(() => createLevelStore(KEYS, stub(() => true).fetch).set(ALICE, PAGE_ID, "course"))) instanceof StoreError, true);
+});
+
 Deno.test("begin_writing_test is called as the service with the owner and the template, and its answer is read back [5]", async () => {
   const { fetch, calls } = stub(() => [{ outcome: "started", test_id: PAGE_ID, expired: [BOB] }]);
   const result = await createWritingTestStore(KEYS, fetch).begin(ALICE, "fr");
@@ -992,4 +1008,17 @@ Deno.test("the files of one test are the folder of that test in photos and nothi
   );
   await createWritingTestStore(KEYS, storage.fetch).removeTestFiles(ALICE, "t-1");
   assertEquals([...storage.photos.files].sort(), [`${ALICE}/page-1/original.jpg`, `${ALICE}/writing-tests/t-2/1.jpg`]);
+});
+
+Deno.test("erasing the photos of an account reaches the writing-test folders under it, two levels down [13]", async () => {
+  const test = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const storage = storageWith([
+    `${ALICE}/page-1/original.jpg`,
+    `${ALICE}/writing-tests/${test}/1.jpg`,
+    `${ALICE}/writing-tests/${test}/2.jpg`,
+    `${BOB}/writing-tests/${test}/1.jpg`,
+  ]);
+  await createAccountStore(KEYS, storage.fetch).removeFiles("photos", ALICE);
+  assertEquals([...storage.files], [`${BOB}/writing-tests/${test}/1.jpg`]);
+  assertEquals(storage.lists.every((list) => list.prefix === ALICE || list.prefix.startsWith(`${ALICE}/`)), true);
 });

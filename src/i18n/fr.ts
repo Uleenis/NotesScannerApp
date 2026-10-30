@@ -68,6 +68,23 @@ export const fr: Strings = {
     deleteBody: "Ses chapitres, ses pages, leurs photos et leurs lectures sont effacés, sans retour possible. Les pages déjà lues comptent toujours ce mois-ci.",
     deleteBusy: "Une page de ce carnet est en cours de lecture. Réessaie dans un instant.",
     deleteFailed: "Le carnet n'a pas pu être supprimé. Réessaie.",
+    level: {
+      label: "Niveau de correction",
+      names: { course: "Cours", journal: "Journal", grammar: "Grammaire" },
+      current: (name: string) => `${name} (actuel)`,
+      loadFailed: "Le niveau de ce carnet n'a pas pu être chargé. Réessaie.",
+      offline: "Pas de connexion. Réessaie.",
+      failed: "Le niveau n'a pas pu être changé. Réessaie.",
+      blocked: {
+        not_started:
+          "Journal et Grammaire demandent que l'app connaisse ton écriture. Tu peux commencer dans « Ton écriture », dans ton compte.",
+        parent_pending: "Journal et Grammaire demandent que l'app connaisse ton écriture. L'accord de ton parent est attendu d'abord.",
+        test_needed: "Journal et Grammaire demandent que l'app connaisse ton écriture. Fais d'abord le test d'écriture dans « Ton écriture ».",
+        training: "L'app apprend encore ton écriture. Journal et Grammaire s'ouvriront quand elle sera prête.",
+        in_service: "Le niveau n'a pas pu être changé. Réessaie.",
+        not_precise: "Ton écriture n'est pas encore lue assez précisément pour Journal et Grammaire.",
+      },
+    },
   },
   chapter: {
     menuLabel: "Options du chapitre",
@@ -346,6 +363,15 @@ export const fr: Strings = {
       wrongCode: (attemptsLeft: number | null) =>
         attemptsLeft === null ? "Ce code n'est pas bon." : `Ce code n'est pas bon. Il te reste ${attemptsLeft} ${attemptsLeft === 1 ? "essai" : "essais"}.`,
     },
+    stageLabel: "Lecture de ton écriture",
+    stages: {
+      not_started: "Pas commencée.",
+      parent_pending: "L'accord de ton parent est attendu.",
+      test_needed: "Le test d'écriture est à faire.",
+      training: "L'app apprend ton écriture.",
+      in_service: "Tes pages sont lues avec un modèle fait pour ton écriture.",
+      not_precise: "Ton modèle n'est pas encore assez précis.",
+    },
     writing: {
       row: "Test d'écriture",
       title: "Test d'écriture",
@@ -419,7 +445,7 @@ export const fr: Strings = {
     readme: [
       "Notes Scanner : export de tes données",
       "Cette archive a été fabriquée sur ton téléphone à partir de ton compte. Elle contient ce que l'app garde pour toi, sauf les fichiers que seuls les serveurs utilisent.",
-      "- README.txt : ce fichier.\n- export.json : la date de l'export, la version du format et le nombre de carnets, de chapitres, de pages et de photos. Une photo qui n'est plus conservée est comptée comme manquante.\n- profile.json : l'identifiant de ton compte, ton adresse e-mail, la langue de l'interface et ta formule.\n- usage.json : ton décompte de pages et la liste des pages décomptées, avec leurs dates.\n- notebooks.json : tes carnets, tes chapitres et le lexique de chaque carnet (les mots inhabituels trouvés dans ses pages).\n- pages/<id>/page.json : une page. Sa ligne (état, type, langue, dates, carnet et chapitre), ses lectures brutes (B1, B2 et A) avec le modèle, sa version et la version des consignes, ses mots avec leurs positions (une boîte [gauche, haut, droite, bas] en pixels de l'image de la page), tes corrections, le texte ajouté à la main en mode Modifier, et ses alertes. « images » dit quels fichiers de photo existent.\n- pages/<id>/text.txt : le texte que la page affiche.\n- pages/<id>/original.jpg et prepared.jpg : la photo que tu as prise et la version préparée pour la lecture.",
+      "- README.txt : ce fichier.\n- export.json : la date de l'export, la version du format et le nombre de carnets, de chapitres, de pages et de photos. Une photo qui n'est plus conservée est comptée comme manquante.\n- profile.json : l'identifiant de ton compte, ton adresse e-mail, la langue de l'interface, ta formule, ton année de naissance et ton pays.\n- usage.json : ton décompte de pages et la liste des pages décomptées, avec leurs dates.\n- notebooks.json : tes carnets, tes chapitres et le lexique de chaque carnet (les mots inhabituels trouvés dans ses pages).\n- training.json : tes accords à l'entraînement sur ton écriture, tes tests d'écriture (état, nombre de lignes et photos conservées) et la liste de tes modèles personnels (sans leurs fichiers).\n- writing-tests/<id>/1.jpg et 2.jpg : les deux photos d'un test d'écriture, tant qu'elles sont conservées.\n- pages/<id>/page.json : une page. Sa ligne (état, type, langue, dates, carnet et chapitre), ses lectures brutes (B1, B2 et A) avec le modèle, sa version et la version des consignes, ses mots avec leurs positions (une boîte [gauche, haut, droite, bas] en pixels de l'image de la page), tes corrections, le texte ajouté à la main en mode Modifier, et ses alertes. « images » dit quels fichiers de photo existent.\n- pages/<id>/text.txt : le texte que la page affiche.\n- pages/<id>/original.jpg et prepared.jpg : la photo que tu as prise et la version préparée pour la lecture.",
       "Tous les fichiers sont du texte UTF-8, sauf les photos. Les fichiers .json sont du JSON.",
     ],
   },

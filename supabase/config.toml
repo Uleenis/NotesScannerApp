@@ -469,6 +469,9 @@ verify_jwt = true
 [functions.revoke-training]
 verify_jwt = true
 
+[functions.set-correction-level]
+verify_jwt = true
+
 [functions.prepare-writing-test]
 verify_jwt = true
 

@@ -12,7 +12,7 @@ import { PrimaryButton } from "@/components/primary-button";
 import { trainingStyles } from "@/components/training/styles";
 import { useStrings } from "@/i18n";
 import { colors } from "@/theme";
-import { refreshTraining, useTrainingState } from "@/training/queries";
+import { refreshTraining, useTrainingStage, useTrainingState } from "@/training/queries";
 import { trainingService } from "@/training/service";
 
 export default function TrainingScreen() {
@@ -20,6 +20,7 @@ export default function TrainingScreen() {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const training = useTrainingState();
+  const stage = useTrainingStage();
   const [withdrawing, setWithdrawing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const busy = useRef(false);
@@ -86,6 +87,14 @@ export default function TrainingScreen() {
   }
 
   const state = training.data;
+  const stageText = stage.data === undefined || stage.data === "not_started" ? null : t.training.stages[stage.data];
+  const stageLine =
+    stageText === null ? null : (
+      <>
+        <Text style={trainingStyles.note}>{t.training.stageLabel}</Text>
+        <Text style={trainingStyles.body}>{stageText}</Text>
+      </>
+    );
   if (state === undefined) {
     return (
       <>
@@ -103,6 +112,7 @@ export default function TrainingScreen() {
       <ScrollView contentContainerStyle={trainingStyles.content}>
         {state.consent === "none" ? (
           <>
+            {stageLine}
             <Text style={trainingStyles.body}>{t.training.intro}</Text>
             <PrimaryButton
               label={t.training.start}
@@ -117,6 +127,7 @@ export default function TrainingScreen() {
         ) : (
           <>
             <Text style={trainingStyles.body}>{state.consent === "parent" ? t.training.byParent : t.training.byYou}</Text>
+            {stageLine}
             <AccountGroup>
               <AccountRow label={t.training.writing.row} onPress={() => router.push("/training/writing-test")} />
               <AccountRow label={t.training.withdraw} onPress={askToWithdraw} disabled={withdrawing} danger last />

@@ -205,8 +205,8 @@ select set_eq(
     where p.pronamespace = 'public'::regnamespace
       and has_function_privilege('authenticated', p.oid, 'execute')
   $$,
-  $$ values ('my_page_allowance'), ('search_pages'), ('suggest_words') $$,
-  'a user can run only the functions that read their own allowance, search and suggest'
+  $$ values ('my_page_allowance'), ('search_pages'), ('suggest_words'), ('training_stage') $$,
+  'a user can run only the functions that read their own allowance, search, suggest and the stage of the training'
 );
 
 select is_empty(

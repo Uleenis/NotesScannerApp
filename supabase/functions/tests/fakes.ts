@@ -9,6 +9,9 @@ import type {
   PrepareWritingTestDeps,
   RevokeStore,
   RevokeTrainingDeps,
+  CorrectionLevel,
+  LevelStore,
+  SetCorrectionLevelDeps,
   Allowance,
   Auth,
   Bucket,
@@ -161,6 +164,9 @@ export class World {
   beforeRevoke: (() => void) | null = null;
   activeConsents = new Set<string>();
   revoked: string[] = [];
+  levels = new Map<string, CorrectionLevel>();
+  inService = new Set<string>();
+  levelWrites: { userId: string; notebookId: string; level: CorrectionLevel }[] = [];
   beforeLibraryCall: (() => void) | null = null;
   photos = new Map<string, FakePhoto>();
   alto = new Map<string, Uint8Array>();
@@ -584,6 +590,20 @@ export class World {
     };
   }
 
+  levelStore(): LevelStore {
+    return {
+      set: async (userId, notebookId, level) => {
+        await this.tick("setCorrectionLevel");
+        const notebook = this.notebooks.get(notebookId);
+        if (!notebook || notebook.userId !== userId) return "notebook_not_found";
+        if (level !== "course" && !this.inService.has(userId)) return "requires_model";
+        this.levelWrites.push({ userId, notebookId, level });
+        this.levels.set(notebookId, level);
+        return "set";
+      },
+    };
+  }
+
   transfers(): TransferStore {
     return {
       hasProcessingPage: async (userId) => {
@@ -974,6 +994,10 @@ export class World {
       accounts: this.accounts(),
       log: this.logger(),
     };
+  }
+
+  levelDeps(): SetCorrectionLevelDeps {
+    return { auth: this.authPort(), levels: this.levelStore(), log: this.logger() };
   }
 
   revokeDeps(): RevokeTrainingDeps {

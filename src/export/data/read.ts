@@ -24,7 +24,22 @@ const OWN_TABLES = {
   chapters: { columns: "id, notebook_id, name, position", order: ["id"], owner: "user_id" },
   lexicon_entries: { columns: "notebook_id, form_key, form, occurrences, confirmed", order: ["notebook_id", "form_key"], owner: "user_id" },
   page_charges: { columns: "id, page_id, charged_at", order: ["id"], owner: "user_id" },
-  profiles: { columns: "id, interface_language, tier", order: ["id"], owner: "id" },
+  profiles: { columns: "id, interface_language, tier, birth_year, country", order: ["id"], owner: "id" },
+  consents: {
+    columns: "id, kind, version, granted_by, parent_email, granted_at, revoked_at",
+    order: ["granted_at", "id"],
+    owner: "user_id",
+  },
+  writing_tests: {
+    columns: "id, template, status, training_lines, validation_lines, redo, created_at, checked_at",
+    order: ["created_at", "id"],
+    owner: "user_id",
+  },
+  htr_models: {
+    columns: "id, name, version, status, cer, alphabet_size, sample_count, faults_correct, created_at",
+    order: ["version", "id"],
+    owner: "user_id",
+  },
   pages: {
     columns:
       "id, notebook_id, chapter_id, position, source, status, queue_reason, retry_count, captured_at, uploaded_at, read_at, page_type, language",

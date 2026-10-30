@@ -6,7 +6,7 @@ import { defaultAuthServices } from "@/auth/default-services";
 import type { Allowance } from "@/capture/allowance";
 import { captureService } from "@/capture/service";
 import { strings } from "@/i18n";
-import type { ConsentFailure, ParentConfirmDone, ParentRequestFailure, TrainingState } from "@/training/api";
+import type { ConsentFailure, ParentConfirmDone, ParentRequestFailure, TrainingStage, TrainingState } from "@/training/api";
 import { trainingService } from "@/training/service";
 import { installFakeAccount } from "./fake-account-service";
 import { histoire, installFakeNotebooks } from "./fake-notebook-service";
@@ -32,7 +32,7 @@ jest.mock("@/pages/service", () => ({
   pageService: { list: jest.fn(async () => []), count: jest.fn(), get: jest.fn(), photoUrl: jest.fn(), startReading: jest.fn(), setPageType: jest.fn(), words: jest.fn(), correct: jest.fn(), edit: jest.fn(), alerts: jest.fn(async () => []), second: jest.fn(async () => null) },
 }));
 jest.mock("@/training/service", () => ({
-  trainingService: { state: jest.fn(), saveAge: jest.fn(), grantConsent: jest.fn(), requestParent: jest.fn(), confirmParent: jest.fn(), revoke: jest.fn() },
+  trainingService: { state: jest.fn(), stage: jest.fn(), saveAge: jest.fn(), grantConsent: jest.fn(), requestParent: jest.fn(), confirmParent: jest.fn(), revoke: jest.fn() },
 }));
 
 const fr = strings.fr;
@@ -41,6 +41,7 @@ const en = strings.en;
 const registeredAllowance: Allowance = { isAnonymous: false, used: 9, max: 15, remaining: 6, resetsAt: null, blockedReason: null };
 
 let state: TrainingState;
+let stage: TrainingStage;
 let alert: jest.SpyInstance;
 
 function signedInAs(kind: "registered" | "anonymous") {
@@ -55,6 +56,7 @@ function signedInAs(kind: "registered" | "anonymous") {
 
 beforeEach(() => {
   state = { birthYear: null, consent: "none" };
+  stage = "not_started";
   jest.mocked(useLocales).mockReturnValue([{ ...phoneLocale("fr"), regionCode: "FR" }]);
   jest.mocked(defaultAuthServices.syncLanguage).mockResolvedValue(true);
   jest.mocked(captureService.allowance).mockReset().mockResolvedValue(registeredAllowance);
@@ -64,6 +66,7 @@ beforeEach(() => {
   signedInAs("registered");
   const service = jest.mocked(trainingService);
   service.state.mockReset().mockImplementation(async () => ({ ...state }));
+  service.stage.mockReset().mockImplementation(async () => stage);
   service.saveAge.mockReset().mockImplementation(async (_user, year) => {
     state = { ...state, birthYear: year };
     return { ok: true };
@@ -164,6 +167,57 @@ describe("the state of the training", () => {
     jest.mocked(useLocales).mockReturnValue([phoneLocale("en")]);
     await open("/training");
     expect(await screen.findByText(en.training.intro)).toBeTruthy();
+  });
+
+  test.each([
+    ["parent_pending", { birthYear: 2012, consent: "none" }],
+    ["test_needed", { birthYear: 1990, consent: "user" }],
+    ["training", { birthYear: 1990, consent: "user" }],
+    ["in_service", { birthYear: 1990, consent: "user" }],
+    ["not_precise", { birthYear: 1990, consent: "user" }],
+  ] as const)("says the stage of the reading of the handwriting: %s [10]", async (reached, given) => {
+    state = { ...given };
+    stage = reached;
+    await open("/training");
+    expect(await screen.findByText(fr.training.stageLabel)).toBeTruthy();
+    expect(await screen.findByText(fr.training.stages[reached])).toBeTruthy();
+  });
+
+  test("says the stage in English on an English phone [14]", async () => {
+    jest.mocked(useLocales).mockReturnValue([phoneLocale("en")]);
+    state = { birthYear: 1990, consent: "user" };
+    stage = "in_service";
+    await open("/training");
+    expect(await screen.findByText(en.training.stageLabel)).toBeTruthy();
+    expect(await screen.findByText(en.training.stages.in_service)).toBeTruthy();
+  });
+
+  test("says nothing of the stage before the training is started", async () => {
+    await open("/training");
+    expect(await screen.findByText(fr.training.intro)).toBeTruthy();
+    expect(screen.queryByText(fr.training.stageLabel)).toBeNull();
+  });
+
+  test("does not hold the screen back when the stage cannot be loaded", async () => {
+    state = { birthYear: 1990, consent: "user" };
+    jest.mocked(trainingService.stage).mockRejectedValue(new Error("lost"));
+    await open("/training");
+    expect(await screen.findByText(fr.training.byYou)).toBeTruthy();
+    expect(screen.queryByText(fr.training.stageLabel)).toBeNull();
+  });
+
+  test("reads the stage again after the withdrawal [4]", async () => {
+    state = { birthYear: 1990, consent: "user" };
+    stage = "in_service";
+    await open("/training");
+    await screen.findByText(fr.training.stages.in_service);
+    stage = "not_started";
+    await fireEvent.press(screen.getByText(fr.training.withdraw));
+    const confirm = (alert.mock.calls[alert.mock.calls.length - 1][2] as AlertButton[]).find((button) => button.style === "destructive");
+    await act(async () => {
+      confirm?.onPress?.();
+    });
+    await waitFor(() => expect(screen.queryByText(fr.training.stages.in_service)).toBeNull());
   });
 
   test("asks a registered account only: an anonymous one is sent to create an account", async () => {
