@@ -28,6 +28,14 @@ Paths below are from the repository root.
 | 6 | `t6/import` (multiple selection, review, bounds, unreadable files) | 3, 9, 10 on the screen, 11, 19 | sensitive (hostile input, users' files) | Sonnet 5.5, High | code and security, Sonnet | |
 | 7 | `t6/lighting` (only if measure 15 keeps it) | 15 | ordinary | Sonnet 5.5, High | code, Sonnet | |
 
+## Carried from branch 1 to branches 5 and 6
+
+- Sweep `cache/scans/` (Android) and `tmp/scans/` (iOS) at the start of the app, like the `export-` folders: a page scanned before the app is killed stays there otherwise.
+- `failed` from `scanPages` can also mean that ML Kit's module could not be fetched (Google Play services present, the scanner not downloaded): decide whether the capture screen then offers the import alone, like `unavailable`.
+- The scanner promise is lost if Android kills the app while the scanner is open: the capture screen must not wait on it forever.
+- iOS: VisionKit has no page limit, and the module keeps the first pages up to the limit, dropping the others without a word. Decide before the pre-beta (an error, or a message).
+- Not seen yet on the phone: that the scanner's result reaches the module (`OnActivityResult`), and that ML Kit's copies are erased. Measure 12 shows the first.
+
 ## Still open from slice 5
 
 - The owner's: the two photos of measure 17, the phone checks of criterion 20 (`../Tranche 5/Vérifications.md`), and questions 1 to 3 of `../Pour Tim.md`.

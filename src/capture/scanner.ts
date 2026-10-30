@@ -8,7 +8,7 @@ export const MEASURE_PAGE_MAX = 30;
 
 export type ScanResult = { status: "scanned"; uris: string[] } | { status: "cancelled" } | { status: "unavailable" } | { status: "failed" };
 
-const FILE_PREFIX = "file:///";
+const SCAN_FILE = /^file:\/\/\/(?:[^/]+\/)+scans\/[A-Za-z0-9-]+\.jpg$/;
 
 export function scanLimit(remaining: number): number {
   if (Number.isNaN(remaining) || remaining <= 0) {
@@ -18,7 +18,7 @@ export function scanLimit(remaining: number): number {
 }
 
 function isFileUri(value: unknown): value is string {
-  return typeof value === "string" && value.length > FILE_PREFIX.length && value.startsWith(FILE_PREFIX);
+  return typeof value === "string" && SCAN_FILE.test(value);
 }
 
 function discard(uri: string) {

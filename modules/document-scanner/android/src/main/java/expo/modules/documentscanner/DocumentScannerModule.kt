@@ -97,6 +97,16 @@ class DocumentScannerModule : Module() {
     } catch (error: Exception) {
       kept.forEach { it.delete() }
       promise.reject("ERR_SCAN_KEEP", "The pages could not be kept", error)
+    } finally {
+      pages.forEach { eraseOwnCopy(it, context.cacheDir, context.filesDir) }
+    }
+  }
+
+  private fun eraseOwnCopy(page: Uri, vararg roots: File) {
+    val path = if (page.scheme == "file") page.path else null
+    val file = path?.let { File(it).canonicalFile } ?: return
+    if (roots.any { file.path.startsWith(it.canonicalPath + File.separator) }) {
+      file.delete()
     }
   }
 }

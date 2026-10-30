@@ -118,14 +118,25 @@ describe("scanPages", () => {
     ["a web address", ["file:///cache/scans/a.jpg", "https://example.com/a.jpg"]],
     ["a content address", ["content://media/external/images/1"]],
     ["an empty name", [""]],
-  ])("refuses an answer that is %s and erases the files it named", async (_label, scanned) => {
+    ["a file outside the scans folder", ["file:///cache/scans/a.jpg", "file:///data/app/databases/x.jpg"]],
+    ["a file with a path in its name", ["file:///cache/scans/../databases/x.jpg"]],
+    ["a file that is not a JPEG", ["file:///cache/scans/a.db"]],
+  ])("refuses an answer that is %s and erases only the scanned files it named", async (_label, scanned) => {
     mockNative.current = native(scanned);
 
     await expect(scanPages({ limit: 5 })).resolves.toEqual({ status: "failed" });
     const named = (Array.isArray(scanned) ? scanned : [scanned]).filter(
-      (item): item is string => typeof item === "string" && item.startsWith("file:///"),
+      (item): item is string => typeof item === "string" && /^file:\/\/\/cache\/scans\/[a-z]\.jpg$/.test(item),
     );
     expect(mockDeleted).toEqual(named);
+  });
+
+  it("accepts the names both native scanners give", async () => {
+    const android = "file:///data/user/0/com.uleenis.notesscanner/cache/scans/0f8e2c1a-5b7d-4c1e-9a3f-2d6b8e4c7a10.jpg";
+    const ios = "file:///private/var/mobile/Containers/Data/Application/A1B2C3D4-0000-1111-2222-333344445555/tmp/scans/7C9E6679-7425-40DE-944B-E07FC1F90AE7.jpg";
+    mockNative.current = native([android, ios]);
+
+    await expect(scanPages({ limit: 2 })).resolves.toEqual({ status: "scanned", uris: [android, ios] });
   });
 });
 

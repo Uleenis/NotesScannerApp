@@ -14,17 +14,19 @@ type Notice = "unavailable" | "failed" | "shareFailed";
 function Measure() {
   const t = useStrings();
   const scanned = useRef<string[]>([]);
+  const mounted = useRef(true);
   const [count, setCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       scanned.current.forEach(measureDeps.discard);
       scanned.current = [];
-    },
-    [],
-  );
+    };
+  }, []);
 
   function forget() {
     scanned.current.forEach(measureDeps.discard);
@@ -37,6 +39,12 @@ function Measure() {
     setNotice(null);
     forget();
     const result = await scanForMeasure();
+    if (!mounted.current) {
+      if (result.status === "scanned") {
+        result.uris.forEach(measureDeps.discard);
+      }
+      return;
+    }
     if (result.status === "scanned") {
       scanned.current = result.uris;
       setCount(result.uris.length);
@@ -52,7 +60,11 @@ function Measure() {
     setCount(0);
     setBusy(true);
     setNotice(null);
-    if (!(await shareMeasure(uris, measureDeps))) {
+    const shared = await shareMeasure(uris, measureDeps);
+    if (!mounted.current) {
+      return;
+    }
+    if (!shared) {
       setNotice("shareFailed");
     }
     setBusy(false);
