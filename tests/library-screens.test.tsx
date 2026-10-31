@@ -5,13 +5,13 @@ import { ActionSheetIOS, Alert, StyleSheet, type AlertButton } from "react-nativ
 
 import { defaultAuthServices } from "@/auth/default-services";
 import type { Allowance } from "@/capture/allowance";
+import { scanPages } from "@/capture/scanner";
 import { captureService } from "@/capture/service";
 import { strings } from "@/i18n";
 import { notebookService } from "@/notebooks/service";
 import { pageService } from "@/pages/service";
 import { closeMenu } from "@/lib/action-menu";
 import { colors } from "@/theme";
-import { granted, installPermission } from "./fake-camera";
 import { installFakeLibrary } from "./fake-library";
 import { localMoment, page } from "./fake-page-service";
 import { phoneLocale } from "./phone-locale";
@@ -19,7 +19,10 @@ import { phoneLocale } from "./phone-locale";
 jest.setTimeout(30_000);
 
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
-jest.mock("expo-camera", () => require("./fake-camera").cameraModule);
+jest.mock("@/capture/scanner", () => ({
+  ...jest.requireActual<typeof import("@/capture/scanner")>("@/capture/scanner"),
+  scanPages: jest.fn(),
+}));
 jest.mock("expo-network", () => ({ useNetworkState: jest.fn(() => ({ isConnected: true, isInternetReachable: true })) }));
 jest.mock("@/pages/timing", () => require("./fake-page-service").timing);
 jest.mock("@/auth/default-services", () => ({
@@ -37,7 +40,14 @@ jest.mock("@/lib/query-client", () => {
 jest.mock("@/notebooks/service", () => ({ notebookService: require("./library-mocks").NOTEBOOK_SERVICE_MOCK }));
 jest.mock("@/pages/service", () => ({ pageService: require("./library-mocks").PAGE_SERVICE_MOCK }));
 jest.mock("@/capture/service", () => ({
-  captureService: { allowance: jest.fn(), latestNotebookId: jest.fn(), send: jest.fn(), preparePhoto: jest.fn(), discardPhoto: jest.fn() },
+  captureService: {
+    allowance: jest.fn(),
+    latestNotebookId: jest.fn(),
+    send: jest.fn(),
+    prepareScan: jest.fn(),
+    discardPhoto: jest.fn(),
+    checkSharpness: jest.fn(),
+  },
 }));
 
 const fr = strings.fr;
@@ -78,9 +88,10 @@ beforeEach(() => {
   jest.mocked(captureService.allowance).mockReset().mockResolvedValue(open);
   jest.mocked(captureService.latestNotebookId).mockReset().mockResolvedValue(histoire.id);
   jest.mocked(captureService.send).mockReset().mockResolvedValue({ status: "sent", pageId: "page-9" });
-  jest.mocked(captureService.preparePhoto).mockReset().mockResolvedValue("file:///cache/prepared-0.jpg");
+  jest.mocked(captureService.prepareScan).mockReset().mockResolvedValue("file:///cache/prepared-0.jpg");
+  jest.mocked(captureService.checkSharpness).mockReset().mockResolvedValue("sharp");
+  jest.mocked(scanPages).mockReset().mockResolvedValue({ status: "scanned", uris: ["file:///cache/scans/s1.jpg"] });
   jest.mocked(captureService.discardPhoto).mockReset();
-  installPermission(granted);
   install();
   sheet = jest.spyOn(ActionSheetIOS, "showActionSheetWithOptions").mockImplementation(() => undefined);
   alert = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
@@ -340,15 +351,11 @@ describe("the screen of a chapter", () => {
     await waitFor(() => expect(pathname()).toBe("/"));
   });
 
-  test("Scan opens the camera in this notebook and this chapter, and the page is filed in the chapter [11]", async () => {
+  test("Scan opens the scanner for this notebook and this chapter, and the page is filed in the chapter [11]", async () => {
     const pathname = await openApp(`/chapter/${moyenAge.id}`);
     await screen.findByText("Les Capétiens");
 
     await fireEvent.press(await screen.findByText(fr.common.scan));
-    await waitFor(() => expect(pathname()).toBe("/capture"));
-    await fireEvent.press(await screen.findByLabelText(fr.capture.shutterLabel));
-    await fireEvent.press(await screen.findByText(fr.capture.read));
-
     await waitFor(() => expect(captureService.send).toHaveBeenCalled());
     expect(jest.mocked(captureService.send).mock.calls[0][0]).toEqual({
       notebookId: histoire.id,
@@ -363,10 +370,6 @@ describe("the screen of a chapter", () => {
     await screen.findByText(moyenAge.name);
 
     await fireEvent.press(await screen.findByText(fr.common.scan));
-    await waitFor(() => expect(pathname()).toBe("/capture"));
-    await fireEvent.press(await screen.findByLabelText(fr.capture.shutterLabel));
-    await fireEvent.press(await screen.findByText(fr.capture.read));
-
     await waitFor(() => expect(captureService.send).toHaveBeenCalled());
     expect(jest.mocked(captureService.send).mock.calls[0][0]).toEqual({
       notebookId: histoire.id,
@@ -614,9 +617,6 @@ describe("the menu of a page", () => {
     const pathname = await openApp("/page/p2");
     await fireEvent.press(await screen.findByText(fr.reading.scanNext));
 
-    await waitFor(() => expect(pathname()).toBe("/capture"));
-    await fireEvent.press(await screen.findByLabelText(fr.capture.shutterLabel));
-    await fireEvent.press(await screen.findByText(fr.capture.read));
     await waitFor(() => expect(captureService.send).toHaveBeenCalled());
     expect(jest.mocked(captureService.send).mock.calls[0][0]).toEqual(expect.objectContaining({ notebookId: histoire.id, chapterId: moyenAge.id }));
   });

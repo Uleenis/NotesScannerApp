@@ -8,7 +8,6 @@ import { strings } from "@/i18n";
 import type { CreateNotebookResult } from "@/notebooks/notebooks";
 import { notebookService } from "@/notebooks/service";
 import { deferred } from "./fake-auth-client";
-import { granted, installPermission } from "./fake-camera";
 import { histoire, installFakeNotebooks, sciences } from "./fake-notebook-service";
 import { newNotebookOptions } from "@/navigation-options";
 import { phoneLocale } from "./phone-locale";
@@ -29,13 +28,15 @@ jest.mock("@/lib/query-client", () => {
 jest.mock("@/notebooks/service", () => ({
   notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn(), chapters: jest.fn(async () => []) },
 }));
-jest.mock("expo-camera", () => require("./fake-camera").cameraModule);
 jest.mock("expo-network", () => ({ useNetworkState: jest.fn(() => ({ isConnected: true, isInternetReachable: true })) }));
 jest.mock("@/capture/service", () => ({
   captureService: {
     allowance: jest.fn(async () => null),
     latestNotebookId: jest.fn(async () => null),
     send: jest.fn(),
+    discardPhoto: jest.fn(),
+    prepareScan: jest.fn(),
+    checkSharpness: jest.fn(),
   },
 }));
 
@@ -48,7 +49,6 @@ beforeEach(() => {
   jest.mocked(notebookService.list).mockReset();
   jest.mocked(notebookService.get).mockReset();
   jest.mocked(notebookService.create).mockReset();
-  installPermission(granted);
 });
 
 async function openApp(initialUrl = "/"): Promise<() => string> {
