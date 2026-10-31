@@ -3,6 +3,7 @@ import { encode } from "jpeg-js";
 import { shrinkTarget } from "@/capture/photo";
 import { captureService } from "@/capture/service";
 import { getSupabase } from "@/lib/supabase";
+import { syntheticPage } from "./fixtures/synthetic-page";
 
 const mockFiles: { uri: string; deleted: boolean; bytes: Uint8Array; deleteFails: boolean }[] = [];
 let mockDeleteFails = false;
@@ -253,6 +254,21 @@ test("the sharpness of a large photo is judged on a copy reduced to 1000 px, whi
   expect(new Set(mockFiles.map((file) => file.uri))).toEqual(new Set(["file:///cache/shrunk.jpg"]));
   expect(mockFiles.some((file) => file.deleted)).toBe(true);
   expect(mockImaging.images.map((image) => image.released)).toEqual([true, true]);
+});
+
+function jpegOfPage(page: { data: Uint8Array; width: number; height: number }): Uint8Array {
+  const data = new Uint8Array(page.width * page.height * 4);
+  page.data.forEach((value, index) => {
+    data.set([value, value, value, 255], index * 4);
+  });
+  return new Uint8Array(encode({ data, width: page.width, height: page.height }, 100).data);
+}
+
+test("a sharp page goes through the whole check and is judged sharp", async () => {
+  mockImaging.sizes = [{ width: 3000, height: 4000 }];
+  mockBytes = jpegOfPage(syntheticPage(1));
+
+  expect(await captureService.checkSharpness("file:///cache/a.jpg")).toBe("sharp");
 });
 
 test("a photo within 1000 px is judged as it is, and its own file is never erased", async () => {

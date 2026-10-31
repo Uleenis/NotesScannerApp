@@ -36,6 +36,8 @@ Paths below are from the repository root.
 - iOS: VisionKit has no page limit, and the module keeps the first pages up to the limit, dropping the others without a word. Decide before the pre-beta (an error, or a message).
 - Not seen yet on the phone: that the scanner's result reaches the module (`OnActivityResult`), and that ML Kit's copies are erased. Measure 12 shows the first.
 
+- Branch 6 (import): bound the pixel count of an imported file (the header of its JPEG, `src/pages/photo-pixels.ts`) before `checkSharpness`, which renders the full image first. Criterion 18 on the phone also tries a blank page or a covered lens: a near-blank page with sensor noise may pass as sharp, which is harmless (the check only warns).
+
 ## Still open from slice 5
 
 - The owner's: question 1 of `../Pour Tim.md`.

@@ -5,8 +5,8 @@ import { getSupabase } from "@/lib/supabase";
 import type { Allowance } from "./allowance";
 import { callPrepare, callRead, fetchAllowance, fetchLatestNotebookId, insertPage, markUploaded, uploadPhotoFile } from "./api";
 import { PHOTO_QUALITY, preparePhoto, shrinkTarget, type Picture } from "./photo";
+import { sendPage, type SendDeps, type SendInput, type SendResult } from "./send-page";
 import { checkSharpness, decodeJpegGray, sharpnessSize, type Gray, type SharpnessCheck } from "./sharpness";
-import { sendPage,type SendDeps, type SendInput, type SendResult } from "./send-page";
 
 const SEND_TIMEOUT_MS = 120_000;
 
