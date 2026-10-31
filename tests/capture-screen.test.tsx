@@ -6,6 +6,7 @@ import { Alert } from "react-native";
 
 import { defaultAuthServices } from "@/auth/default-services";
 import type { Allowance } from "@/capture/allowance";
+import { pickImages, type PickResult } from "@/capture/importer";
 import { scanPages, type ScanResult } from "@/capture/scanner";
 import type { SendResult } from "@/capture/send-page";
 import { captureService } from "@/capture/service";
@@ -40,12 +41,17 @@ jest.mock("@/capture/scanner", () => ({
   ...jest.requireActual<typeof import("@/capture/scanner")>("@/capture/scanner"),
   scanPages: jest.fn(),
 }));
+jest.mock("@/capture/importer", () => ({
+  ...jest.requireActual<typeof import("@/capture/importer")>("@/capture/importer"),
+  pickImages: jest.fn(),
+}));
 jest.mock("@/capture/service", () => ({
   captureService: {
     allowance: jest.fn(),
     latestNotebookId: jest.fn(),
     send: jest.fn(),
     prepareScan: jest.fn(),
+    prepareImport: jest.fn(),
     discardPhoto: jest.fn(),
     checkSharpness: jest.fn(),
   },
@@ -74,6 +80,18 @@ function scanned(count: number, first = 1): ScanResult {
   return { status: "scanned", uris: Array.from({ length: count }, (_, index) => `file:///cache/scans/s${first + index}.jpg`) };
 }
 
+function picked(count: number, first = 1, rejected = 0): PickResult {
+  return { status: "picked", uris: Array.from({ length: count }, (_, index) => original(first + index)), rejected };
+}
+
+function original(position: number): string {
+  return `file:///cache/ImagePicker/i${position}.jpg`;
+}
+
+function turned(position: number, quarters: number): string {
+  return `file:///cache/ready/r${position}-t${quarters}.jpg`;
+}
+
 function ready(position: number): string {
   return `file:///cache/ready/r${position}.jpg`;
 }
@@ -91,6 +109,8 @@ beforeEach(() => {
   jest.mocked(captureService.latestNotebookId).mockReset().mockResolvedValue(histoire.id);
   jest.mocked(captureService.send).mockReset().mockImplementation(async (input) => ({ status: "sent", pageId: `page-${input.photoUri.replace(/\D/g, "")}` }));
   jest.mocked(captureService.prepareScan).mockReset().mockImplementation(async (uri) => uri.replace("scans/s", "ready/r"));
+  jest.mocked(captureService.prepareImport).mockReset().mockImplementation(async (uri, quarters) => uri.replace("ImagePicker/i", "ready/r").replace(".jpg", quarters === 0 ? ".jpg" : `-t${quarters}.jpg`));
+  jest.mocked(pickImages).mockReset().mockResolvedValue({ status: "cancelled" });
   jest.mocked(captureService.discardPhoto).mockReset();
   Object.keys(sharpness).forEach((key) => delete sharpness[key]);
   jest.mocked(captureService.checkSharpness).mockReset().mockImplementation(async (uri) => sharpness[uri] ?? "sharp");
@@ -918,4 +938,391 @@ test("the capture texts come from the English file on an English phone", async (
   expect(await screen.findByText(en.capture.blurryTitle(1))).toBeTruthy();
   expect(screen.getByText(en.capture.sendAnyway)).toBeTruthy();
   expect(screen.getByText(en.capture.blurryPage(1))).toBeTruthy();
+});
+
+describe("import from the gallery [9][10][19]", () => {
+  async function openIdle(): Promise<() => string> {
+    const pathname = await openApp("/");
+    await screen.findByText(histoire.name);
+    await loaded();
+    await fireEvent.press(await screen.findByText(fr.common.scan));
+    await settle();
+    return pathname;
+  }
+
+  async function pressImport(): Promise<void> {
+    await fireEvent.press(await screen.findByText(fr.capture.import));
+    await settle();
+  }
+
+  async function press(label: string): Promise<void> {
+    await fireEvent.press(await screen.findByText(label));
+    await settle();
+  }
+
+  function sources(): unknown[] {
+    return jest.mocked(captureService.send).mock.calls.map(([input]) => input.source);
+  }
+
+  test("the idle screen offers the import beside the scan, and the import opens the picker for the smaller of the pages left and 20 [9]", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue({ ...open, remaining: 400 });
+    await openIdle();
+    expect(screen.getByText(fr.common.scan)).toBeTruthy();
+
+    await pressImport();
+
+    expect(pickImages).toHaveBeenCalledWith({ limit: 20 });
+  });
+
+  test.each([
+    [13, 13],
+    [2, 2],
+  ])("with %i pages left the picker is asked for %i", async (remaining, limit) => {
+    jest.mocked(captureService.allowance).mockResolvedValue({ ...open, remaining });
+    await openIdle();
+    await pressImport();
+
+    expect(pickImages).toHaveBeenCalledWith({ limit });
+  });
+
+  test("a scanner that is not there leaves only the import, and the import works [10]", async () => {
+    jest.mocked(scanPages).mockResolvedValue({ status: "unavailable" });
+    jest.mocked(pickImages).mockResolvedValue(picked(1));
+    await openIdle();
+
+    expect(await screen.findByText(fr.capture.scannerUnavailable)).toBeTruthy();
+    expect(screen.queryByText(fr.common.scan)).toBeNull();
+
+    await pressImport();
+    await press(fr.capture.keep);
+
+    expect(sent()).toEqual([ready(1)]);
+    expect(sources()).toEqual(["import"]);
+  });
+
+  test("once the scanner is known to be missing, no later screen brings the scan button back", async () => {
+    jest.mocked(scanPages).mockResolvedValue({ status: "unavailable" });
+    await openIdle();
+    await pressImport();
+
+    expect(screen.getByText(fr.capture.scannerUnavailable)).toBeTruthy();
+    expect(screen.queryByText(fr.common.scan)).toBeNull();
+
+    jest.mocked(pickImages).mockResolvedValueOnce({ status: "failed" });
+    await pressImport();
+
+    expect(await screen.findByText(fr.capture.importFailed)).toBeTruthy();
+    expect(screen.getByText(fr.capture.scannerUnavailable)).toBeTruthy();
+    expect(screen.queryByText(fr.common.scan)).toBeNull();
+
+    jest.mocked(pickImages).mockResolvedValueOnce(picked(1));
+    await pressImport();
+    await press(fr.capture.remove);
+
+    expect(screen.getByText(fr.capture.scannerUnavailable)).toBeTruthy();
+    expect(screen.queryByText(fr.common.scan)).toBeNull();
+  });
+
+  test("a replacement with no usable file says so on the sheet and keeps the page", async () => {
+    sharpness[ready(1)] = "blurry";
+    jest.mocked(pickImages).mockResolvedValueOnce(picked(1));
+    await openIdle();
+    await pressImport();
+    await press(fr.capture.keep);
+
+    jest.mocked(pickImages).mockResolvedValue(picked(0, 1, 1));
+    await fireEvent.press(await screen.findByLabelText(fr.capture.blurryPageLabel(1)));
+    await settle();
+
+    expect(await screen.findByText(fr.capture.importFailed)).toBeTruthy();
+    expect(screen.getByText(fr.capture.blurryTitle(1))).toBeTruthy();
+    expect(discarded()).not.toContain(ready(1));
+
+    jest.mocked(pickImages).mockResolvedValue({ status: "failed" });
+    await fireEvent.press(await screen.findByLabelText(fr.capture.blurryPageLabel(1)));
+    await settle();
+
+    expect(await screen.findByText(fr.capture.importFailed)).toBeTruthy();
+  });
+
+  test("a scanner that fails leaves the scan again and the import", async () => {
+    jest.mocked(scanPages).mockResolvedValue({ status: "failed" });
+    await openIdle();
+
+    expect(await screen.findByText(fr.capture.scannerFailed)).toBeTruthy();
+    expect(screen.getByText(fr.common.scan)).toBeTruthy();
+    expect(screen.getByText(fr.capture.import)).toBeTruthy();
+  });
+
+  test("a picker closed without a photo creates nothing and keeps the screen", async () => {
+    const pathname = await openIdle();
+    await pressImport();
+
+    expect(pathname()).toBe("/capture");
+    expect(screen.getByText(fr.capture.import)).toBeTruthy();
+    expect(captureService.send).not.toHaveBeenCalled();
+    expect(captureService.prepareImport).not.toHaveBeenCalled();
+  });
+
+  test("a picker that fails is said and can be tried again", async () => {
+    jest.mocked(pickImages).mockResolvedValueOnce({ status: "failed" });
+    await openIdle();
+    await pressImport();
+
+    expect(await screen.findByText(fr.capture.importFailed)).toBeTruthy();
+
+    jest.mocked(pickImages).mockResolvedValue(picked(1));
+    await pressImport();
+
+    expect(await screen.findByText(fr.capture.reviewPage(1, 1))).toBeTruthy();
+  });
+
+  test("each image is shown one by one, Page 2 of 5 style, and nothing is sent before the last is kept [9]", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(3));
+    await openIdle();
+    await pressImport();
+
+    expect(await screen.findByText(fr.capture.reviewPage(1, 3))).toBeTruthy();
+    expect(screen.getByTestId("photo-review").props.source.uri).toBe(ready(1));
+    expect(captureService.prepareImport).toHaveBeenCalledWith(original(1), 0);
+    expect(captureService.prepareImport).not.toHaveBeenCalledWith(original(2), 0);
+
+    await press(fr.capture.keep);
+    expect(await screen.findByText(fr.capture.reviewPage(2, 3))).toBeTruthy();
+    expect(captureService.send).not.toHaveBeenCalled();
+
+    await press(fr.capture.keep);
+    expect(await screen.findByText(fr.capture.reviewPage(3, 3))).toBeTruthy();
+    expect(captureService.send).not.toHaveBeenCalled();
+  });
+
+  test("the kept images are reduced, checked for sharpness, then sent in order with the import source, and the notebook opens [9][4]", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(2));
+    const pathname = await openIdle();
+    await pressImport();
+    await press(fr.capture.keep);
+    await press(fr.capture.keep);
+
+    expect(captureService.prepareScan).not.toHaveBeenCalled();
+    expect(jest.mocked(captureService.checkSharpness).mock.calls.map(([uri]) => uri)).toEqual([ready(1), ready(2)]);
+    expect(sent()).toEqual([ready(1), ready(2)]);
+    expect(sources()).toEqual(["import", "import"]);
+    expect(pathname()).toBe("/notebook/" + histoire.id);
+    expect(discarded()).toEqual(expect.arrayContaining([original(1), original(2), ready(1), ready(2)]));
+  });
+
+  test("a sideways photo is turned a quarter at a time with Rotate, and the turned one is what is sent [19]", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(2));
+    await openIdle();
+    await pressImport();
+    await press(fr.capture.keep);
+
+    await fireEvent.press(await screen.findByLabelText(fr.capture.rotateLabel));
+    await settle();
+
+    expect(captureService.prepareImport).toHaveBeenLastCalledWith(original(2), 1);
+    expect(screen.getByTestId("photo-review").props.source.uri).toBe(turned(2, 1));
+    expect(discarded()).toContain(ready(2));
+
+    await press(fr.capture.keep);
+
+    expect(sent()).toEqual([ready(1), turned(2, 1)]);
+  });
+
+  test("turning four times comes back to the first position", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(1));
+    await openIdle();
+    await pressImport();
+    for (let turn = 0; turn < 4; turn += 1) {
+      await fireEvent.press(await screen.findByLabelText(fr.capture.rotateLabel));
+      await settle();
+    }
+
+    expect(captureService.prepareImport).toHaveBeenLastCalledWith(original(1), 0);
+  });
+
+  test("a turn that fails is said and the image stays as it was", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(1));
+    await openIdle();
+    await pressImport();
+    await screen.findByText(fr.capture.reviewPage(1, 1));
+    jest.mocked(captureService.prepareImport).mockRejectedValueOnce(new Error("memory"));
+    await fireEvent.press(await screen.findByLabelText(fr.capture.rotateLabel));
+    await settle();
+
+    expect(await screen.findByText(fr.capture.rotateFailed)).toBeTruthy();
+    expect(screen.getByTestId("photo-review").props.source.uri).toBe(ready(1));
+    expect(discarded()).not.toContain(ready(1));
+  });
+
+  test("Remove drops an image, erases its files, and the others go on", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(3));
+    await openIdle();
+    await pressImport();
+    await press(fr.capture.remove);
+    await press(fr.capture.keep);
+    await press(fr.capture.keep);
+
+    expect(discarded()).toEqual(expect.arrayContaining([original(1), ready(1)]));
+    expect(sent()).toEqual([ready(2), ready(3)]);
+  });
+
+  test("removing every image sends nothing and brings the idle screen back", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(2));
+    const pathname = await openIdle();
+    await pressImport();
+    await press(fr.capture.remove);
+    await press(fr.capture.remove);
+
+    expect(captureService.send).not.toHaveBeenCalled();
+    expect(pathname()).toBe("/capture");
+    expect(screen.getByText(fr.capture.import)).toBeTruthy();
+    expect(discarded()).toEqual(expect.arrayContaining([original(1), original(2), ready(1), ready(2)]));
+  });
+
+  test("a file the picker could not give is counted and said once the others are sent [9]", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(1, 1, 2));
+    await openIdle();
+    await pressImport();
+    await press(fr.capture.keep);
+
+    expect(await screen.findByText(fr.capture.leftOut(2))).toBeTruthy();
+    expect(sent()).toEqual([ready(1)]);
+  });
+
+  test("when no file could be read, the idle screen says so", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(0, 1, 2));
+    await openIdle();
+    await pressImport();
+
+    expect(await screen.findByText(fr.capture.leftOut(2))).toBeTruthy();
+    expect(screen.getByText(fr.capture.import)).toBeTruthy();
+    expect(captureService.send).not.toHaveBeenCalled();
+  });
+
+  test("an image that cannot be prepared is left out, counted and erased, and the review goes on", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(2));
+    jest.mocked(captureService.prepareImport).mockRejectedValueOnce(new Error("memory"));
+    await openIdle();
+    await pressImport();
+
+    expect(await screen.findByText(fr.capture.reviewPage(2, 2))).toBeTruthy();
+    expect(discarded()).toContain(original(1));
+
+    await press(fr.capture.keep);
+
+    expect(sent()).toEqual([ready(2)]);
+    expect(await screen.findByText(fr.capture.leftOut(1))).toBeTruthy();
+  });
+
+  test("a blurry imported page is listed, and taking it again opens the picker for one image that replaces it, still an import [8]", async () => {
+    sharpness[ready(2)] = "blurry";
+    jest.mocked(pickImages).mockResolvedValueOnce(picked(3));
+    await openIdle();
+    await pressImport();
+    await press(fr.capture.keep);
+    await press(fr.capture.keep);
+    await press(fr.capture.keep);
+
+    expect(await screen.findByText(fr.capture.blurryTitle(1))).toBeTruthy();
+    expect(captureService.send).not.toHaveBeenCalled();
+
+    jest.mocked(pickImages).mockResolvedValue(picked(1, 9));
+    await fireEvent.press(await screen.findByLabelText(fr.capture.blurryPageLabel(2)));
+    await settle();
+
+    expect(pickImages).toHaveBeenLastCalledWith({ limit: 1 });
+    expect(scanPages).toHaveBeenCalledTimes(1);
+
+    await press(fr.capture.keep);
+
+    expect(sent()).toEqual([ready(1), ready(9), ready(3)]);
+    expect(sources()).toEqual(["import", "import", "import"]);
+    expect(discarded()).toContain(ready(2));
+  });
+
+  test("a picker closed on a replacement keeps the sheet and the pages as they were", async () => {
+    sharpness[ready(1)] = "blurry";
+    jest.mocked(pickImages).mockResolvedValueOnce(picked(1));
+    await openIdle();
+    await pressImport();
+    await press(fr.capture.keep);
+
+    jest.mocked(pickImages).mockResolvedValue({ status: "cancelled" });
+    await fireEvent.press(await screen.findByLabelText(fr.capture.blurryPageLabel(1)));
+    await settle();
+
+    expect(await screen.findByText(fr.capture.blurryTitle(1))).toBeTruthy();
+    expect(discarded()).not.toContain(ready(1));
+  });
+
+  test("sending anyway sends the blurry imported page too", async () => {
+    sharpness[ready(1)] = "blurry";
+    jest.mocked(pickImages).mockResolvedValue(picked(1));
+    await openIdle();
+    await pressImport();
+    await press(fr.capture.keep);
+    await press(fr.capture.sendAnyway);
+
+    expect(sent()).toEqual([ready(1)]);
+    expect(sources()).toEqual(["import"]);
+  });
+
+  test("a scanned series keeps the camera source", async () => {
+    jest.mocked(scanPages).mockResolvedValue(scanned(1));
+    await openCapture();
+
+    expect(sources()).toEqual(["camera"]);
+  });
+
+  test("leaving during the review asks first with the number of pages, then erases every file", async () => {
+    jest.mocked(pickImages).mockResolvedValue(picked(3));
+    const pathname = await openIdle();
+    await pressImport();
+    await press(fr.capture.keep);
+    await fireEvent.press(await screen.findByText(fr.common.cancel));
+
+    expect(alert).toHaveBeenCalledWith(fr.capture.leaveTitle, fr.capture.leaveBody(3), expect.any(Array));
+    expect(pathname()).toBe("/capture");
+
+    await confirmLeave();
+    await settle();
+
+    expect(pathname()).toBe("/");
+    expect(discarded()).toEqual(expect.arrayContaining([original(1), original(2), original(3), ready(1), ready(2)]));
+    expect(captureService.send).not.toHaveBeenCalled();
+  });
+
+  test("a picker still open when the screen is left has its files erased, not sent", async () => {
+    const opened = deferred<PickResult>();
+    jest.mocked(pickImages).mockReturnValue(opened.promise);
+    const pathname = await openIdle();
+    await pressImport();
+    await fireEvent.press(await screen.findByText(fr.common.cancel));
+    await settle();
+    expect(pathname()).toBe("/");
+
+    await act(async () => opened.resolve(picked(2)));
+    await settle();
+
+    expect(discarded()).toEqual(expect.arrayContaining([original(1), original(2)]));
+    expect(captureService.prepareImport).not.toHaveBeenCalled();
+    expect(captureService.send).not.toHaveBeenCalled();
+  });
+
+  test("the review speaks English on an English phone [11]", async () => {
+    jest.mocked(useLocales).mockReturnValue([phoneLocale("en")]);
+    jest.mocked(pickImages).mockResolvedValue(picked(2));
+    await openApp("/");
+    await screen.findByText(histoire.name);
+    await loaded();
+    await fireEvent.press(await screen.findByText(en.common.scan));
+    await settle();
+    await fireEvent.press(await screen.findByText(en.capture.import));
+    await settle();
+
+    expect(await screen.findByText(en.capture.reviewPage(1, 2))).toBeTruthy();
+    expect(screen.getByText(en.capture.remove)).toBeTruthy();
+    expect(screen.getByText(en.capture.keep)).toBeTruthy();
+  });
 });

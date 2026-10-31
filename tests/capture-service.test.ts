@@ -320,3 +320,25 @@ test("a scanned page that cannot be decoded fails, and nothing is saved", async 
   await expect(captureService.prepareScan("file:///cache/scans/a.jpg")).rejects.toThrow("no memory");
   expect(mockImaging.saved).toEqual([]);
 });
+
+test.each([
+  [0, "render file:///cache/ImagePicker/a.jpg"],
+  [1, "render file:///cache/ImagePicker/a.jpg rotate 90"],
+  [2, "render file:///cache/ImagePicker/a.jpg rotate 180"],
+  [3, "render file:///cache/ImagePicker/a.jpg rotate 270"],
+  [5, "render file:///cache/ImagePicker/a.jpg rotate 90"],
+  [-1, "render file:///cache/ImagePicker/a.jpg rotate 270"],
+])("an imported image is turned %i quarters and saved again as a JPEG, from the original each time", async (quarters, render) => {
+  expect(await captureService.prepareImport("file:///cache/ImagePicker/a.jpg", quarters)).toBe("file:///cache/turned.jpg");
+  expect(mockImaging.calls).toEqual([render, "save turned"]);
+  expect(mockImaging.saved).toEqual([{ format: "jpeg", compress: 0.9 }]);
+  expect(mockFiles).toEqual([]);
+});
+
+test("an imported image with too many pixels is shrunk to 12 megapixels, and one that cannot be decoded fails", async () => {
+  mockImaging.sizes = [{ width: 8000, height: 6000 }];
+  expect(await captureService.prepareImport("file:///cache/ImagePicker/a.jpg", 0)).toBe("file:///cache/shrunk.jpg");
+
+  mockImaging.fail = true;
+  await expect(captureService.prepareImport("file:///cache/ImagePicker/a.jpg", 1)).rejects.toThrow("no memory");
+});

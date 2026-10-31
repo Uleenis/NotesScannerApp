@@ -1,14 +1,14 @@
 # Current slice
 
-Slice 6 — Capture, branches 1 to 5 done: the next branch is 6. Slices 1 to 5, 7 and 9 and Correctifs 1 and 2 are built; their Bilans are in `../Tranche N/Bilan.md`, `../Correctifs N/Bilan.md` and `../../05 Shipped/Tranche 1 - Lecture B1.md`.
+Slice 6 — Capture, branches 1 to 6 done (branch 7 is not built: measure 15 does not keep it). Slices 1 to 7 and 9 and Correctifs 1 and 2 are built; their Bilans are in `../Tranche N/Bilan.md`, `../Correctifs N/Bilan.md` and `../../05 Shipped/Tranche 1 - Lecture B1.md`.
 
 Paths below are from the repository root.
 
 - **Spec and plan of slice 6:** `../../02 Design/Tranche 6.md`, validated by the owner on 30/10/2026 with its six decisions as proposed.
 - **Decisions:** `../Tranche 6/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Method:** `../../01 Steps/Méthode de travail.md`. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next:** branch 6, `t6/import` (sensitive: hostile input, users' files; criteria 3, 9, 10 on the screen, 11, 19). Branch 5 (`t6/series`) built the capture screen: `scanPages` at once with `seriesLimit`, `prepareScans` (`captureService.prepareScan` then `checkSharpness`), the blurry list, `sendSeries`, the hook `src/capture/use-series.ts`, and `sweepScans()` at the start of the app. Branch 6 adds the import button to the idle screen and to the `unavailable` and `failed` cases (decided in `../Tranche 6/Décisions.md`), `source = 'import'` through `insertPage`'s last argument, and the review of each imported image ("Rotate", "Remove"). Its files go through the same `prepareScans` and `sendSeries`; bound the pixel count of an imported file with `src/pages/photo-pixels.ts` before `checkSharpness`. Branch 5 left to the phone checks (criteria 17, 18, 20, with the Samsung): the sharpness threshold on the phone's own reduction and decoding (`SHARPNESS_THRESHOLD`, under 500 ms per page), the scanner's result reaching the module, and that ML Kit's copies are erased.
-- **Order:** branches 1 to 6 in the order of the table; branch 7 is not built.
+- **Next:** nothing in slice 6. Branch 6 (`t6/import`) added `importer.ts` (the system photo picker of `expo-image-picker`, the closed case of a picked file: address, size, format from its first bytes, pixel bounds before any decode), the review one image at a time ("Rotate", "Remove") in `use-series.ts` (`candidates`, `accepted`, `reviewAt`), `checkImports`, `captureService.prepareImport`, `source = import` through `SendInput.source`, and `ImagePicker` in `sweepScans()`. The owner's phone checks (criteria 17 to 21, `../Tranche 6/Vérifications.md`) need a new development build (new native module). The next slice is 8.
+- **Order:** branches 1 to 6 done; branch 7 is not built.
 - **After this slice:** 8, then the owner's design and the reading improvements, then pre-beta, then 11 (`../../01 Steps/Périmètre du MVP.md`). A slice whose document is missing or not validated: stop and ask.
 - **Guarded files:** none expected. The tests mock the scanner; CI does not build the native app.
 - **The owner's:** nothing for this slice at the moment.
@@ -25,7 +25,7 @@ Paths below are from the repository root.
 | 3 | `t6/source` (`import` in `pages.source`, rights) | 1 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done |
 | 4 | `t6/sharpness` (sharpness function, synthetic fixtures, threshold of measure 16) | 7 | ordinary | Sonnet 5.5, High | code, Sonnet | done; measure 16 redone on paper photographs, score and threshold changed (0.55) |
 | 5 | `t6/series` (capture screen, series, blurry pages, sending, limit, network loss, cache) | 2 and 10 on the screen, 3 to 6, 8, 11, 17, 18, 20 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | done; phone checks 17, 18, 20 and the threshold on the Samsung left to the owner |
-| 6 | `t6/import` (multiple selection, review, bounds, unreadable files) | 3, 9, 10 on the screen, 11, 19 | sensitive (hostile input, users' files) | Sonnet 5.5, High | code and security, Sonnet | |
+| 6 | `t6/import` (multiple selection, review, bounds, unreadable files) | 3, 9, 10 on the screen, 11, 19 | sensitive (hostile input, users' files) | Sonnet 5.5, High | code and security, Sonnet | done; phone checks 19 to 21 left to the owner |
 | 7 | `t6/lighting` (only if measure 15 keeps it) | 15 | ordinary | Sonnet 5.5, High | code, Sonnet | not built (measure 15) |
 
 ## Carried from branch 1 to branches 5 and 6
@@ -34,7 +34,7 @@ Paths below are from the repository root.
 - iOS: VisionKit has no page limit, and the module keeps the first pages up to the limit, dropping the others without a word. Decide before the pre-beta (an error, or a message).
 - Not seen yet on the phone: that the scanner's result reaches the module (`OnActivityResult`), and that ML Kit's copies are erased. Measure 12 shows the first.
 
-- Branch 6 (import): bound the pixel count of an imported file (the header of its JPEG, `src/pages/photo-pixels.ts`) before `checkSharpness`, which renders the full image first. Criterion 18 on the phone also tries a blank page or a covered lens: a near-blank page with sensor noise may pass as sharp, which is harmless (the check only warns).
+- Done in branch 6: the pixel count of an imported file is bounded before any decode (`importer.ts`, `jpegSize` with its own bounds), `failed` and `unavailable` offer the import, and `ImagePicker` is swept. To see on the phone: that the picker of Android returns `…/cache/ImagePicker/<name>.<ext>` addresses (otherwise every file is set aside), the memory of a 50 Mpx photo at the reduction (`IMPORT_PIXELS_MAX` can drop to about 30 Mpx), and whether `ImageManipulator` honours the EXIF orientation of a raw gallery JPEG (if not, "Rotate" fixes it). Criterion 18 on the phone also tries a blank page or a covered lens: a near-blank page with sensor noise may pass as sharp, which is harmless (the check only warns).
 
 ## Still open from slice 5
 

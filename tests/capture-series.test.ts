@@ -1,6 +1,6 @@
 import type { Allowance } from "@/capture/allowance";
 import type { SendResult } from "@/capture/send-page";
-import { destination, prepareScans, replaceAt, seriesLimit, sendSeries, type CheckedPage, type SeriesPage } from "@/capture/series";
+import { checkImports, destination, prepareScans, replaceAt, seriesLimit, sendSeries, type CheckedPage, type SeriesPage } from "@/capture/series";
 import type { SharpnessCheck } from "@/capture/sharpness";
 
 jest.mock("../modules/document-scanner", () => ({ documentScanner: () => null }));
@@ -106,6 +106,44 @@ describe("prepareScans", () => {
 
     expect(result.pages).toEqual([]);
     expect(discarded).toEqual(expect.arrayContaining(["file:///cache/scans/a.jpg", "file:///cache/ready/a.jpg", "file:///cache/scans/b.jpg"]));
+  });
+});
+
+describe("checkImports", () => {
+  function deps(overrides: { check?: jest.Mock<Promise<SharpnessCheck>, [string]>; alive?: () => boolean } = {}) {
+    return { check: jest.fn(async (_uri: string): Promise<SharpnessCheck> => "sharp"), onProgress: jest.fn(), ...overrides };
+  }
+
+  it("checks the sharpness of each prepared file, in order, and erases nothing", async () => {
+    const uris = ["file:///cache/a.jpg", "file:///cache/b.jpg"];
+    const run = deps({ check: jest.fn(async (uri: string): Promise<SharpnessCheck> => (uri.endsWith("b.jpg") ? "blurry" : "sharp")) });
+
+    expect(await checkImports(uris, run)).toEqual([
+      { uri: uris[0], sharpness: "sharp" },
+      { uri: uris[1], sharpness: "blurry" },
+    ]);
+    expect(run.check.mock.calls.map(([uri]) => uri)).toEqual(uris);
+    expect(run.onProgress.mock.calls).toEqual([[0, 2], [1, 2]]);
+  });
+
+  it("keeps a page whose check throws, as unchecked", async () => {
+    const run = deps({ check: jest.fn(async (_uri: string): Promise<SharpnessCheck> => Promise.reject(new Error("decode"))) });
+
+    expect(await checkImports(["file:///cache/a.jpg"], run)).toEqual([{ uri: "file:///cache/a.jpg", sharpness: "unchecked" }]);
+  });
+
+  it("stops checking once the screen is gone and returns what was checked", async () => {
+    let alive = true;
+    const run = deps({
+      check: jest.fn(async (_uri: string): Promise<SharpnessCheck> => {
+        alive = false;
+        return "sharp";
+      }),
+      alive: () => alive,
+    });
+
+    expect(await checkImports(["file:///cache/a.jpg", "file:///cache/b.jpg"], run)).toEqual([{ uri: "file:///cache/a.jpg", sharpness: "sharp" }]);
+    expect(run.check).toHaveBeenCalledTimes(1);
   });
 });
 

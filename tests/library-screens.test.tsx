@@ -362,6 +362,7 @@ describe("the screen of a chapter", () => {
       chapterId: moyenAge.id,
       photoUri: "file:///cache/prepared-0.jpg",
       pageId: null,
+      source: "camera",
     });
   });
 
@@ -375,6 +376,7 @@ describe("the screen of a chapter", () => {
       notebookId: histoire.id,
       photoUri: "file:///cache/prepared-0.jpg",
       pageId: null,
+      source: "camera",
     });
   });
 });

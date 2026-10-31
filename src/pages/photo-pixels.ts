@@ -4,6 +4,10 @@ export const HEADER_BYTES = 131_072;
 export const MAX_SIDE = 8000;
 export const MAX_PIXELS = 12_000_000;
 
+export type PixelBounds = { side: number; pixels: number };
+
+const READING_BOUNDS: PixelBounds = { side: MAX_SIDE, pixels: MAX_PIXELS };
+
 const FRAMES = new Set([0xc0, 0xc1, 0xc2]);
 const STANDALONE = new Set([0x01, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7]);
 const SCAN = 0xda;
@@ -47,7 +51,7 @@ function exifOrientation(bytes: Uint8Array, start: number, end: number): number 
   return null;
 }
 
-export function jpegSize(bytes: Uint8Array): PhotoSize | null {
+export function jpegSize(bytes: Uint8Array, bounds: PixelBounds = READING_BOUNDS): PhotoSize | null {
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
     return null;
   }
@@ -84,7 +88,7 @@ export function jpegSize(bytes: Uint8Array): PhotoSize | null {
       }
       const height = (bytes[position + 3] << 8) | bytes[position + 4];
       const width = (bytes[position + 5] << 8) | bytes[position + 6];
-      if (width <= 0 || height <= 0 || width > MAX_SIDE || height > MAX_SIDE || width * height > MAX_PIXELS) {
+      if (width <= 0 || height <= 0 || width > bounds.side || height > bounds.side || width * height > bounds.pixels) {
         return null;
       }
       return orientation !== null && orientation >= 5 ? { width: height, height: width } : { width, height };

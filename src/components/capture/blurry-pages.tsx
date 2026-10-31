@@ -6,15 +6,16 @@ import { colors, radius, typography } from "@/theme";
 
 export type BlurryPage = { index: number; uri: string };
 
-type Props = { pages: BlurryPage[]; onRetake: (index: number) => void; onSendAnyway: () => void };
+type Props = { pages: BlurryPage[]; failed?: boolean; onRetake: (index: number) => void; onSendAnyway: () => void };
 
-export function BlurryPages({ pages, onRetake, onSendAnyway }: Props) {
+export function BlurryPages({ pages, failed = false, onRetake, onSendAnyway }: Props) {
   const t = useStrings();
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{t.capture.blurryTitle(pages.length)}</Text>
       <Text style={styles.body}>{t.capture.blurryBody}</Text>
+      {failed ? <Text style={styles.notice}>{t.capture.importFailed}</Text> : null}
       <ScrollView contentContainerStyle={styles.list} style={styles.scroll}>
         {pages.map((page) => (
           <View key={page.uri} style={styles.row}>
@@ -51,6 +52,11 @@ const styles = StyleSheet.create({
   body: {
     ...typography.interfaceSecondary,
     color: colors.inkSecondary,
+    textAlign: "center",
+  },
+  notice: {
+    ...typography.interfaceSecondary,
+    color: colors.ink,
     textAlign: "center",
   },
   scroll: {
