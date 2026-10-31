@@ -141,7 +141,7 @@ function Capture({
       body = (
         <View style={styles.idle}>
           <Text style={styles.hint}>{t.capture.hint}</Text>
-          {phase.notice === "unavailable" ? <Text style={styles.notice}>{t.capture.scannerUnavailable}</Text> : null}
+          {phase.noScanner ? <Text style={styles.notice}>{t.capture.scannerUnavailable}</Text> : null}
           {phase.notice === "failed" ? <Text style={styles.notice}>{t.capture.scannerFailed}</Text> : null}
           {phase.notice === "importFailed" ? <Text style={styles.notice}>{t.capture.importFailed}</Text> : null}
           {phase.leftOut > 0 ? <Text style={styles.notice}>{t.capture.leftOut(phase.leftOut)}</Text> : null}
@@ -150,7 +150,7 @@ function Capture({
               {counter.kind === "trial" ? t.capture.counterTrial(counter.remaining) : t.capture.counterMonth(counter.remaining)}
             </Text>
           )}
-          {phase.notice === "unavailable" ? (
+          {phase.noScanner ? (
             <PrimaryButton label={t.capture.import} onPress={series.importPhotos} />
           ) : (
             <>
@@ -179,6 +179,7 @@ function Capture({
   } else if (phase.kind === "blurry") {
     body = (
       <BlurryPages
+        failed={phase.importFailed === true}
         onRetake={series.retake}
         onSendAnyway={series.sendAnyway}
         pages={series.pages.flatMap((page, index) => (page.sharpness === "blurry" ? [{ index, uri: page.uri }] : []))}

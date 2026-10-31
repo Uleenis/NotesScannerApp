@@ -20,6 +20,7 @@ jest.mock("expo-image-picker", () => ({
 
 jest.mock("expo-file-system", () => ({
   FileMode: { ReadOnly: "r" },
+  Paths: { cache: { uri: "file:///data/user/0/com.uleenis.notesscanner/cache/" } },
   File: class {
     uri: string;
     constructor(uri: string) {
@@ -239,6 +240,10 @@ describe("pickImages", () => {
       "content://media/external/images/1",
       "https://example.com/a.jpg",
       "file:///cache/scans/a.jpg",
+      "file:///sdcard/DCIM/ImagePicker/a.jpg",
+      "file:///data/user/0/com.uleenis.notesscanner/cache/ImagePicker/%2e%2e/a.jpg",
+      "file:///data/user/0/com.uleenis.notesscanner/files/\n/../ImagePicker/a.jpg",
+      "file:///data/user/0/com.uleenis.notesscanner/cache/other/ImagePicker/a.jpg",
       `${dir}/sub/a.jpg`,
       `${dir}/a b.jpg`,
       `${dir}/.jpg`,

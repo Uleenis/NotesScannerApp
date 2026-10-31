@@ -1000,6 +1000,51 @@ describe("import from the gallery [9][10][19]", () => {
     expect(sources()).toEqual(["import"]);
   });
 
+  test("once the scanner is known to be missing, no later screen brings the scan button back", async () => {
+    jest.mocked(scanPages).mockResolvedValue({ status: "unavailable" });
+    await openIdle();
+    await pressImport();
+
+    expect(screen.getByText(fr.capture.scannerUnavailable)).toBeTruthy();
+    expect(screen.queryByText(fr.common.scan)).toBeNull();
+
+    jest.mocked(pickImages).mockResolvedValueOnce({ status: "failed" });
+    await pressImport();
+
+    expect(await screen.findByText(fr.capture.importFailed)).toBeTruthy();
+    expect(screen.getByText(fr.capture.scannerUnavailable)).toBeTruthy();
+    expect(screen.queryByText(fr.common.scan)).toBeNull();
+
+    jest.mocked(pickImages).mockResolvedValueOnce(picked(1));
+    await pressImport();
+    await press(fr.capture.remove);
+
+    expect(screen.getByText(fr.capture.scannerUnavailable)).toBeTruthy();
+    expect(screen.queryByText(fr.common.scan)).toBeNull();
+  });
+
+  test("a replacement with no usable file says so on the sheet and keeps the page", async () => {
+    sharpness[ready(1)] = "blurry";
+    jest.mocked(pickImages).mockResolvedValueOnce(picked(1));
+    await openIdle();
+    await pressImport();
+    await press(fr.capture.keep);
+
+    jest.mocked(pickImages).mockResolvedValue(picked(0, 1, 1));
+    await fireEvent.press(await screen.findByLabelText(fr.capture.blurryPageLabel(1)));
+    await settle();
+
+    expect(await screen.findByText(fr.capture.importFailed)).toBeTruthy();
+    expect(screen.getByText(fr.capture.blurryTitle(1))).toBeTruthy();
+    expect(discarded()).not.toContain(ready(1));
+
+    jest.mocked(pickImages).mockResolvedValue({ status: "failed" });
+    await fireEvent.press(await screen.findByLabelText(fr.capture.blurryPageLabel(1)));
+    await settle();
+
+    expect(await screen.findByText(fr.capture.importFailed)).toBeTruthy();
+  });
+
   test("a scanner that fails leaves the scan again and the import", async () => {
     jest.mocked(scanPages).mockResolvedValue({ status: "failed" });
     await openIdle();

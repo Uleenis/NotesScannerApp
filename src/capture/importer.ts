@@ -1,4 +1,4 @@
-import { File, FileMode } from "expo-file-system";
+import { File, FileMode, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 
 import { jpegSize, type PixelBounds } from "@/pages/photo-pixels";
@@ -14,7 +14,12 @@ const HEAD_BYTES = 131_072;
 
 const BOUNDS: PixelBounds = { side: IMPORT_SIDE_MAX, pixels: IMPORT_PIXELS_MAX };
 
-const PICKED_FILE = /^file:\/\/\/(?!.*\.\.)(?:[^/]+\/)+ImagePicker\/[A-Za-z0-9-]+\.[A-Za-z0-9]{2,5}$/;
+const PICKED_NAME = /^[A-Za-z0-9-]+\.[A-Za-z0-9]{2,5}$/;
+
+function isPickedFile(uri: string): boolean {
+  const folder = `${String(Paths.cache.uri).replace(/\/+$/, "")}/ImagePicker/`;
+  return uri.startsWith(folder) && PICKED_NAME.test(uri.slice(folder.length));
+}
 
 const HEIC_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"]);
 
@@ -95,7 +100,7 @@ function field(value: unknown, name: string): unknown {
 }
 
 function discard(uri: string): void {
-  if (!PICKED_FILE.test(uri)) {
+  if (!isPickedFile(uri)) {
     return;
   }
   try {
@@ -160,7 +165,7 @@ export async function pickImages({ limit }: { limit: number }): Promise<PickResu
   let rejected = 0;
   for (const [index, asset] of assets.entries()) {
     const uri = addresses[index];
-    if (typeof uri !== "string" || !PICKED_FILE.test(uri) || seen.has(uri)) {
+    if (typeof uri !== "string" || !isPickedFile(uri) || seen.has(uri)) {
       rejected += 1;
       continue;
     }

@@ -19,17 +19,17 @@ export type Target = { notebookId: string; chapterId: string | null };
 type Candidate = { original: string; turns: number; kept: string | null };
 
 export type Phase =
-  | { kind: "idle"; notice: "unavailable" | "failed" | "importFailed" | null; leftOut: number }
+  | { kind: "idle"; notice: "failed" | "importFailed" | null; noScanner: boolean; leftOut: number }
   | { kind: "scanning" }
   | { kind: "picking" }
   | { kind: "reviewing"; page: number; total: number; uri: string; turning: boolean; problem: boolean }
   | { kind: "preparing"; page: number; total: number }
-  | { kind: "blurry" }
+  | { kind: "blurry"; importFailed?: true }
   | { kind: "sending"; page: number; total: number }
   | { kind: "interrupted"; pending: number }
   | { kind: "ended"; notSent: number; block: Block | null; leftOut: number; next: string | null };
 
-const IDLE: Phase = { kind: "idle", notice: null, leftOut: 0 };
+const IDLE: Phase = { kind: "idle", notice: null, noScanner: false, leftOut: 0 };
 
 export function useSeries(target: Target, limit: number, ready: boolean) {
   const t = useStrings();
@@ -53,12 +53,20 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
   const sentTo = useRef<Target>(target);
   const inFlight = useRef<string | null>(null);
   const mode = useRef<PageSource>("camera");
+  const scannerGone = useRef(false);
   const candidates = useRef<Candidate[]>([]);
   const accepted = useRef<string[]>([]);
   const reviewAt = useRef(0);
   const replacing = useRef<number | null>(null);
 
   const alive = () => mounted.current && !cancelled.current;
+
+  const idle = (notice: "failed" | "importFailed" | null, left = 0): Phase => ({
+    kind: "idle",
+    notice,
+    noScanner: scannerGone.current,
+    leftOut: left,
+  });
 
   function discardHeld() {
     const flying = inFlight.current;
@@ -127,10 +135,11 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     busy.current = false;
     if (replace !== null) {
       setPhase({ kind: "blurry" });
-    } else if (result.status === "unavailable" || result.status === "failed") {
-      setPhase({ kind: "idle", notice: result.status, leftOut: 0 });
+    } else if (result.status === "unavailable") {
+      scannerGone.current = true;
+      setPhase(idle(null));
     } else {
-      setPhase(IDLE);
+      setPhase(idle(result.status === "failed" ? "failed" : null));
     }
   }
 
@@ -194,9 +203,9 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     }
     if (result.status !== "picked") {
       if (replace !== null) {
-        setPhase({ kind: "blurry" });
+        setPhase(result.status === "failed" ? { kind: "blurry", importFailed: true } : { kind: "blurry" });
       } else {
-        setPhase(result.status === "failed" ? { kind: "idle", notice: "importFailed", leftOut: 0 } : IDLE);
+        setPhase(idle(result.status === "failed" ? "importFailed" : null));
       }
       return;
     }
@@ -264,7 +273,7 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     reviewAt.current = 0;
     if (list.length === 0) {
       syncHeld();
-      setPhase(replace !== null ? { kind: "blurry" } : { kind: "idle", notice: null, leftOut: leftOut.current });
+      setPhase(replace !== null ? { kind: "blurry", importFailed: true } : idle(null, leftOut.current));
       return;
     }
     busy.current = true;
@@ -358,7 +367,7 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
 
   function proceed() {
     if (checked.current.length === 0) {
-      setPhase({ kind: "idle", notice: null, leftOut: leftOut.current });
+      setPhase(idle(null, leftOut.current));
     } else if (checked.current.some((page) => page.sharpness === "blurry")) {
       setPhase({ kind: "blurry" });
     } else {
@@ -420,7 +429,7 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     if (leftOut.current === 0 && next !== null) {
       router.replace(next);
     } else if (next === null) {
-      setPhase({ kind: "idle", notice: null, leftOut: leftOut.current });
+      setPhase(idle(null, leftOut.current));
     } else {
       setPhase({ kind: "ended", notSent: 0, block: null, leftOut: leftOut.current, next });
     }
