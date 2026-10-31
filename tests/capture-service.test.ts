@@ -1,15 +1,18 @@
+import { encode } from "jpeg-js";
+
 import { shrinkTarget } from "@/capture/photo";
 import { captureService } from "@/capture/service";
 import { getSupabase } from "@/lib/supabase";
 
 const mockFiles: { uri: string; deleted: boolean; bytes: Uint8Array; deleteFails: boolean }[] = [];
 let mockDeleteFails = false;
+let mockBytes: Uint8Array | null = null;
 
 jest.mock("expo-file-system", () => ({
   File: class {
     state: { uri: string; deleted: boolean; bytes: Uint8Array; deleteFails: boolean };
     constructor(uri: string) {
-      this.state = { uri, deleted: false, bytes: new Uint8Array([0xff, 0xd8, 0xff]), deleteFails: mockDeleteFails };
+      this.state = { uri, deleted: false, bytes: mockBytes ?? new Uint8Array([0xff, 0xd8, 0xff]), deleteFails: mockDeleteFails };
       mockFiles.push(this.state);
     }
     async bytes() {
@@ -123,6 +126,7 @@ function fakeSupabase(options: { upload?: "ok" | "fail"; read?: Promise<unknown>
 beforeEach(() => {
   mockFiles.length = 0;
   mockDeleteFails = false;
+  mockBytes = null;
   mockImaging.calls = [];
   mockImaging.sizes = [];
   mockImaging.saved = [];
@@ -232,6 +236,43 @@ test("a photo that cannot be turned fails, and nothing is saved", async () => {
   mockImaging.fail = true;
   await expect(captureService.preparePhoto(taken, 0)).rejects.toThrow("no memory");
   expect(mockImaging.saved).toEqual([]);
+});
+
+function flatJpeg(): Uint8Array {
+  const data = new Uint8Array(40 * 30 * 4).fill(200);
+  return new Uint8Array(encode({ data, width: 40, height: 30 }, 90).data);
+}
+
+test("the sharpness of a large photo is judged on a copy reduced to 1000 px, which is erased", async () => {
+  mockImaging.sizes = [{ width: 3000, height: 4000 }];
+  mockBytes = flatJpeg();
+
+  expect(await captureService.checkSharpness("file:///cache/a.jpg")).toBe("blurry");
+  expect(mockImaging.calls).toEqual(["render file:///cache/a.jpg", "render image:turned resize 750x1000", "save shrunk"]);
+  expect(mockImaging.saved).toEqual([{ format: "jpeg", compress: 1 }]);
+  expect(new Set(mockFiles.map((file) => file.uri))).toEqual(new Set(["file:///cache/shrunk.jpg"]));
+  expect(mockFiles.some((file) => file.deleted)).toBe(true);
+  expect(mockImaging.images.map((image) => image.released)).toEqual([true, true]);
+});
+
+test("a photo within 1000 px is judged as it is, and its own file is never erased", async () => {
+  mockImaging.sizes = [{ width: 600, height: 800 }];
+  mockBytes = flatJpeg();
+
+  expect(await captureService.checkSharpness("file:///cache/a.jpg")).toBe("blurry");
+  expect(mockImaging.calls).toEqual(["render file:///cache/a.jpg", "save turned"]);
+  expect(new Set(mockFiles.map((file) => file.uri))).toEqual(new Set(["file:///cache/turned.jpg"]));
+  expect(mockFiles.some((file) => file.deleted)).toBe(true);
+});
+
+test("a photo that cannot be read for sharpness is left unchecked, and the copy is still erased", async () => {
+  mockImaging.sizes = [{ width: 3000, height: 4000 }];
+
+  expect(await captureService.checkSharpness("file:///cache/a.jpg")).toBe("unchecked");
+  expect(mockFiles.some((file) => file.deleted)).toBe(true);
+
+  mockImaging.fail = true;
+  expect(await captureService.checkSharpness("file:///cache/a.jpg")).toBe("unchecked");
 });
 
 test("a photo that is thrown away has its file deleted, and a missing file is no problem", () => {

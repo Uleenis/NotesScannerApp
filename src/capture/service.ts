@@ -5,7 +5,8 @@ import { getSupabase } from "@/lib/supabase";
 import type { Allowance } from "./allowance";
 import { callPrepare, callRead, fetchAllowance, fetchLatestNotebookId, insertPage, markUploaded, uploadPhotoFile } from "./api";
 import { PHOTO_QUALITY, preparePhoto, shrinkTarget, type Picture } from "./photo";
-import { sendPage, type SendDeps, type SendInput, type SendResult } from "./send-page";
+import { checkSharpness, decodeJpegGray, sharpnessSize, type Gray, type SharpnessCheck } from "./sharpness";
+import { sendPage,type SendDeps, type SendInput, type SendResult } from "./send-page";
 
 const SEND_TIMEOUT_MS = 120_000;
 
@@ -15,6 +16,7 @@ export type CaptureService = {
   send: (input: SendInput, onReadingSettled?: () => void) => Promise<SendResult>;
   preparePhoto: (picture: Picture, quarterTurns: number) => Promise<string>;
   discardPhoto: (uri: string) => void;
+  checkSharpness: (uri: string) => Promise<SharpnessCheck>;
 };
 
 function realDeps(onReadingSettled?: () => void): SendDeps {
@@ -47,6 +49,25 @@ async function saveTurned(uri: string, degrees: number): Promise<string> {
   }
 }
 
+async function decodeForSharpness(uri: string): Promise<Gray | null> {
+  const loaded = ImageManipulator.manipulate(uri);
+  const full = await loaded.renderAsync();
+  const images: ImageRef[] = [full];
+  let copy: string | null = null;
+  try {
+    const target = sharpnessSize(full.width, full.height);
+    const small = target === null ? full : await ImageManipulator.manipulate(full).resize(target).renderAsync();
+    images.push(small);
+    copy = (await small.saveAsync({ format: SaveFormat.JPEG, compress: 1 })).uri;
+    return decodeJpegGray(await new File(copy).bytes());
+  } finally {
+    new Set(images).forEach((image) => image.release());
+    if (copy !== null) {
+      discardPhoto(copy);
+    }
+  }
+}
+
 function discardPhoto(uri: string): void {
   try {
     new File(uri).delete();
@@ -61,4 +82,5 @@ export const captureService: CaptureService = {
   send: (input, onReadingSettled) => sendPage(realDeps(onReadingSettled), input),
   preparePhoto: (picture, quarterTurns) => preparePhoto(picture, quarterTurns, { save: saveTurned }),
   discardPhoto,
+  checkSharpness: (uri) => checkSharpness(uri, { decode: decodeForSharpness }),
 };
