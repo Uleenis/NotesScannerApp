@@ -77,14 +77,17 @@ export async function fetchLatestNotebookId(client: CaptureClient): Promise<stri
   return typeof id === "string" ? id : null;
 }
 
+export type PageSource = "camera" | "import";
+
 export async function insertPage(
   client: CaptureClient,
   notebookId: string,
   capturedAt: string,
   chapterId: string | null,
+  source: PageSource = "camera",
 ): Promise<CreatePageResult> {
   try {
-    const row: Record<string, string> = { notebook_id: notebookId, source: "camera", captured_at: capturedAt };
+    const row: Record<string, string> = { notebook_id: notebookId, source, captured_at: capturedAt };
     const { data, error } = await client
       .from("pages")
       .insert(chapterId === null ? row : { ...row, chapter_id: chapterId })

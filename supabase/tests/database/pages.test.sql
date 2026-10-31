@@ -1,6 +1,6 @@
 begin;
 
-select plan(34);
+select plan(38);
 
 create function pg_temp.make_user(uid uuid) returns void
 language sql as $$
@@ -122,9 +122,30 @@ select throws_ok(
   '42501', null, 'a user cannot give a page away'
 );
 
+select lives_ok(
+  $$insert into public.pages (notebook_id, position, source, captured_at) values ('11111111-1111-1111-1111-111111111111', 7, 'import', now())$$,
+  'a user can create a page imported from the gallery'
+);
+
+select is(
+  (select source from public.pages where position = 7),
+  'import',
+  'an imported page keeps its source'
+);
+
 select throws_ok(
-  $$insert into public.pages (notebook_id, source) values ('11111111-1111-1111-1111-111111111111', 'import')$$,
-  '23514', null, 'a source that does not exist yet is refused'
+  $$insert into public.pages (notebook_id, source) values ('11111111-1111-1111-1111-111111111111', 'gallery')$$,
+  '23514', null, 'a source that does not exist is refused'
+);
+
+select throws_ok(
+  $$insert into public.pages (notebook_id, source) values ('11111111-1111-1111-1111-111111111111', 'IMPORT')$$,
+  '23514', null, 'a source is matched exactly'
+);
+
+select throws_ok(
+  $$update public.pages set source = 'import' where position = 0$$,
+  '42501', null, 'a user cannot change the source of a page afterwards'
 );
 
 select throws_ok(
