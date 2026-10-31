@@ -1,13 +1,13 @@
 # Current slice
 
-Slice 6 — Capture, branches 1 to 3 done: the next branch is 4. Slices 1 to 5, 7 and 9 and Correctifs 1 and 2 are built; their Bilans are in `../Tranche N/Bilan.md`, `../Correctifs N/Bilan.md` and `../../05 Shipped/Tranche 1 - Lecture B1.md`.
+Slice 6 — Capture, branches 1 to 4 done: the next branch is 5. Slices 1 to 5, 7 and 9 and Correctifs 1 and 2 are built; their Bilans are in `../Tranche N/Bilan.md`, `../Correctifs N/Bilan.md` and `../../05 Shipped/Tranche 1 - Lecture B1.md`.
 
 Paths below are from the repository root.
 
 - **Spec and plan of slice 6:** `../../02 Design/Tranche 6.md`, validated by the owner on 30/10/2026 with its six decisions as proposed.
 - **Decisions:** `../Tranche 6/Décisions.md`, in French, one line each; questions for the owner in `../Pour Tim.md`.
 - **Method:** `../../01 Steps/Méthode de travail.md`. One session per branch: "Continue la tranche." builds the next branch below to its merge, updates this file, and stops. Open the session with the model the table gives.
-- **Next:** branch 4, `t6/sharpness`. Branch 3 (`t6/source`) added `import` to `pages.source` (migration `20261109120000_t6_source.sql`) and the `source` argument of `insertPage`; the screens of branches 5 and 6 pass it. The owner confirmed on 31/10/2026 (`../Tranche 6/Décisions.md`): the system scanner is kept; the limits of criterion 14 for the crop are +0.5 point of CER outside math and 10 points on one page (the 5 points of the spec were below the noise of one shot); the crop is judged on paper photographs, no longer on the iPad scans. The owner accepted that the +0.5 limit holds only through the fiches or Jour 86 (journal alone +0.80 without Jour 86), that Jour 68 stays about 5 points worse than the iPad scans, and that the 10 points were set just above the observed noise (10.4). Branch 2 measures (`../../04 Testing/T6 mesures/Résultats.md`): the 21 paper pages photographed by the scanner, corners as proposed: outside math the CER goes down 1.39 points against the iPad scans, the journal alone is +0.92 (+1.54 without Jour 86), and 3 journal pages lose more than 5 points (Jour 19 +8.4, Jour 68 +5.7, Jour 8 +5.4); a repeat of those three pages shows a spread between shots of 10.4, 0.9 and 7.3 points. No cut text on the 4 images re-read (17 not checked). Measure 15: lighting does not help on paper pages (+2.64 points), so branch 7 is not built. Measure 16: Laplacian variance of the grayscale image at 1,000 px, threshold 300, taken on the first set of scans; no paper photo has been measured for sharpness, so branch 4 measures it again on paper photographs before fixing the threshold.
+- **Next:** branch 5, `t6/series` (sensitive: users' files; criteria 2 and 10 on the screen, 3 to 6, 8, 11, 17, 18, 20). Branch 3 added `import` to `pages.source` and the `source` argument of `insertPage`; branch 4 (`t6/sharpness`) added `src/capture/sharpness.ts` and `captureService.checkSharpness(uri)` (`sharp`, `blurry` or `unchecked`: never signal a page as blurry when the check is `unchecked`). The owner confirmed on 31/10/2026 (`../Tranche 6/Décisions.md`): the system scanner is kept, the crop limits are +0.5 point of CER outside math and 10 points on one page, and the crop is judged on paper photographs. Measure 16 was redone on paper photographs in branch 4: the plain variance of the Laplacian no longer met criterion 16 (6 of 21 paper photographs under 300), so the score is the variance of the Laplacian over the variance of the image at 1,000 px, threshold 0.55 (42 sharp pass, 98.8 % of the blurred versions flagged, `../../04 Testing/T6 mesures/Résultats.md`). Branch 5 checks it on the Samsung (criterion 18: a deliberately blurred page flagged, a sharp one not, under 500 ms per page with the manipulator's reduction and `jpeg-js` decoding) and adjusts `SHARPNESS_THRESHOLD` with the synthetic fixtures if the phone's values differ.
 - **Order:** branches 1 to 6 in the order of the table; branch 7 is not built.
 - **After this slice:** 8, then the owner's design and the reading improvements, then pre-beta, then 11 (`../../01 Steps/Périmètre du MVP.md`). A slice whose document is missing or not validated: stop and ask.
 - **Guarded files:** none expected. The tests mock the scanner; CI does not build the native app.
@@ -23,7 +23,7 @@ Paths below are from the repository root.
 | 1 | `t6/dev-build` (development client, local Android build, `scanPages`, measurement screen in development builds only) | 2, 10 | ordinary | Sonnet 5.5, High | code, Sonnet | done |
 | 2 | `t6/measure` (crop, lighting, sharpness threshold, outside the repository) | 12 to 16 | ordinary | Sonnet 5.5, High | code, Sonnet | done; criterion 14 held with the limits confirmed by the owner (0.5 outside math, 10 points per page) |
 | 3 | `t6/source` (`import` in `pages.source`, rights) | 1 | sensitive (access rights) | Sonnet 5.5, High | code and security, Sonnet | done |
-| 4 | `t6/sharpness` (sharpness function, synthetic fixtures, threshold of measure 16) | 7 | ordinary | Sonnet 5.5, High | code, Sonnet | |
+| 4 | `t6/sharpness` (sharpness function, synthetic fixtures, threshold of measure 16) | 7 | ordinary | Sonnet 5.5, High | code, Sonnet | done; measure 16 redone on paper photographs, score and threshold changed (0.55) |
 | 5 | `t6/series` (capture screen, series, blurry pages, sending, limit, network loss, cache) | 2 and 10 on the screen, 3 to 6, 8, 11, 17, 18, 20 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | |
 | 6 | `t6/import` (multiple selection, review, bounds, unreadable files) | 3, 9, 10 on the screen, 11, 19 | sensitive (hostile input, users' files) | Sonnet 5.5, High | code and security, Sonnet | |
 | 7 | `t6/lighting` (only if measure 15 keeps it) | 15 | ordinary | Sonnet 5.5, High | code, Sonnet | not built (measure 15) |
@@ -35,6 +35,8 @@ Paths below are from the repository root.
 - The scanner promise is lost if Android kills the app while the scanner is open: the capture screen must not wait on it forever.
 - iOS: VisionKit has no page limit, and the module keeps the first pages up to the limit, dropping the others without a word. Decide before the pre-beta (an error, or a message).
 - Not seen yet on the phone: that the scanner's result reaches the module (`OnActivityResult`), and that ML Kit's copies are erased. Measure 12 shows the first.
+
+- Branch 6 (import): bound the pixel count of an imported file (the header of its JPEG, `src/pages/photo-pixels.ts`) before `checkSharpness`, which renders the full image first. Criterion 18 on the phone also tries a blank page or a covered lens: a near-blank page with sensor noise may pass as sharp, which is harmless (the check only warns).
 
 ## Still open from slice 5
 
