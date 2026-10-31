@@ -99,6 +99,19 @@ test("a page is created with its notebook, its source and its moment, and nothin
   expect(result).toEqual({ status: "created", pageId: "page-1" });
 });
 
+test("a page imported from the gallery is created with the source import", async () => {
+  const fake = pagesClient({ data: { id: "page-2" }, error: null });
+  const result = await insertPage(client(fake), "notebook-1", "2026-10-06T10:00:00.000Z", "chapter-1", "import");
+
+  expect(fake.insert).toHaveBeenCalledWith({
+    notebook_id: "notebook-1",
+    source: "import",
+    captured_at: "2026-10-06T10:00:00.000Z",
+    chapter_id: "chapter-1",
+  });
+  expect(result).toEqual({ status: "created", pageId: "page-2" });
+});
+
 test("a page that cannot be created is a failure, a lost network is a network failure", async () => {
   expect(await insertPage(client(pagesClient({ data: null, error: { code: "42501", message: "denied" } })), "n", "t", null)).toEqual({
     status: "failed",
