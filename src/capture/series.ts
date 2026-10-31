@@ -23,6 +23,7 @@ export type SendSeriesDeps = {
   send: (page: SeriesPage) => Promise<SendResult>;
   discard: (uri: string) => void;
   onProgress?: (index: number) => void;
+  onSettled?: (page: SeriesPage) => void;
   alive?: () => boolean;
 };
 
@@ -84,11 +85,13 @@ export async function sendSeries(pages: SeriesPage[], deps: SendSeriesDeps): Pro
       case "sent":
         sent.push(result.pageId);
         deps.discard(page.uri);
+        deps.onSettled?.(page);
         break;
       case "photo":
       case "tooLarge":
         rejected += 1;
         deps.discard(page.uri);
+        deps.onSettled?.(page);
         break;
       case "limit":
         return { sent, rejected, pending: stopped(pages, index, result.pageId), stop: { status: "limit", reason: result.reason } };

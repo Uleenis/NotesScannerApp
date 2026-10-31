@@ -480,6 +480,22 @@ test("while the scanner is open the cancel button leaves, and a late result is e
   expect(discarded()).toEqual(expect.arrayContaining(["file:///cache/scans/s1.jpg", "file:///cache/scans/s2.jpg"]));
 });
 
+test("leaving while the last page is being checked erases the prepared pages and sends nothing", async () => {
+  jest.mocked(scanPages).mockResolvedValue(scanned(2));
+  const checking = deferred<SharpnessCheck>();
+  jest.mocked(captureService.checkSharpness).mockResolvedValueOnce("sharp").mockReturnValueOnce(checking.promise);
+  const pathname = await openCapture();
+  await screen.findByText(fr.capture.preparing(2, 2));
+  await fireEvent.press(screen.getByText(fr.common.cancel));
+  expect(pathname()).toBe("/");
+
+  await act(async () => checking.resolve("sharp"));
+  await settle();
+
+  expect(captureService.send).not.toHaveBeenCalled();
+  expect(discarded()).toEqual(expect.arrayContaining([ready(1), ready(2)]));
+});
+
 test("a series of three pages is prepared, sent in order into the chosen notebook, and opens the notebook [4][17]", async () => {
   jest.mocked(scanPages).mockResolvedValue(scanned(3));
   const pathname = await openCapture();
@@ -836,12 +852,43 @@ test("leaving while the pages are going asks first, and a confirmed leave stops 
 
   expect(alert).toHaveBeenCalledWith(fr.capture.leaveTitle, fr.capture.leaveBody(3), expect.any(Array));
   await confirmLeave();
+  expect(discarded()).not.toContain(ready(1));
+  expect(discarded()).toEqual(expect.arrayContaining([ready(2), ready(3)]));
   await act(async () => first.resolve({ status: "sent", pageId: "p1" }));
   await settle();
 
   expect(pathname()).toBe("/");
   expect(captureService.send).toHaveBeenCalledTimes(1);
   expect(discarded()).toEqual(expect.arrayContaining([ready(1), ready(2), ready(3)]));
+});
+
+test("the pages already sent are not counted among those that will be lost", async () => {
+  jest.mocked(scanPages).mockResolvedValue(scanned(4));
+  const third = deferred<SendResult>();
+  jest.mocked(captureService.send)
+    .mockResolvedValueOnce({ status: "sent", pageId: "p1" })
+    .mockResolvedValueOnce({ status: "sent", pageId: "p2" })
+    .mockReturnValueOnce(third.promise);
+  await openCapture();
+  await screen.findByText(fr.capture.sendingSeries(3, 4));
+  await fireEvent.press(screen.getByText(fr.common.cancel));
+
+  expect(alert).toHaveBeenCalledWith(fr.capture.leaveTitle, fr.capture.leaveBody(2), expect.any(Array));
+});
+
+test("confirming a leave after the series ended and moved on does not go back from the page that opened", async () => {
+  jest.mocked(scanPages).mockResolvedValue(scanned(1));
+  const only = deferred<SendResult>();
+  jest.mocked(captureService.send).mockReturnValueOnce(only.promise);
+  const pathname = await openCapture();
+  await screen.findByText(fr.capture.sendingSeries(1, 1));
+  await fireEvent.press(screen.getByText(fr.common.cancel));
+  await act(async () => only.resolve({ status: "sent", pageId: "p1" }));
+  await settle();
+  await confirmLeave();
+  await settle();
+
+  expect(pathname()).toBe("/page/p1");
 });
 
 test("leaving while the pages are going does not open anything afterwards", async () => {

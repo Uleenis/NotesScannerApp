@@ -8,7 +8,7 @@ export const MEASURE_PAGE_MAX = 30;
 
 export type ScanResult = { status: "scanned"; uris: string[] } | { status: "cancelled" } | { status: "unavailable" } | { status: "failed" };
 
-const SCAN_FILE = /^file:\/\/\/(?:[^/]+\/)+scans\/[A-Za-z0-9-]+\.jpg$/;
+const SCAN_FILE = /^file:\/\/\/(?!.*\.\.)(?:[^/]+\/)+scans\/[A-Za-z0-9-]+\.jpg$/;
 
 export function scanLimit(remaining: number): number {
   if (Number.isNaN(remaining) || remaining <= 0) {

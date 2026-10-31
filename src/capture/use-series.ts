@@ -45,12 +45,14 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
   const processed = useRef(0);
   const total = useRef(0);
   const sentTo = useRef<Target>(target);
+  const inFlight = useRef<string | null>(null);
 
   const alive = () => mounted.current && !cancelled.current;
 
   function discardHeld() {
-    held.current.forEach(captureService.discardPhoto);
-    held.current = [];
+    const flying = inFlight.current;
+    held.current.filter((uri) => uri !== flying).forEach(captureService.discardPhoto);
+    held.current = flying === null ? [] : [flying];
   }
 
   useEffect(() => {
@@ -81,6 +83,9 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
       return;
     }
     busy.current = true;
+    if (replace === null) {
+      sentTo.current = targetNow.current;
+    }
     setPhase({ kind: "scanning" });
     let result: ScanResult;
     try {
@@ -126,6 +131,7 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     });
     busy.current = false;
     if (!alive()) {
+      prepared.pages.forEach((page) => captureService.discardPhoto(page.uri));
       return;
     }
     if (replace !== null) {
@@ -149,7 +155,6 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     } else if (checked.current.some((page) => page.sharpness === "blurry")) {
       setPhase({ kind: "blurry" });
     } else {
-      sentTo.current = targetNow.current;
       total.current = checked.current.length;
       void sendAll(checked.current.map((page) => ({ uri: page.uri, pageId: null })));
     }
@@ -164,9 +169,18 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     const run = await sendSeries(list, {
       send: (page) => {
         const input = { notebookId, photoUri: page.uri, pageId: page.pageId };
-        return send.mutateAsync(chapterId === null ? input : { ...input, chapterId }).catch((): SendResult => ({ status: "failed", pageId: page.pageId }));
+        inFlight.current = page.uri;
+        return send
+          .mutateAsync(chapterId === null ? input : { ...input, chapterId })
+          .catch((): SendResult => ({ status: "failed", pageId: page.pageId }))
+          .finally(() => {
+            inFlight.current = null;
+          });
       },
       discard: captureService.discardPhoto,
+      onSettled: (page) => {
+        held.current = held.current.filter((uri) => uri !== page.uri);
+      },
       onProgress: (index) => {
         if (alive()) {
           setPhase({ kind: "sending", page: processed.current + index + 1, total: total.current });
@@ -224,7 +238,9 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
   function leaveNow() {
     cancelled.current = true;
     discardHeld();
-    router.back();
+    if (mounted.current) {
+      router.back();
+    }
   }
 
   function leave() {
@@ -260,7 +276,6 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     scan: () => void startScan(limit, null),
     retake: (index: number) => void startScan(1, index),
     sendAnyway: () => {
-      sentTo.current = targetNow.current;
       total.current = checked.current.length;
       void sendAll(checked.current.map((page) => ({ uri: page.uri, pageId: null })));
     },

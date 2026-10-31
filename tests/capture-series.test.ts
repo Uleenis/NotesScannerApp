@@ -148,6 +148,23 @@ describe("sendSeries", () => {
     expect(run.discarded).toEqual(pages(3).map((page) => page.uri));
   });
 
+  it("tells which pages are settled, sent or left out, as they go", async () => {
+    const settled: string[] = [];
+    const run = runner([
+      { status: "sent", pageId: "p1" },
+      { status: "photo", pageId: "p2" },
+      { status: "network", pageId: "p3" },
+    ]);
+    await sendSeries(pages(4), {
+      ...run.deps,
+      onSettled: (page) => {
+        settled.push(page.uri);
+      },
+    });
+
+    expect(settled).toEqual([pages(4)[0].uri, pages(4)[1].uri]);
+  });
+
   it("starts the next page only after the previous one is answered", async () => {
     const order: string[] = [];
     let release: (() => void) | undefined;
