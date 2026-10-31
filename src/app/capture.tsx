@@ -12,9 +12,11 @@ import { BlockedCapture } from "@/components/capture/blocked-capture";
 import { BlurryPages } from "@/components/capture/blurry-pages";
 import { CaptureTopBar } from "@/components/capture/capture-top-bar";
 import { NotebookPicker } from "@/components/capture/notebook-picker";
+import { PhotoReview } from "@/components/capture/photo-review";
 import { SeriesNotice } from "@/components/capture/series-notice";
 import { LoadError } from "@/components/load-error";
 import { PrimaryButton } from "@/components/primary-button";
+import { SecondaryButton } from "@/components/secondary-button";
 import { useStrings } from "@/i18n";
 import type { Strings } from "@/i18n/en";
 import type { NotebookSummary } from "@/notebooks/notebooks";
@@ -102,6 +104,8 @@ function Capture({
     switch (current.kind) {
       case "scanning":
         return <SeriesNotice busy lines={[t.capture.scanning]} />;
+      case "picking":
+        return <SeriesNotice busy lines={[t.capture.picking]} />;
       case "preparing":
         return <SeriesNotice busy lines={[t.capture.preparing(current.page, current.total)]} />;
       case "sending":
@@ -139,16 +143,39 @@ function Capture({
           <Text style={styles.hint}>{t.capture.hint}</Text>
           {phase.notice === "unavailable" ? <Text style={styles.notice}>{t.capture.scannerUnavailable}</Text> : null}
           {phase.notice === "failed" ? <Text style={styles.notice}>{t.capture.scannerFailed}</Text> : null}
+          {phase.notice === "importFailed" ? <Text style={styles.notice}>{t.capture.importFailed}</Text> : null}
           {phase.leftOut > 0 ? <Text style={styles.notice}>{t.capture.leftOut(phase.leftOut)}</Text> : null}
           {counter === null ? null : (
             <Text style={styles.counter}>
               {counter.kind === "trial" ? t.capture.counterTrial(counter.remaining) : t.capture.counterMonth(counter.remaining)}
             </Text>
           )}
-          {phase.notice === "unavailable" ? null : <PrimaryButton label={t.common.scan} onPress={series.scan} />}
+          {phase.notice === "unavailable" ? (
+            <PrimaryButton label={t.capture.import} onPress={series.importPhotos} />
+          ) : (
+            <>
+              <PrimaryButton label={t.common.scan} onPress={series.scan} />
+              <SecondaryButton label={t.capture.import} onPress={series.importPhotos} />
+            </>
+          )}
         </View>
       );
     }
+  } else if (phase.kind === "reviewing") {
+    body = (
+      <PhotoReview
+        actionLabel={t.capture.keep}
+        message={phase.problem ? t.capture.rotateFailed : null}
+        onRead={series.keepImage}
+        onRetake={series.removeImage}
+        onRotate={series.rotate}
+        photoUri={phase.uri}
+        retakeLabel={t.capture.remove}
+        sending={false}
+        title={t.capture.reviewPage(phase.page, phase.total)}
+        turning={phase.turning}
+      />
+    );
   } else if (phase.kind === "blurry") {
     body = (
       <BlurryPages

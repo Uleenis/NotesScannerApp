@@ -1,4 +1,5 @@
 import type { BlockReason } from "./allowance";
+import type { PageSource } from "./api";
 
 export type CreatePageResult = { status: "created"; pageId: string } | { status: "network" } | { status: "failed" };
 
@@ -16,7 +17,7 @@ export type UploadResult = "uploaded" | "tooLarge" | "network" | "refused" | "fa
 export type MarkResult = "marked" | "network" | "failed";
 
 export type SendDeps = {
-  createPage: (notebookId: string, capturedAt: string, chapterId: string | null) => Promise<CreatePageResult>;
+  createPage: (notebookId: string, capturedAt: string, chapterId: string | null, source: PageSource) => Promise<CreatePageResult>;
   preparePage: (pageId: string) => Promise<PrepareResult>;
   upload: (path: string, token: string, photoUri: string) => Promise<UploadResult>;
   markUploaded: (pageId: string, uploadedAt: string) => Promise<MarkResult>;
@@ -25,7 +26,7 @@ export type SendDeps = {
   timeoutMs: number;
 };
 
-export type SendInput = { notebookId: string; chapterId?: string | null; photoUri: string; pageId: string | null };
+export type SendInput = { notebookId: string; chapterId?: string | null; photoUri: string; pageId: string | null; source?: PageSource };
 
 export type SendResult =
   | { status: "sent"; pageId: string }
@@ -39,7 +40,7 @@ async function createOrReuse(deps: SendDeps, input: SendInput): Promise<CreatePa
   if (input.pageId !== null) {
     return { status: "created", pageId: input.pageId };
   }
-  return deps.createPage(input.notebookId, deps.now(), input.chapterId ?? null);
+  return deps.createPage(input.notebookId, deps.now(), input.chapterId ?? null, input.source ?? "camera");
 }
 
 async function send(deps: SendDeps, input: SendInput, track: (pageId: string) => void): Promise<SendResult> {

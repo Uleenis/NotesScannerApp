@@ -16,6 +16,7 @@ export type CaptureService = {
   send: (input: SendInput, onReadingSettled?: () => void) => Promise<SendResult>;
   preparePhoto: (picture: Picture, quarterTurns: number) => Promise<string>;
   prepareScan: (uri: string) => Promise<string>;
+  prepareImport: (uri: string, quarterTurns: number) => Promise<string>;
   discardPhoto: (uri: string) => void;
   checkSharpness: (uri: string) => Promise<SharpnessCheck>;
 };
@@ -23,7 +24,7 @@ export type CaptureService = {
 function realDeps(onReadingSettled?: () => void): SendDeps {
   const client = getSupabase();
   return {
-    createPage: (notebookId, capturedAt, chapterId) => insertPage(client, notebookId, capturedAt, chapterId),
+    createPage: (notebookId, capturedAt, chapterId, source) => insertPage(client, notebookId, capturedAt, chapterId, source),
     preparePage: (pageId) => callPrepare(client, pageId),
     upload: (path, token, photoUri) => uploadPhotoFile(client, new File(photoUri), path, token),
     markUploaded: (pageId, uploadedAt) => markUploaded(client, pageId, uploadedAt),
@@ -83,6 +84,7 @@ export const captureService: CaptureService = {
   send: (input, onReadingSettled) => sendPage(realDeps(onReadingSettled), input),
   preparePhoto: (picture, quarterTurns) => preparePhoto(picture, quarterTurns, { save: saveTurned }),
   prepareScan: (uri) => saveTurned(uri, 0),
+  prepareImport: (uri, quarterTurns) => saveTurned(uri, (((quarterTurns % 4) + 4) % 4) * 90),
   discardPhoto,
   checkSharpness: (uri) => checkSharpness(uri, { decode: decodeForSharpness }),
 };

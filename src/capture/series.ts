@@ -71,6 +71,28 @@ export async function prepareScans(uris: string[], deps: PrepareDeps): Promise<{
   return { pages, unreadable };
 }
 
+export async function checkImports(
+  uris: string[],
+  deps: { check: (uri: string) => Promise<SharpnessCheck>; onProgress?: (done: number, total: number) => void; alive?: () => boolean },
+): Promise<CheckedPage[]> {
+  const alive = deps.alive ?? (() => true);
+  const pages: CheckedPage[] = [];
+  for (const [index, uri] of uris.entries()) {
+    if (!alive()) {
+      return pages;
+    }
+    deps.onProgress?.(index, uris.length);
+    let sharpness: SharpnessCheck;
+    try {
+      sharpness = await deps.check(uri);
+    } catch {
+      sharpness = "unchecked";
+    }
+    pages.push({ uri, sharpness });
+  }
+  return pages;
+}
+
 export async function sendSeries(pages: SeriesPage[], deps: SendSeriesDeps): Promise<SeriesRun> {
   const alive = deps.alive ?? (() => true);
   const sent: string[] = [];

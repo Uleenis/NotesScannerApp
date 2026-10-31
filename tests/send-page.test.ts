@@ -47,7 +47,7 @@ test("the page is created in the chosen notebook with the moment of the capture"
   const { deps } = makeDeps();
   await sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: null });
 
-  expect(deps.createPage).toHaveBeenCalledWith(NOTEBOOK, NOW, null);
+  expect(deps.createPage).toHaveBeenCalledWith(NOTEBOOK, NOW, null, "camera");
 });
 
 test("the photo goes to the address the server prepared, with its token", async () => {
@@ -231,5 +231,19 @@ test("a page sent for a chapter is created in that chapter", async () => {
   const { deps } = makeDeps();
   await sendPage(deps, { notebookId: NOTEBOOK, chapterId: "chapter-3", photoUri: PHOTO, pageId: null });
 
-  expect(deps.createPage).toHaveBeenCalledWith(NOTEBOOK, NOW, "chapter-3");
+  expect(deps.createPage).toHaveBeenCalledWith(NOTEBOOK, NOW, "chapter-3", "camera");
+});
+
+test("a page imported from the gallery is created with the import source [9]", async () => {
+  const { deps } = makeDeps();
+  await sendPage(deps, { notebookId: NOTEBOOK, chapterId: "chapter-3", photoUri: PHOTO, pageId: null, source: "import" });
+
+  expect(deps.createPage).toHaveBeenCalledWith(NOTEBOOK, NOW, "chapter-3", "import");
+});
+
+test("a page that already exists is not created again, whatever its source", async () => {
+  const { deps } = makeDeps();
+  await sendPage(deps, { notebookId: NOTEBOOK, photoUri: PHOTO, pageId: "page-9", source: "import" });
+
+  expect(deps.createPage).not.toHaveBeenCalled();
 });

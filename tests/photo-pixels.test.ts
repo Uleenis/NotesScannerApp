@@ -81,6 +81,15 @@ describe("jpegSize", () => {
     expect(jpegSize(jpeg(frame(width, height)))).toBeNull();
   });
 
+  test("takes the bounds it is given in place of those of the reading service", () => {
+    const wide = { side: 16_000, pixels: 50_000_000 };
+    expect(jpegSize(jpeg(frame(8160, 6120)), wide)).toEqual({ width: 8160, height: 6120 });
+    expect(jpegSize(jpeg(frame(8160, 6120)))).toBeNull();
+    expect(jpegSize(jpeg(frame(16_001, 100)), wide)).toBeNull();
+    expect(jpegSize(jpeg(frame(10_000, 5001)), wide)).toBeNull();
+    expect(jpegSize(jpeg(frame(65_535, 65_535)), wide)).toBeNull();
+  });
+
   test("ignores an EXIF that is cut or malformed and keeps the size as written", () => {
     const broken = segment(0xe1, [0x45, 0x78, 0x69, 0x66, 0, 0, 0x4d, 0x4d, 0, 42, 0xff, 0xff, 0xff, 0xff]);
     expect(jpegSize(jpeg(broken, frame(4000, 3000)))).toEqual({ width: 4000, height: 3000 });
