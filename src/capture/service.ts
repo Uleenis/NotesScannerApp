@@ -15,6 +15,7 @@ export type CaptureService = {
   latestNotebookId: () => Promise<string | null>;
   send: (input: SendInput, onReadingSettled?: () => void) => Promise<SendResult>;
   preparePhoto: (picture: Picture, quarterTurns: number) => Promise<string>;
+  prepareScan: (uri: string) => Promise<string>;
   discardPhoto: (uri: string) => void;
   checkSharpness: (uri: string) => Promise<SharpnessCheck>;
 };
@@ -81,6 +82,7 @@ export const captureService: CaptureService = {
   latestNotebookId: () => fetchLatestNotebookId(getSupabase()),
   send: (input, onReadingSettled) => sendPage(realDeps(onReadingSettled), input),
   preparePhoto: (picture, quarterTurns) => preparePhoto(picture, quarterTurns, { save: saveTurned }),
+  prepareScan: (uri) => saveTurned(uri, 0),
   discardPhoto,
   checkSharpness: (uri) => checkSharpness(uri, { decode: decodeForSharpness }),
 };

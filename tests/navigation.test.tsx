@@ -3,7 +3,6 @@ import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen } from "expo-router/testing-library";
 
 import { strings } from "@/i18n";
-import { granted, installPermission } from "./fake-camera";
 import { histoire, installFakeNotebooks } from "./fake-notebook-service";
 import { phoneLocale } from "./phone-locale";
 
@@ -22,13 +21,15 @@ jest.mock("@/notebooks/service", () => ({
   notebookService: { list: jest.fn(), get: jest.fn(), create: jest.fn(), chapters: jest.fn(async () => []) },
 }));
 
-jest.mock("expo-camera", () => require("./fake-camera").cameraModule);
 jest.mock("expo-network", () => ({ useNetworkState: jest.fn(() => ({ isConnected: true, isInternetReachable: true })) }));
 jest.mock("@/capture/service", () => ({
   captureService: {
     allowance: jest.fn(async () => null),
     latestNotebookId: jest.fn(async () => null),
     send: jest.fn(),
+    discardPhoto: jest.fn(),
+    prepareScan: jest.fn(),
+    checkSharpness: jest.fn(),
   },
 }));
 jest.mock("@/pages/service", () => ({
@@ -39,7 +40,6 @@ const mockedUseLocales = jest.mocked(useLocales);
 
 beforeEach(() => {
   installFakeNotebooks([histoire]);
-  installPermission(granted);
 });
 
 async function openApp(languageCode: string, initialUrl = "/"): Promise<() => string> {

@@ -120,6 +120,7 @@ describe("scanPages", () => {
     ["an empty name", [""]],
     ["a file outside the scans folder", ["file:///cache/scans/a.jpg", "file:///data/app/databases/x.jpg"]],
     ["a file with a path in its name", ["file:///cache/scans/../databases/x.jpg"]],
+    ["a folder climbing out before the scans folder", ["file:///cache/../data/scans/a.jpg"]],
     ["a file that is not a JPEG", ["file:///cache/scans/a.db"]],
   ])("refuses an answer that is %s and erases only the scanned files it named", async (_label, scanned) => {
     mockNative.current = native(scanned);

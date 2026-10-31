@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthProvider } from "@/auth/auth-provider";
 import { defaultAuthServices } from "@/auth/default-services";
+import { sweepScans } from "@/capture/sweep";
 import { ActionSheetHost } from "@/components/action-sheet-host";
 import { ExportHost } from "@/components/export-host";
 import { ForgetOtherAccounts } from "@/components/forget-other-accounts";
@@ -26,6 +27,8 @@ export default function RootLayout() {
   const [queryClient] = useState(createQueryClient);
 
   useEffect(followAppFocus, []);
+
+  useEffect(sweepScans, []);
 
   useEffect(() => {
     if (ready) {

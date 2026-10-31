@@ -299,3 +299,24 @@ test("a photo that is thrown away has its file deleted, and a missing file is no
   mockDeleteFails = true;
   expect(() => captureService.discardPhoto("file:///cache/b.jpg")).not.toThrow();
 });
+
+test("a scanned page is saved again as a JPEG without being turned, and the file of the scanner is left to the caller", async () => {
+  expect(await captureService.prepareScan("file:///cache/scans/a.jpg")).toBe("file:///cache/turned.jpg");
+  expect(mockImaging.calls).toEqual(["render file:///cache/scans/a.jpg", "save turned"]);
+  expect(mockImaging.saved).toEqual([{ format: "jpeg", compress: 0.9 }]);
+  expect(mockFiles).toEqual([]);
+});
+
+test("a scanned page with too many pixels is shrunk to 12 megapixels before it is saved", async () => {
+  mockImaging.sizes = [{ width: 4000, height: 6000 }];
+  expect(await captureService.prepareScan("file:///cache/scans/a.jpg")).toBe("file:///cache/shrunk.jpg");
+  const target = shrinkTarget(4000, 6000);
+  expect(mockImaging.calls[1]).toBe(`render image:turned resize ${target?.width}x${target?.height}`);
+  expect(mockImaging.images.map((image) => image.released)).toEqual([true, true]);
+});
+
+test("a scanned page that cannot be decoded fails, and nothing is saved", async () => {
+  mockImaging.fail = true;
+  await expect(captureService.prepareScan("file:///cache/scans/a.jpg")).rejects.toThrow("no memory");
+  expect(mockImaging.saved).toEqual([]);
+});
