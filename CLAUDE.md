@@ -136,9 +136,8 @@ The owner does not read the code. What protects `main` is the spec, the tests, t
 
 ## Dependency audit allowlist
 
-`audit-ci.json` allows three high advisories: two in development tooling that never ships in the app, one in the app pending the owner's answer. Remove an entry as soon as a fix can be taken.
+`audit-ci.json` allows two high advisories: one in development tooling that never ships in the app, one in the app pending the owner's answer. Remove an entry as soon as a fix can be taken.
 
-- `GHSA-86w9-cpqp-85rv`: `node-forge` 1.4.0 via `@expo/cli` code signing, lax RSA signature parsing.
 - `GHSA-mrhx-c7xc-m3w5`: `zod` 3.25.76 via `@expo/cli` and `eslint-plugin-react-hooks` (fixed in zod 4.6.6, a major version those tools do not take yet), memory exhaustion when validating oversized collections. Allowed on 24/10/2026 at the owner's choice; retry the upgrade with the next Expo SDK patch.
 - `GHSA-qr28-fpjm-wq7f`: `decode-uri-component` 0.2.2 via `expo-router` 57 and `query-string` 7, quadratic time on a long run of malformed percent-encoded text (a crafted deep link can stall the app). It ships in the app. The fix, 0.5.1, is ESM only and `query-string` 7 loads it with `require`; `expo-router` 58 (next Expo SDK) takes it. Allowed on 29/10/2026 as the safest option easy to undo, pending the owner's answer in `../Pour Tim.md`.
 
