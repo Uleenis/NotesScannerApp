@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { throughMirror } from "@/offline/through";
 import {
   createChapter,
   listChapters,
@@ -31,12 +32,24 @@ export type NotebookService = {
 };
 
 export const notebookService: NotebookService = {
-  list: () => listNotebooks(getSupabase()),
-  get: (id) => getNotebook(getSupabase(), id),
+  list: () =>
+    throughMirror(
+      () => listNotebooks(getSupabase()),
+      (mirror, notebooks) => mirror.notebooks(notebooks),
+    ),
+  get: (id) =>
+    throughMirror(
+      () => getNotebook(getSupabase(), id),
+      (mirror, notebook) => mirror.notebook(id, notebook),
+    ),
   create: (name) => createNotebook(getSupabase(), name),
   rename: (id, name) => renameNotebook(getSupabase(), id, name),
   remove: (id) => deleteNotebook(getSupabase(), id),
-  chapters: () => listChapters(getSupabase()),
+  chapters: () =>
+    throughMirror(
+      () => listChapters(getSupabase()),
+      (mirror, chapters) => mirror.chapters(chapters),
+    ),
   createChapter: (notebookId, name) => createChapter(getSupabase(), notebookId, name),
   renameChapter: (id, name) => renameChapter(getSupabase(), id, name),
   removeChapter: (id) => deleteChapter(getSupabase(), id),

@@ -1,7 +1,7 @@
 import type { AESEncryptionKey } from "expo-crypto";
 import { Directory, File } from "expo-file-system";
 
-import { checkedUuid } from "./bytes";
+import { checkedUuid, isUuid } from "./bytes";
 import { SEAL_BYTES, seal, unseal } from "./cipher";
 
 export const PHOTO_BYTES_MAX = 64 * 1024 * 1024;
@@ -14,6 +14,7 @@ export type SealedPhotos = {
   save(id: string, bytes: Uint8Array): Promise<void>;
   open(id: string): Promise<OpenedPhoto>;
   remove(id: string): void;
+  list(): string[];
 };
 
 export function photoFolder(account: Directory, kind: PhotoKind): Directory {
@@ -79,6 +80,19 @@ export function sealedPhotos(
       if (target.exists) {
         target.delete();
       }
+    },
+    list() {
+      if (!isOpen()) {
+        throw new Error("store_closed");
+      }
+      if (!folder.exists) {
+        return [];
+      }
+      return folder
+        .list()
+        .filter((entry) => entry instanceof File)
+        .map((entry) => entry.uri.slice(entry.uri.lastIndexOf("/") + 1).replace(/\.bin$/, ""))
+        .filter(isUuid);
     },
   };
 }

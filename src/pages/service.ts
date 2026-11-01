@@ -1,4 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
+import { fetchPhotoAt } from "@/offline/fetch-photo";
+import { beginMirror } from "@/offline/mirror";
+import { throughMirror } from "@/offline/through";
 import type { DeleteResult } from "@/notebooks/removal";
 import { listAlerts, type ShownAlert } from "./alerts";
 import { editPage, type EditedGap, type EditedWord, type EditResult } from "./edit";
@@ -40,10 +43,23 @@ export type PageService = {
 };
 
 export const pageService: PageService = {
-  list: () => listPages(getSupabase()),
+  list: () =>
+    throughMirror(
+      () => listPages(getSupabase()),
+      (mirror, pages) => mirror.pages(pages),
+    ),
   count: () => countPages(getSupabase()),
-  get: (id) => getPage(getSupabase(), id),
-  photoUrl: (userId, pageId) => photoUrl(getSupabase(), userId, pageId),
+  get: (id) =>
+    throughMirror(
+      () => getPage(getSupabase(), id),
+      (mirror, page) => mirror.page(id, page),
+    ),
+  photoUrl: async (userId, pageId) => {
+    const mirror = beginMirror();
+    const url = await photoUrl(getSupabase(), userId, pageId);
+    void mirror.openedPhoto(pageId, () => fetchPhotoAt(fetch, url)).catch(() => undefined);
+    return url;
+  },
   photoPixels: (uri) => readPhotoPixels(uri),
   startReading: (pageId) => startReading(getSupabase(), pageId),
   setPageType: (pageId, pageType) => setPageType(getSupabase(), pageId, pageType),
@@ -52,6 +68,10 @@ export const pageService: PageService = {
   words: (pageId) => listWords(getSupabase(), pageId),
   correct: (pageId, tokenIndex, text, chosenFrom) => addCorrection(getSupabase(), pageId, tokenIndex, text, chosenFrom),
   edit: (pageId, text, words, gaps) => editPage(getSupabase(), pageId, text, words, gaps),
-  alerts: (pageId) => listAlerts(getSupabase(), pageId),
+  alerts: (pageId) =>
+    throughMirror(
+      () => listAlerts(getSupabase(), pageId),
+      (mirror, alerts) => mirror.alerts(pageId, alerts),
+    ),
   second: (pageId) => readSecond(getSupabase(), pageId),
 };

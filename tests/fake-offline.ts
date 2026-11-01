@@ -1,3 +1,5 @@
+import { DatabaseSync } from "node:sqlite";
+
 const subtle = globalThis.crypto.subtle;
 
 function randomBytes(count: number): Uint8Array<ArrayBuffer> {
@@ -20,7 +22,7 @@ function joinBytes(...parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
 
 export const fakeFiles = new Map<string, Uint8Array>();
 export const fakeDirectories = new Set<string>();
-export const fakeDatabases = new Map<string, { key: string | null; userVersion: number; tables: string[] }>();
+export const fakeDatabases = new Map<string, { key: string | null; userVersion: number; tables: string[]; inner: DatabaseSync }>();
 export const fakeOpened: FakeDatabase[] = [];
 export const fakeSqlite = { cipher: true, probeError: null as string | null };
 export const fakeFaults = { directoryDelete: false, write: false };
@@ -166,6 +168,12 @@ export const fileSystem = {
 const KEY_PRAGMA = /^PRAGMA key = "x'([0-9a-f]{64})'"$/;
 const USER_VERSION_SET = /^PRAGMA user_version = (\d+)$/;
 const CREATE_TABLE = /create table (\w+)/g;
+const PRAGMA = /^\s*PRAGMA/i;
+
+function bindings(params: unknown[]): never[] {
+  const list = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
+  return list as never[];
+}
 
 export class FakeDatabase {
   path: string;
@@ -178,7 +186,7 @@ export class FakeDatabase {
   private file() {
     const found = fakeDatabases.get(this.path);
     if (found === undefined) {
-      const created = { key: this.key, userVersion: 0, tables: [] as string[] };
+      const created = { key: this.key, userVersion: 0, tables: [] as string[], inner: new DatabaseSync(":memory:") };
       fakeDatabases.set(this.path, created);
       fakeFiles.set(this.path, this.key === null ? textBytes("SQLite format 3") : randomBytes(64));
       return created;
@@ -214,8 +222,20 @@ export class FakeDatabase {
     for (const match of sql.matchAll(CREATE_TABLE)) {
       file.tables.push(match[1]);
     }
+    if (!PRAGMA.test(sql)) {
+      file.inner.exec(sql);
+    }
   }
-  async getFirstAsync<T>(sql: string): Promise<T | null> {
+  async runAsync(sql: string, ...params: unknown[]): Promise<{ changes: number; lastInsertRowId: number }> {
+    this.record(sql);
+    const result = this.file().inner.prepare(sql).run(...bindings(params));
+    return { changes: Number(result.changes), lastInsertRowId: Number(result.lastInsertRowid) };
+  }
+  async getAllAsync<T>(sql: string, ...params: unknown[]): Promise<T[]> {
+    this.record(sql);
+    return this.file().inner.prepare(sql).all(...bindings(params)) as T[];
+  }
+  async getFirstAsync<T>(sql: string, ...params: unknown[]): Promise<T | null> {
     this.record(sql);
     if (sql === "PRAGMA cipher_version") {
       return (fakeSqlite.cipher ? { cipher_version: "4.10.0 community" } : null) as T | null;
@@ -232,10 +252,19 @@ export class FakeDatabase {
       }
       return { count: file.tables.length } as T;
     }
-    throw new Error(`unexpected query ${sql}`);
+    const row = file.inner.prepare(sql).get(...bindings(params));
+    return (row ?? null) as T | null;
   }
   async withTransactionAsync(task: () => Promise<void>): Promise<void> {
-    await task();
+    const { inner } = this.file();
+    inner.exec("begin");
+    try {
+      await task();
+    } catch (error) {
+      inner.exec("rollback");
+      throw error;
+    }
+    inner.exec("commit");
   }
   async closeAsync(): Promise<void> {
     this.closed = true;

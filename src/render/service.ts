@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { throughMirror } from "@/offline/through";
 import { readRendering, renderPage, type RenderOutcome, type StoredRendering } from "./api";
 
 export type RenderService = {
@@ -7,6 +8,10 @@ export type RenderService = {
 };
 
 export const renderService: RenderService = {
-  read: (pageId) => readRendering(getSupabase(), pageId),
+  read: (pageId) =>
+    throughMirror(
+      () => readRendering(getSupabase(), pageId),
+      (mirror, rendering) => mirror.rendering(pageId, rendering),
+    ),
   render: (pageId) => renderPage(getSupabase(), pageId),
 };
