@@ -14,6 +14,8 @@ export type SyncDeps = {
   canDownload: () => boolean;
 };
 
+export const SYNC_TIMEOUT_MS = 10 * 60_000;
+
 export type SyncReport = { status: "done" | "failed"; downloaded: number };
 
 const running = new WeakMap<AccountStore, Promise<SyncReport>>();
@@ -75,7 +77,12 @@ export function syncStore(store: AccountStore, deps: SyncDeps): Promise<SyncRepo
   if (existing !== undefined) {
     return existing;
   }
-  const started = run(store, deps).finally(() => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<SyncReport>((resolve) => {
+    timer = setTimeout(() => resolve({ status: "failed", downloaded: 0 }), SYNC_TIMEOUT_MS);
+  });
+  const started: Promise<SyncReport> = Promise.race([run(store, deps), timeout]).finally(() => {
+    clearTimeout(timer);
     if (running.get(store) === started) {
       running.delete(store);
     }

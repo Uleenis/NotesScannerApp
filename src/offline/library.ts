@@ -12,6 +12,9 @@ export type CachedLibrary = { notebooks: NotebookSummary[]; chapters: ChapterSum
 
 type Database = AccountStore["database"];
 
+export const LIST_CAP = 1000;
+export const ORPHAN_GRACE_MS = 10 * 60_000;
+
 const STATUSES: readonly string[] = ["queued", "processing", "read", "failed"];
 const QUEUE_REASONS: readonly string[] = ["read_error", "offline"];
 const PAGE_TYPES: readonly string[] = ["text", "math", "unsupported_script"];
@@ -144,8 +147,12 @@ async function forgetNotebooks(store: AccountStore, ids: string[]): Promise<stri
 }
 
 async function sweepOrphans(store: AccountStore): Promise<string[]> {
-  const rows = await store.database.getAllAsync<{ page_id: string }>("select page_id from photos where page_id not in (select id from pages)");
-  await store.database.runAsync("delete from photos where page_id not in (select id from pages)");
+  const cutoff = Date.now() - ORPHAN_GRACE_MS;
+  const rows = await store.database.getAllAsync<{ page_id: string }>(
+    "select page_id from photos where page_id not in (select id from pages) and opened_at < ?",
+    [cutoff],
+  );
+  await store.database.runAsync("delete from photos where page_id not in (select id from pages) and opened_at < ?", [cutoff]);
   await store.database.runAsync("delete from page_alerts where page_id not in (select id from pages)");
   await store.database.runAsync("delete from page_renderings where page_id not in (select id from pages)");
   return rows.map((row) => row.page_id);
@@ -161,10 +168,12 @@ export async function replaceNotebooks(store: AccountStore, notebooks: NotebookS
   const files = await inWrite(store, async () => {
     let erased: string[] = [];
     await store.database.withTransactionAsync(async () => {
-      const keep = new Set(records.map((record) => record.id));
-      const gone = (await existingIds(store, "notebooks")).filter((id) => !keep.has(id));
-      erased = await forgetNotebooks(store, gone);
-      await store.database.runAsync("delete from notebooks");
+      if (records.length < LIST_CAP) {
+        const keep = new Set(records.map((record) => record.id));
+        const gone = (await existingIds(store, "notebooks")).filter((id) => !keep.has(id));
+        erased = await forgetNotebooks(store, gone);
+        await store.database.runAsync("delete from notebooks");
+      }
       for (const record of records) {
         await insertNotebook(store.database, record);
       }
@@ -178,7 +187,9 @@ export async function replaceChapters(store: AccountStore, chapters: ChapterSumm
   const records = chapters.map(storedChapter);
   await inWrite(store, () =>
     store.database.withTransactionAsync(async () => {
-      await store.database.runAsync("delete from chapters");
+      if (records.length < LIST_CAP) {
+        await store.database.runAsync("delete from chapters");
+      }
       for (const record of records) {
         await insertChapter(store.database, record);
       }
@@ -193,6 +204,9 @@ export async function replacePages(store: AccountStore, pages: PageRecord[]): Pr
     await store.database.withTransactionAsync(async () => {
       for (const record of records) {
         await insertPage(store.database, record);
+      }
+      if (records.length >= LIST_CAP) {
+        return;
       }
       const keep = new Set(records.map((record) => record.id));
       const gone = (await existingIds(store, "pages")).filter((id) => !keep.has(id));
@@ -221,8 +235,26 @@ export async function putPage(store: AccountStore, page: PageRecord): Promise<vo
 
 export async function dropPage(store: AccountStore, pageId: string): Promise<void> {
   const id = checkedUuid(pageId);
-  await inWrite(store, () => store.database.withTransactionAsync(() => forgetPages(store, [id])));
-  removePhotoFiles(store, [id]);
+  const dropped = await inWrite(store, async () => {
+    let photo = true;
+    await store.database.withTransactionAsync(async () => {
+      const recent = await store.database.getFirstAsync<{ found: number }>("select 1 as found from photos where page_id = ? and opened_at >= ?", [
+        id,
+        Date.now() - ORPHAN_GRACE_MS,
+      ]);
+      photo = recent === null;
+      await deleteWhereIn(store, "pages", "id", [id]);
+      await deleteWhereIn(store, "page_alerts", "page_id", [id]);
+      await deleteWhereIn(store, "page_renderings", "page_id", [id]);
+      if (photo) {
+        await deleteWhereIn(store, "photos", "page_id", [id]);
+      }
+    });
+    return photo;
+  });
+  if (dropped) {
+    removePhotoFiles(store, [id]);
+  }
 }
 
 export async function dropNotebook(store: AccountStore, notebookId: string): Promise<void> {

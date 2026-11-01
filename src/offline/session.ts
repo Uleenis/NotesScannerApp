@@ -28,12 +28,21 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
     }
   }
 
+  function held(): AccountStore | null {
+    if (store !== null && !store.isOpen()) {
+      store = null;
+      deps.setStore(null);
+    }
+    return store;
+  }
+
   async function synchronise(): Promise<void> {
-    if (store === null || !deps.isOnline()) {
+    const open = held();
+    if (open === null || !deps.isOnline()) {
       return;
     }
     try {
-      await deps.sync(store);
+      await deps.sync(open);
     } catch {
       return;
     }
@@ -82,7 +91,7 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
       if (wanted === null) {
         return;
       }
-      if (store === null) {
+      if (held() === null) {
         await open(wanted);
       }
       await synchronise();

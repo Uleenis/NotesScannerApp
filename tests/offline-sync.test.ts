@@ -1,7 +1,7 @@
 import { readLibrary, replacePages } from "@/offline/library";
 import { PHOTO_TARGET_BYTES, hasPhoto, keepPhoto, openPhoto } from "@/offline/page-photos";
 import { closeAccountStores, openAccountStore, type AccountStore } from "@/offline/store";
-import { syncStore, type SyncDeps } from "@/offline/sync";
+import { SYNC_TIMEOUT_MS, syncStore, type SyncDeps } from "@/offline/sync";
 
 import { resetOffline } from "./fake-offline";
 import { USER, chapter, jpeg, notebook, page } from "./offline-fixtures";
@@ -190,6 +190,23 @@ describe("downloading the photos", () => {
 });
 
 describe("one synchronisation at a time", () => {
+  it("lets a new synchronisation start when the running one is stuck", async () => {
+    jest.useFakeTimers();
+    let loads = 0;
+    const stuck = deps({
+      pages: () => {
+        loads += 1;
+        return new Promise(() => undefined);
+      },
+    });
+    const first = syncStore(store, stuck);
+    await jest.advanceTimersByTimeAsync(SYNC_TIMEOUT_MS + 1);
+    await expect(first).resolves.toEqual({ status: "failed", downloaded: 0 });
+    void syncStore(store, stuck);
+    expect(loads).toBe(2);
+    jest.useRealTimers();
+  });
+
   it("shares a running synchronisation between two triggers", async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {

@@ -1,5 +1,5 @@
 import { PHOTO_BYTES_MAX } from "@/offline/photos";
-import { fetchPagePhoto, type FetchPhotoDeps } from "@/offline/fetch-photo";
+import { FETCH_TIMEOUT_MS, fetchPagePhoto, fetchPhotoAt, type FetchPhotoDeps } from "@/offline/fetch-photo";
 
 import { USER, jpeg, uuid } from "./offline-fixtures";
 
@@ -38,6 +38,28 @@ function deps(overrides: Partial<FetchPhotoDeps> = {}): FetchPhotoDeps & { urls:
     ...overrides,
   };
 }
+
+describe("a download that stalls", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("is abandoned after the time allowed and counted as a network failure", async () => {
+    jest.useFakeTimers();
+    let aborted = false;
+    const stalled = ((_url: string, init?: { signal?: AbortSignal }) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new Error("aborted"));
+        });
+      })) as unknown as typeof fetch;
+    const result = fetchPhotoAt(stalled, "https://storage.example/photo");
+    await jest.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 1);
+    await expect(result).resolves.toEqual({ status: "network" });
+    expect(aborted).toBe(true);
+  });
+});
 
 describe("fetching the photo of a page", () => {
   it("asks for the original under the user and the page, and returns the bytes", async () => {

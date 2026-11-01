@@ -95,6 +95,18 @@ describe("the offline session of the app", () => {
     expect(mockSession.network).toHaveBeenCalledWith(true);
   });
 
+  it("tells the session when the phone joins a free network while already online", async () => {
+    mockNetwork = { isConnected: true, type: "CELLULAR" };
+    const view = await render(<OfflineSync />);
+    expect(mockSession.network).not.toHaveBeenCalled();
+    mockNetwork = { isConnected: true, type: "WIFI" };
+    await view.rerender(<OfflineSync />);
+    expect(mockSession.network).toHaveBeenCalledTimes(1);
+    mockNetwork = { isConnected: true, type: "ETHERNET" };
+    await view.rerender(<OfflineSync />);
+    expect(mockSession.network).toHaveBeenCalledTimes(1);
+  });
+
   it("downloads photos on Wi-Fi or Ethernet only, with the app in front", async () => {
     const view = await render(<OfflineSync />);
     await mockDeps?.sync({ userId: USER });

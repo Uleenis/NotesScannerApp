@@ -54,12 +54,14 @@ export function OfflineSync() {
   }, [session]);
 
   const wasOnline = useRef(online);
+  const wasFree = useRef(free);
   useEffect(() => {
-    if (online && !wasOnline.current) {
+    if ((online && !wasOnline.current) || (free && !wasFree.current)) {
       void session.network(true);
     }
     wasOnline.current = online;
-  }, [online, session]);
+    wasFree.current = free;
+  }, [online, free, session]);
 
   return null;
 }

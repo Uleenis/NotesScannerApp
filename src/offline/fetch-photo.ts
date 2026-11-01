@@ -3,6 +3,8 @@ import { checkedUuid } from "./bytes";
 import { isJpeg } from "./page-photos";
 import { PHOTO_BYTES_MAX } from "./photos";
 
+export const FETCH_TIMEOUT_MS = 45_000;
+
 export type PhotoFetch = { status: "ok"; bytes: Uint8Array } | { status: "gone" } | { status: "network" };
 
 export type FetchPhotoDeps = {
@@ -11,8 +13,10 @@ export type FetchPhotoDeps = {
 };
 
 export async function fetchPhotoAt(fetchPhoto: typeof fetch, url: string): Promise<PhotoFetch> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetchPhoto(url);
+    const response = await fetchPhoto(url, { signal: controller.signal });
     if (response.status === 404 || response.status === 400 || response.status === 403) {
       return { status: "gone" };
     }
@@ -30,6 +34,8 @@ export async function fetchPhotoAt(fetchPhoto: typeof fetch, url: string): Promi
     return { status: "ok", bytes };
   } catch {
     return { status: "network" };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

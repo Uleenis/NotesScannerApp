@@ -1,4 +1,5 @@
 import {
+  LIST_CAP,
   dropNotebook,
   dropPage,
   putAlerts,
@@ -102,7 +103,7 @@ describe("filling from the server", () => {
   });
 
   it("removes a photo that belongs to no page of the list", async () => {
-    await keepPhoto(store, page(9, 1).id, jpeg(1024));
+    await keepPhoto(store, page(9, 1).id, jpeg(1024), { now: 1 });
     await replacePages(store, [page(1, 1)]);
     expect(await hasPhoto(store, page(9, 1).id)).toBe(false);
     expect(photoFiles()).toBe(0);
@@ -150,6 +151,50 @@ describe("filling from the server", () => {
   });
 });
 
+describe("a list as long as the server's limit", () => {
+  it("removes nothing, because the server may have cut it", async () => {
+    const all = Array.from({ length: LIST_CAP + 5 }, (_, n) => page(n + 1, 1));
+    await replacePages(store, all);
+    await replaceNotebooks(store, [notebook(1), notebook(2)]);
+    await replaceChapters(store, [chapter(1, 1), chapter(2, 1)]);
+    await keepPhoto(store, all[LIST_CAP + 2].id, jpeg(1024), { now: 1 });
+    await replacePages(store, all.slice(0, LIST_CAP));
+    await replaceNotebooks(store, Array.from({ length: LIST_CAP }, (_, n) => notebook(n + 10)));
+    await replaceChapters(store, Array.from({ length: LIST_CAP }, (_, n) => chapter(n + 10, 1)));
+    const library = await readLibrary(store);
+    expect(library.pages).toHaveLength(LIST_CAP + 5);
+    expect(library.notebooks).toHaveLength(LIST_CAP + 2);
+    expect(library.chapters).toHaveLength(LIST_CAP + 2);
+    expect(await hasPhoto(store, all[LIST_CAP + 2].id)).toBe(true);
+  });
+
+  it("removes again as soon as the list is shorter than the limit", async () => {
+    const all = Array.from({ length: LIST_CAP + 5 }, (_, n) => page(n + 1, 1));
+    await replacePages(store, all);
+    await replacePages(store, all.slice(0, LIST_CAP - 1));
+    expect((await readLibrary(store)).pages).toHaveLength(LIST_CAP - 1);
+  });
+});
+
+describe("a photo kept a moment ago", () => {
+  it("survives a list that was asked before its page existed, and is swept later", async () => {
+    await keepPhoto(store, page(9, 1).id, jpeg(1024));
+    await replacePages(store, [page(1, 1)]);
+    expect(await hasPhoto(store, page(9, 1).id)).toBe(true);
+    jest.spyOn(Date, "now").mockReturnValue(Date.now() + 11 * 60_000);
+    await replacePages(store, [page(1, 1)]);
+    jest.restoreAllMocks();
+    expect(await hasPhoto(store, page(9, 1).id)).toBe(false);
+  });
+
+  it("survives an answer that says its page is not there yet", async () => {
+    await keepPhoto(store, page(9, 1).id, jpeg(1024));
+    await dropPage(store, page(9, 1).id);
+    expect(await hasPhoto(store, page(9, 1).id)).toBe(true);
+    expect(photoFiles()).toBe(1);
+  });
+});
+
 describe("one object at a time", () => {
   it("stores a notebook, a chapter and a page, and replaces them", async () => {
     await putNotebook(store, notebook(1, "First"));
@@ -165,7 +210,7 @@ describe("one object at a time", () => {
 
   it("removes a page the server says is gone, with its photo", async () => {
     await putPage(store, page(1, 1));
-    await keepPhoto(store, page(1, 1).id, jpeg(1024));
+    await keepPhoto(store, page(1, 1).id, jpeg(1024), { now: 1 });
     await dropPage(store, page(1, 1).id);
     expect((await readLibrary(store)).pages).toEqual([]);
     expect(await hasPhoto(store, page(1, 1).id)).toBe(false);

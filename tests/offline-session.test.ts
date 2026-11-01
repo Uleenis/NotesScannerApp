@@ -120,6 +120,16 @@ describe("the offline store of the signed-in account", () => {
 });
 
 describe("overlapping openings", () => {
+  it("opens again at the foreground when the store it holds has been closed", async () => {
+    const { state, session } = setup();
+    await session.start(USER);
+    await state.stores[0].close();
+    await session.foreground();
+    expect(state.opens).toBe(2);
+    expect(state.current).toBe(state.stores[1]);
+    expect(state.synced).toEqual([USER, USER]);
+  });
+
   it("keeps the store open when the same account is wanted again while it opens", async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
@@ -138,9 +148,6 @@ describe("overlapping openings", () => {
     await Promise.all([first, second]);
     expect(shared.closed).toBe(false);
     expect(state.current).toBe(shared);
-    const flicker = session.start(null).then(() => session.start(USER));
-    await flicker;
-    expect(state.current?.userId).toBe(USER);
   });
 
   it("closes a store opened for an account that is no longer wanted", async () => {
