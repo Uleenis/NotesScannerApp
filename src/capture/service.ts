@@ -2,6 +2,7 @@ import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat, type ImageRef } from "expo-image-manipulator";
 
 import { getSupabase } from "@/lib/supabase";
+import { beginMirror } from "@/offline/mirror";
 import type { Allowance } from "./allowance";
 import { callPrepare, callRead, fetchAllowance, fetchLatestNotebookId, insertPage, markUploaded, uploadPhotoFile } from "./api";
 import { PHOTO_QUALITY, preparePhoto, shrinkTarget, type Picture } from "./photo";
@@ -81,7 +82,14 @@ function discardPhoto(uri: string): void {
 export const captureService: CaptureService = {
   allowance: () => fetchAllowance(getSupabase()),
   latestNotebookId: () => fetchLatestNotebookId(getSupabase()),
-  send: (input, onReadingSettled) => sendPage(realDeps(onReadingSettled), input),
+  send: async (input, onReadingSettled) => {
+    const mirror = beginMirror();
+    const result = await sendPage(realDeps(onReadingSettled), input);
+    if (result.status === "sent") {
+      await mirror.sentPhoto(result.pageId, input.photoUri).catch(() => undefined);
+    }
+    return result;
+  },
   preparePhoto: (picture, quarterTurns) => preparePhoto(picture, quarterTurns, { save: saveTurned }),
   prepareScan: (uri) => saveTurned(uri, 0),
   prepareImport: (uri, quarterTurns) => saveTurned(uri, (((quarterTurns % 4) + 4) % 4) * 90),

@@ -12,6 +12,7 @@ jest.mock("expo-font", () => ({
   useFonts: jest.fn(),
 }));
 jest.mock("expo-localization", () => ({ useLocales: jest.fn() }));
+jest.mock("expo-network", () => ({ useNetworkState: () => ({ isConnected: true, isInternetReachable: true }) }));
 jest.mock("@/auth/default-services", () => ({
   defaultAuthServices: {
     watch: () => () => undefined,
