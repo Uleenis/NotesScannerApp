@@ -39,19 +39,21 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
     }
   }
 
-  async function open(userId: string, mine: number): Promise<void> {
+  async function open(userId: string): Promise<void> {
     let opened: AccountStore;
     try {
       opened = await deps.open(userId);
     } catch {
       return;
     }
-    if (mine !== generation || wanted !== userId) {
+    if (wanted !== userId) {
       await opened.close().catch(() => undefined);
       return;
     }
-    store = opened;
-    deps.setStore(opened);
+    if (store === null) {
+      store = opened;
+      deps.setStore(opened);
+    }
   }
 
   return {
@@ -66,7 +68,7 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
       if (userId === null) {
         return;
       }
-      await open(userId, mine);
+      await open(userId);
       if (mine === generation) {
         await synchronise();
       }
@@ -81,8 +83,7 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
         return;
       }
       if (store === null) {
-        generation += 1;
-        await open(wanted, generation);
+        await open(wanted);
       }
       await synchronise();
     },

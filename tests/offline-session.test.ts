@@ -119,6 +119,54 @@ describe("the offline store of the signed-in account", () => {
   });
 });
 
+describe("overlapping openings", () => {
+  it("keeps the store open when the same account is wanted again while it opens", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const shared = fakeStore(USER);
+    const { state, session } = setup({
+      open: async () => {
+        await gate;
+        return shared;
+      },
+    });
+    const first = session.start(USER);
+    const second = session.foreground();
+    release();
+    await Promise.all([first, second]);
+    expect(shared.closed).toBe(false);
+    expect(state.current).toBe(shared);
+    const flicker = session.start(null).then(() => session.start(USER));
+    await flicker;
+    expect(state.current?.userId).toBe(USER);
+  });
+
+  it("closes a store opened for an account that is no longer wanted", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const stale = fakeStore(USER);
+    const { state, session } = setup({
+      open: async (userId) => {
+        if (userId === USER) {
+          await gate;
+          return stale;
+        }
+        return fakeStore(userId);
+      },
+    });
+    const first = session.start(USER);
+    await session.start(OTHER_USER);
+    release();
+    await first;
+    expect(stale.closed).toBe(true);
+    expect(state.current?.userId).toBe(OTHER_USER);
+  });
+});
+
 describe("when to synchronise", () => {
   it("synchronises when the network returns and at the foreground", async () => {
     const { state, session } = setup();

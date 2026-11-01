@@ -26,7 +26,8 @@ async function downloadPhotos(store: AccountStore, deps: SyncDeps): Promise<numb
   } catch {
     return 0;
   }
-  for (const pageId of wanted) {
+  const base = Date.now();
+  for (const [rank, pageId] of wanted.entries()) {
     if (!store.isOpen() || !deps.canDownload()) {
       break;
     }
@@ -41,7 +42,7 @@ async function downloadPhotos(store: AccountStore, deps: SyncDeps): Promise<numb
       if (fetched.status === "gone" || !store.isOpen() || (await hasPhoto(store, pageId))) {
         continue;
       }
-      await keepPhoto(store, pageId, fetched.bytes, { evict: false });
+      await keepPhoto(store, pageId, fetched.bytes, { evict: false, now: base - rank });
       downloaded += 1;
     } catch {
       continue;

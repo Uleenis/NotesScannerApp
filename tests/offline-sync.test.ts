@@ -99,6 +99,12 @@ describe("downloading the photos", () => {
     }
   });
 
+  it("marks the most recent pages as the most recently opened, so they are the last to go", async () => {
+    await syncStore(store, deps());
+    const rows = await store.database.getAllAsync<{ page_id: string }>("select page_id from photos order by opened_at desc");
+    expect(rows.map((row) => row.page_id)).toEqual([page(2, 1).id, page(3, 1).id, page(4, 1).id, page(1, 1).id]);
+  });
+
   it("downloads nothing on a network billed by use", async () => {
     const used = deps({ canDownload: () => false });
     const report = await syncStore(store, used);
