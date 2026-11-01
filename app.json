@@ -18,7 +18,8 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "allowBackup": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -28,7 +29,12 @@
       "expo-router",
       "expo-font",
       "expo-splash-screen",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": false
+        }
+      ],
       [
         "expo-image-picker",
         {
@@ -43,7 +49,14 @@
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
+      "./plugins/with-no-backup"
     ]
   }
 }

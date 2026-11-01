@@ -24,15 +24,20 @@ beforeEach(() => {
   mockFailing = false;
 });
 
-test("the folders of the scanner, of the photo picker and of the image tool in the cache are erased, nothing else", () => {
+test("the folders of the scanner, of the photo picker, of the image tool and of the photos shown offline in the cache are erased, nothing else", () => {
   sweepScans();
 
-  expect(mockDeleted).toEqual(["file:///cache/scans", "file:///cache/ImageManipulator", "file:///cache/ImagePicker"]);
+  expect(mockDeleted).toEqual([
+    "file:///cache/scans",
+    "file:///cache/ImageManipulator",
+    "file:///cache/ImagePicker",
+    "file:///cache/offline-view",
+  ]);
 });
 
 test("a folder that is gone or cannot be erased stops nothing", () => {
   mockFailing = true;
 
   expect(() => sweepScans()).not.toThrow();
-  expect(mockDeleted).toHaveLength(3);
+  expect(mockDeleted).toHaveLength(4);
 });
