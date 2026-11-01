@@ -21,7 +21,7 @@ export async function readKey(userId: string): Promise<StoredKey> {
   try {
     value = await SecureStore.getItemAsync(name, options());
   } catch {
-    return { status: "unreadable" };
+    throw new Error("key_unavailable");
   }
   if (value === null) {
     return { status: "absent" };

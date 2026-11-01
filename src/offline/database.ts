@@ -20,6 +20,8 @@ create table photos (page_id text primary key not null, bytes integer not null c
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
+const UNREADABLE = ["file is not a database", "database disk image is malformed"];
+
 export class StoreUnreadable extends Error {
   constructor() {
     super("store_unreadable");
@@ -29,8 +31,11 @@ export class StoreUnreadable extends Error {
 async function migrate(database: SQLiteDatabase): Promise<void> {
   const row = await database.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
   const current = row?.user_version ?? 0;
-  if (!Number.isInteger(current) || current < 0 || current > SCHEMA_VERSION) {
+  if (!Number.isInteger(current) || current < 0) {
     throw new StoreUnreadable();
+  }
+  if (current > SCHEMA_VERSION) {
+    throw new Error("store_newer");
   }
   for (let version = current; version < SCHEMA_VERSION; version += 1) {
     await database.withTransactionAsync(async () => {
@@ -54,8 +59,9 @@ export async function openDatabase(folder: Directory, key: string): Promise<SQLi
     }
     try {
       await database.getFirstAsync("select count(*) as count from sqlite_master");
-    } catch {
-      throw new StoreUnreadable();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      throw UNREADABLE.some((text) => message.includes(text)) ? new StoreUnreadable() : error;
     }
     await database.execAsync("PRAGMA temp_store = MEMORY");
     await migrate(database);

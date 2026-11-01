@@ -13,6 +13,7 @@ public class BackupExclusionModule: Module {
       values.isExcludedFromBackup = true
       do {
         try url.setResourceValues(values)
+        url.removeAllCachedResourceValues()
         let read = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
         return read.isExcludedFromBackup == true
       } catch {

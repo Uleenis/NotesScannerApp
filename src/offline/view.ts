@@ -12,6 +12,13 @@ export function writeViewFile(bytes: Uint8Array): File {
   return file;
 }
 
+export function clearViewFiles(): void {
+  const folder = new Directory(Paths.cache, VIEW_FOLDER);
+  if (folder.exists) {
+    folder.delete();
+  }
+}
+
 export function eraseViewFile(file: File): void {
   try {
     file.delete();

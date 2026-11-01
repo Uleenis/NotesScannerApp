@@ -22,7 +22,8 @@ export const fakeFiles = new Map<string, Uint8Array>();
 export const fakeDirectories = new Set<string>();
 export const fakeDatabases = new Map<string, { key: string | null; userVersion: number; tables: string[] }>();
 export const fakeOpened: FakeDatabase[] = [];
-export const fakeSqlite = { cipher: true };
+export const fakeSqlite = { cipher: true, probeError: null as string | null };
+export const fakeFaults = { directoryDelete: false, write: false };
 export const fakeSecure = {
   values: new Map<string, string>(),
   getFails: 0,
@@ -36,6 +37,9 @@ export function resetOffline(): void {
   fakeDatabases.clear();
   fakeOpened.length = 0;
   fakeSqlite.cipher = true;
+  fakeSqlite.probeError = null;
+  fakeFaults.directoryDelete = false;
+  fakeFaults.write = false;
   fakeSecure.values.clear();
   fakeSecure.getFails = 0;
   fakeSecure.calls.length = 0;
@@ -96,6 +100,9 @@ class FakeDirectory {
     if (!this.exists) {
       throw new Error("missing directory");
     }
+    if (fakeFaults.directoryDelete) {
+      throw new Error("busy");
+    }
     removeUnder(this.uri);
   }
   list(): (FakeDirectory | FakeFile)[] {
@@ -128,6 +135,10 @@ class FakeFile {
   write(content: Uint8Array | string): void {
     if (!this.exists) {
       throw new Error("missing file");
+    }
+    if (fakeFaults.write) {
+      fakeFiles.set(this.uri, new Uint8Array(3));
+      throw new Error("no space left");
     }
     fakeFiles.set(this.uri, typeof content === "string" ? textBytes(content) : new Uint8Array(content));
   }
@@ -214,6 +225,11 @@ export class FakeDatabase {
       return { user_version: file.userVersion } as T;
     }
     if (sql === "select count(*) as count from sqlite_master") {
+      if (fakeSqlite.probeError !== null) {
+        const message = fakeSqlite.probeError;
+        fakeSqlite.probeError = null;
+        throw new Error(message);
+      }
       return { count: file.tables.length } as T;
     }
     throw new Error(`unexpected query ${sql}`);

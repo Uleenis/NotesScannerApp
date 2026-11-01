@@ -28,9 +28,19 @@ export function countPhotos(account: Directory, kind: PhotoKind): number {
   return folder.list().filter((entry) => entry instanceof File).length;
 }
 
-export function sealedPhotos(account: Directory, kind: PhotoKind, key: AESEncryptionKey): SealedPhotos {
+export function sealedPhotos(
+  account: Directory,
+  kind: PhotoKind,
+  key: AESEncryptionKey,
+  isOpen: () => boolean,
+): SealedPhotos {
   const folder = photoFolder(account, kind);
-  const file = (id: string) => new File(folder, `${checkedUuid(id)}.bin`);
+  const file = (id: string) => {
+    if (!isOpen()) {
+      throw new Error("store_closed");
+    }
+    return new File(folder, `${checkedUuid(id)}.bin`);
+  };
   const label = (id: string) => `${kind}:${id}`;
   return {
     async save(id, bytes) {
@@ -39,9 +49,19 @@ export function sealedPhotos(account: Directory, kind: PhotoKind, key: AESEncryp
         throw new Error("photo_size");
       }
       const sealed = await seal(bytes, key, label(id));
-      folder.create({ intermediates: true, idempotent: true });
-      target.create({ overwrite: true });
-      target.write(sealed);
+      if (!isOpen()) {
+        throw new Error("store_closed");
+      }
+      try {
+        folder.create({ intermediates: true, idempotent: true });
+        target.create({ overwrite: true });
+        target.write(sealed);
+      } catch (error) {
+        if (target.exists) {
+          target.delete();
+        }
+        throw error;
+      }
     },
     async open(id) {
       const target = file(id);

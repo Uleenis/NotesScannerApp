@@ -7,18 +7,21 @@ import { deriveKeys } from "./cipher";
 import { StoreUnreadable, openDatabase } from "./database";
 import { createKey, deleteKey, readKey } from "./key";
 import { countPhotos, sealedPhotos, type SealedPhotos } from "./photos";
+import { clearViewFiles } from "./view";
 
 export type AccountStore = {
   userId: string;
   database: SQLiteDatabase;
   pagePhotos: SealedPhotos;
   queuePhotos: SealedPhotos;
+  isOpen(): boolean;
   close(): Promise<void>;
 };
 
 export type OpenedStore = { store: AccountStore; lostPending: number };
 
 const stores = new Map<string, Promise<AccountStore>>();
+const turns = new Map<string, Promise<void>>();
 
 function offlineRoot(): Directory {
   return new Directory(Paths.document, "offline");
@@ -32,16 +35,32 @@ function hasContent(folder: Directory): boolean {
   return folder.exists && folder.list().length > 0;
 }
 
+function inTurn<T>(userId: string, task: () => Promise<T>): Promise<T> {
+  const previous = turns.get(userId) ?? Promise.resolve();
+  const next = previous.then(task);
+  const settled = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  turns.set(userId, settled);
+  void settled.then(() => {
+    if (turns.get(userId) === settled) {
+      turns.delete(userId);
+    }
+  });
+  return next;
+}
+
 async function erase(userId: string, folder: Directory): Promise<number> {
   const lost = countPhotos(folder, "queue");
+  await deleteKey(userId);
   if (folder.exists) {
     folder.delete();
   }
-  await deleteKey(userId);
   return lost;
 }
 
-async function build(userId: string, report: (lost: number) => void): Promise<Omit<AccountStore, "close">> {
+async function build(userId: string, report: (lost: number) => void): Promise<AccountStore> {
   const folder = accountFolder(userId);
   const root = offlineRoot();
   root.create({ intermediates: true, idempotent: true });
@@ -68,12 +87,27 @@ async function build(userId: string, report: (lost: number) => void): Promise<Om
     keys = await deriveKeys(await createKey(userId));
     database = await openDatabase(folder, keys.database);
   }
-  return {
+  let open = true;
+  const isOpen = () => open;
+  const store: AccountStore = {
     userId,
     database,
-    pagePhotos: sealedPhotos(folder, "pages", keys.photos),
-    queuePhotos: sealedPhotos(folder, "queue", keys.photos),
+    pagePhotos: sealedPhotos(folder, "pages", keys.photos, isOpen),
+    queuePhotos: sealedPhotos(folder, "queue", keys.photos, isOpen),
+    isOpen,
+    async close() {
+      if (!open) {
+        return;
+      }
+      open = false;
+      if (stores.get(userId) === opening) {
+        stores.delete(userId);
+      }
+      await database.closeAsync();
+    },
   };
+  const opening = stores.get(userId);
+  return store;
 }
 
 export async function openAccountStore(userId: string): Promise<OpenedStore> {
@@ -83,17 +117,11 @@ export async function openAccountStore(userId: string): Promise<OpenedStore> {
     return { store: await existing, lostPending: 0 };
   }
   let lostPending = 0;
-  const opening: Promise<AccountStore> = build(userId, (lost) => {
-    lostPending += lost;
-  }).then((parts) => ({
-    ...parts,
-    async close() {
-      if (stores.get(userId) === opening) {
-        stores.delete(userId);
-      }
-      await parts.database.closeAsync();
-    },
-  }));
+  const opening = inTurn(userId, () =>
+    build(userId, (lost) => {
+      lostPending += lost;
+    }),
+  );
   stores.set(userId, opening);
   try {
     return { store: await opening, lostPending };
@@ -124,8 +152,11 @@ export async function wipeAccountStore(userId: string): Promise<number> {
   const folder = accountFolder(userId);
   const opening = stores.get(userId);
   stores.delete(userId);
-  if (opening !== undefined) {
-    await closeOpening(opening);
-  }
-  return erase(userId, folder);
+  return inTurn(userId, async () => {
+    if (opening !== undefined) {
+      await closeOpening(opening);
+    }
+    clearViewFiles();
+    return erase(userId, folder);
+  });
 }

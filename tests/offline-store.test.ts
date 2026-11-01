@@ -6,6 +6,7 @@ import { VIEW_FOLDER, eraseViewFile, writeViewFile } from "@/offline/view";
 
 import {
   fakeDatabases,
+  fakeFaults,
   fakeFiles,
   fakeOpened,
   fakeRandom,
@@ -94,6 +95,12 @@ describe("the key of an account", () => {
       expect(contains(content, masterBytes)).toBe(false);
       expect(contains(content, textBytes(master))).toBe(false);
     }
+    const derived = /x'([0-9a-f]{64})'/.exec(fakeOpened[0].statements[0])?.[1] ?? "";
+    expect(derived).toHaveLength(64);
+    for (const content of fakeFiles.values()) {
+      expect(contains(content, fromHex(derived))).toBe(false);
+      expect(contains(content, textBytes(derived))).toBe(false);
+    }
     for (const statement of fakeOpened.flatMap((database) => database.statements)) {
       expect(statement).not.toContain(master);
     }
@@ -147,36 +154,68 @@ describe("the key of an account", () => {
     expect(await opened.store.pagePhotos.open(PAGE)).toEqual({ status: "refused" });
   });
 
-  it("when it cannot be read, erases everything the phone keeps of the account and tells how many waiting pages were lost", async () => {
+  it("when it is unreadable, erases everything the phone keeps of the account and tells how many waiting pages were lost", async () => {
     const { store } = await openAccountStore(USER);
     await store.pagePhotos.save(PAGE, photo());
     await store.queuePhotos.save(PAGE, photo());
     await store.queuePhotos.save(PAGE_TWO, photo());
     await store.close();
-    const before = fakeSecure.values.get(KEY_NAME);
 
-    fakeSecure.getFails = 1;
+    fakeSecure.values.set(KEY_NAME, "not a key");
     const { store: rebuilt, lostPending } = await openAccountStore(USER);
 
     expect(lostPending).toBe(2);
     expect(fakeSecure.values.get(KEY_NAME)).toMatch(/^[0-9a-f]{64}$/);
-    expect(fakeSecure.values.get(KEY_NAME)).not.toBe(before);
     expect(fakeSecure.calls.some((call) => call.action === "delete" && call.key === KEY_NAME)).toBe(true);
     expect(await rebuilt.pagePhotos.open(PAGE)).toEqual({ status: "missing" });
     expect(await rebuilt.queuePhotos.open(PAGE)).toEqual({ status: "missing" });
     expect(fakeDatabases.get(`${FOLDER}/store.db`)?.userVersion).toBe(1);
   });
 
-  it("when it is not a key of 256 bits, is unreadable too", async () => {
+  it("when the secure store fails for a moment, opens nothing and erases nothing; the next opening finds everything", async () => {
+    const { store } = await openAccountStore(USER);
+    await store.queuePhotos.save(PAGE, photo());
+    await store.close();
+    const before = fakeSecure.values.get(KEY_NAME);
+
+    fakeSecure.getFails = 1;
+    await expect(openAccountStore(USER)).rejects.toThrow("key_unavailable");
+
+    expect(fakeSecure.values.get(KEY_NAME)).toBe(before);
+    expect(fakeFiles.has(`${FOLDER}/queue/${PAGE}.bin`)).toBe(true);
+    const { store: again, lostPending } = await openAccountStore(USER);
+    expect(lostPending).toBe(0);
+    expect((await again.queuePhotos.open(PAGE)).status).toBe("ok");
+  });
+
+  it("erases the store when the database is damaged, and nothing when it fails for another reason", async () => {
     const { store } = await openAccountStore(USER);
     await store.queuePhotos.save(PAGE, photo());
     await store.close();
 
-    fakeSecure.values.set(KEY_NAME, "not a key");
-    const { lostPending } = await openAccountStore(USER);
+    fakeSqlite.probeError = "database is locked";
+    await expect(openAccountStore(USER)).rejects.toThrow("database is locked");
+    expect(fakeFiles.has(`${FOLDER}/queue/${PAGE}.bin`)).toBe(true);
+    expect(fakeSecure.values.has(KEY_NAME)).toBe(true);
 
+    fakeSqlite.probeError = "database disk image is malformed";
+    const { lostPending } = await openAccountStore(USER);
     expect(lostPending).toBe(1);
-    expect(fakeSecure.values.get(KEY_NAME)).toMatch(/^[0-9a-f]{64}$/);
+    expect(fakeFiles.has(`${FOLDER}/queue/${PAGE}.bin`)).toBe(false);
+  });
+
+  it("keeps a store written by a newer version of the app and refuses to open it", async () => {
+    const { store } = await openAccountStore(USER);
+    await store.queuePhotos.save(PAGE, photo());
+    await store.close();
+    const database = fakeDatabases.get(`${FOLDER}/store.db`);
+    if (database !== undefined) {
+      database.userVersion = 2;
+    }
+
+    await expect(openAccountStore(USER)).rejects.toThrow("store_newer");
+    expect(fakeFiles.has(`${FOLDER}/queue/${PAGE}.bin`)).toBe(true);
+    expect(fakeSecure.values.has(KEY_NAME)).toBe(true);
   });
 
   it("when it is gone but files of the account are left, erases them before drawing a new one", async () => {
@@ -279,6 +318,26 @@ describe("the photos", () => {
     expect(await store.pagePhotos.open(PAGE)).toEqual({ status: "refused" });
   });
 
+  it("leave no partial file when writing fails", async () => {
+    const { store } = await openAccountStore(USER);
+
+    fakeFaults.write = true;
+    await expect(store.queuePhotos.save(PAGE, photo())).rejects.toThrow("no space left");
+
+    expect(fakeFiles.has(`${FOLDER}/queue/${PAGE}.bin`)).toBe(false);
+  });
+
+  it("are refused once their store is closed", async () => {
+    const { store } = await openAccountStore(USER);
+    await store.pagePhotos.save(PAGE, photo());
+    await store.close();
+
+    expect(store.isOpen()).toBe(false);
+    await expect(store.pagePhotos.open(PAGE)).rejects.toThrow("store_closed");
+    await expect(store.queuePhotos.save(PAGE, photo())).rejects.toThrow("store_closed");
+    expect(fakeFiles.has(`${FOLDER}/queue/${PAGE}.bin`)).toBe(false);
+  });
+
   it("can be removed one by one", async () => {
     const { store } = await openAccountStore(USER);
     await store.pagePhotos.save(PAGE, photo());
@@ -306,6 +365,48 @@ describe("wiping an account", () => {
     expect(fakeSecure.values.has(KEY_NAME)).toBe(false);
     expect((await other.pagePhotos.open(PAGE)).status).toBe("ok");
     expect(fakeSecure.values.has(`offline-key.${OTHER}`)).toBe(true);
+  });
+
+  it("erases the clear photo files shown on screen, and refuses the photos of the closed store", async () => {
+    const { store } = await openAccountStore(USER);
+    const shown = writeViewFile(photo());
+
+    await wipeAccountStore(USER);
+
+    expect(fakeFiles.has(shown.uri)).toBe(false);
+    await expect(store.queuePhotos.save(PAGE, photo())).rejects.toThrow("store_closed");
+    expect([...fakeFiles.keys()].filter((uri) => uri.startsWith(FOLDER))).toEqual([]);
+  });
+
+  it("erases the key first: when the files cannot all be erased, they can no longer be read and the next opening erases them", async () => {
+    const { store } = await openAccountStore(USER);
+    await store.queuePhotos.save(PAGE, photo());
+
+    fakeFaults.directoryDelete = true;
+    await expect(wipeAccountStore(USER)).rejects.toThrow("busy");
+    expect(fakeSecure.values.has(KEY_NAME)).toBe(false);
+
+    fakeFaults.directoryDelete = false;
+    const { store: fresh, lostPending } = await openAccountStore(USER);
+    expect(lostPending).toBe(1);
+    expect(await fresh.queuePhotos.open(PAGE)).toEqual({ status: "missing" });
+  });
+
+  it("then opening at once, without waiting, opens only once the wipe is done", async () => {
+    const { store } = await openAccountStore(USER);
+    await store.pagePhotos.save(PAGE, photo());
+
+    const wiping = wipeAccountStore(USER);
+    const opening = openAccountStore(USER);
+    await wiping;
+    const { store: fresh } = await opening;
+    await fresh.queuePhotos.save(PAGE, photo());
+    await fresh.close();
+    const { store: again } = await openAccountStore(USER);
+
+    expect(fresh).not.toBe(store);
+    expect(await again.pagePhotos.open(PAGE)).toEqual({ status: "missing" });
+    expect((await again.queuePhotos.open(PAGE)).status).toBe("ok");
   });
 
   it("of an account never opened on this phone erases nothing and loses nothing", async () => {

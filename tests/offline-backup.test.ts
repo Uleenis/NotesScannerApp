@@ -122,7 +122,7 @@ describe("iCloud backups", () => {
   it("are left out by the native module, which sets the mark and reads it back", () => {
     expect(moduleConfig.platforms).toEqual(["apple"]);
     expect(swift).toMatch(/isExcludedFromBackup = true/);
-    expect(swift).toMatch(/resourceValues\(forKeys: \[\.isExcludedFromBackupKey\]\)/);
+    expect(swift).toMatch(/removeAllCachedResourceValues\(\)\s+let read = try url\.resourceValues\(forKeys: \[\.isExcludedFromBackupKey\]\)/);
   });
 
   it("leave out the key: it never leaves this phone", async () => {
