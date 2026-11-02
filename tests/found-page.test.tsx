@@ -198,6 +198,20 @@ describe("a page opened from a search result", () => {
     expect(style).toMatchObject({ left: "10%", top: "20%", width: "20%", height: "5%" });
   });
 
+  test("a second tap on the photo while the sheet is open opens no second sheet", async () => {
+    const app = await openPage("/page/page-1?found=7");
+    await showPhoto();
+    await screen.findByLabelText(fr.search.frameLabel);
+
+    await fireEvent.press(screen.getByTestId("found-photo"));
+    await waitFor(() => expect(app.getPathname()).toBe("/page/page-1/photo"));
+    await fireEvent.press(screen.getByTestId("found-photo", { includeHiddenElements: true }));
+
+    expect(screen.getAllByTestId("photo-sheet-bar", { includeHiddenElements: true })).toHaveLength(1);
+    await fireEvent.press(screen.getByText(fr.photo.close));
+    await waitFor(() => expect(app.getPathname()).toBe("/page/page-1"));
+  });
+
   test("the photo sheet opened the usual way has no box", async () => {
     await openPage("/page/page-1/photo");
     await fireEvent(await screen.findByTestId("zoomable-photo"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 300 } } });
