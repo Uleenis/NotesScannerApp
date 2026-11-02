@@ -3,7 +3,10 @@ import { ImageManipulator, SaveFormat, type ImageRef } from "expo-image-manipula
 
 import { getSupabase } from "@/lib/supabase";
 import { beginMirror } from "@/offline/mirror";
+import { isOnline } from "@/offline/network";
 import type { Allowance } from "./allowance";
+import { offlineLimit } from "./offline-limit";
+import { queuePage, type EnqueueInput, type EnqueueResult } from "./queue-service";
 import { callPrepare, callRead, fetchAllowance, fetchLatestNotebookId, insertPage, markUploaded, uploadPhotoFile } from "./api";
 import { PHOTO_QUALITY, preparePhoto, shrinkTarget, type Picture } from "./photo";
 import { sendPage, type SendDeps, type SendInput, type SendResult } from "./send-page";
@@ -14,6 +17,7 @@ const SEND_TIMEOUT_MS = 120_000;
 export type CaptureService = {
   allowance: () => Promise<Allowance | null>;
   latestNotebookId: () => Promise<string | null>;
+  enqueue: (input: EnqueueInput) => Promise<EnqueueResult>;
   send: (input: SendInput, onReadingSettled?: () => void) => Promise<SendResult>;
   preparePhoto: (picture: Picture, quarterTurns: number) => Promise<string>;
   prepareScan: (uri: string) => Promise<string>;
@@ -80,7 +84,26 @@ function discardPhoto(uri: string): void {
 }
 
 export const captureService: CaptureService = {
-  allowance: () => fetchAllowance(getSupabase()),
+  allowance: async () => {
+    if (!isOnline()) {
+      return offlineLimit();
+    }
+    const mirror = beginMirror();
+    try {
+      const allowance = await fetchAllowance(getSupabase());
+      if (allowance !== null) {
+        await mirror.limit(allowance);
+      }
+      return allowance;
+    } catch (error) {
+      const known = await offlineLimit();
+      if (known === null) {
+        throw error;
+      }
+      return known;
+    }
+  },
+  enqueue: queuePage,
   latestNotebookId: () => fetchLatestNotebookId(getSupabase()),
   send: async (input, onReadingSettled) => {
     const mirror = beginMirror();

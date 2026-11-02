@@ -1,6 +1,5 @@
-import { useNetworkState } from "expo-network";
+import { useOnline } from "@/offline/network";
 
 export function useOffline(): boolean {
-  const state = useNetworkState();
-  return state.isConnected === false;
+  return !useOnline();
 }

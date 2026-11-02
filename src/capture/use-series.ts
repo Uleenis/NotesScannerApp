@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { BackHandler } from "react-native";
 
 import { useStrings } from "@/i18n";
+import { isOnline } from "@/offline/network";
 import { confirmDeletion } from "@/lib/action-menu";
 import { blockForReason, type Block, type BlockReason } from "./allowance";
 import type { PageSource } from "./api";
@@ -26,8 +27,9 @@ export type Phase =
   | { kind: "preparing"; page: number; total: number }
   | { kind: "blurry"; importFailed?: true }
   | { kind: "sending"; page: number; total: number }
+  | { kind: "queueing"; page: number; total: number }
   | { kind: "interrupted"; pending: number }
-  | { kind: "ended"; notSent: number; block: Block | null; leftOut: number; next: string | null };
+  | { kind: "ended"; notSent: number; notSaved: number; block: Block | null; leftOut: number; next: string | null };
 
 const IDLE: Phase = { kind: "idle", notice: null, noScanner: false, leftOut: 0 };
 
@@ -376,8 +378,49 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     }
   }
 
+  async function queueAll(list: SeriesPage[]) {
+    busy.current = true;
+    const { notebookId, chapterId } = sentTo.current;
+    let queued = 0;
+    let notSaved = 0;
+    for (const [index, page] of list.entries()) {
+      if (!alive()) {
+        list.slice(index).forEach((left) => captureService.discardPhoto(left.uri));
+        break;
+      }
+      setPhase({ kind: "queueing", page: index + 1, total: list.length });
+      inFlight.current = page.uri;
+      const result = await captureService.enqueue({ notebookId, chapterId, photoUri: page.uri, source: mode.current });
+      inFlight.current = null;
+      held.current = held.current.filter((uri) => uri !== page.uri);
+      captureService.discardPhoto(page.uri);
+      if (result.status === "queued") {
+        queued += 1;
+      } else {
+        notSaved += 1;
+      }
+    }
+    busy.current = false;
+    if (!alive()) {
+      return;
+    }
+    pending.current = [];
+    held.current = [];
+    setPages([]);
+    const next = queued === 0 ? null : chapterId === null ? `/notebook/${notebookId}` : `/chapter/${chapterId}`;
+    if (notSaved === 0 && leftOut.current === 0 && next !== null) {
+      router.replace(next);
+    } else {
+      setPhase({ kind: "ended", notSent: 0, notSaved, block: null, leftOut: leftOut.current, next });
+    }
+  }
+
   async function sendAll(list: SeriesPage[]) {
     if (busy.current || !alive()) {
+      return;
+    }
+    if (!isOnline()) {
+      await queueAll(list);
       return;
     }
     busy.current = true;
@@ -431,7 +474,7 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     } else if (next === null) {
       setPhase(idle(null, leftOut.current));
     } else {
-      setPhase({ kind: "ended", notSent: 0, block: null, leftOut: leftOut.current, next });
+      setPhase({ kind: "ended", notSent: 0, notSaved: 0, block: null, leftOut: leftOut.current, next });
     }
   }
 
@@ -447,7 +490,7 @@ export function useSeries(target: Target, limit: number, ready: boolean) {
     if (next === null) {
       router.replace({ pathname: "/limit", params: limitParams(block) });
     } else {
-      setPhase({ kind: "ended", notSent, block, leftOut: leftOut.current, next });
+      setPhase({ kind: "ended", notSent, notSaved: 0, block, leftOut: leftOut.current, next });
     }
   }
 

@@ -10,7 +10,7 @@ import type { AccountStore } from "./store";
 
 type Reader<T> = (store: AccountStore) => Promise<T | undefined>;
 
-async function readStore<T>(read: Reader<T>): Promise<T | undefined> {
+export async function readStore<T>(read: Reader<T>): Promise<T | undefined> {
   const store = getMirrorStore();
   if (store === null || !store.isOpen()) {
     return undefined;

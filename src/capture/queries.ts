@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/auth/auth-provider";
+import { useOnline } from "@/offline/network";
 import type { Allowance } from "./allowance";
 import type { SendInput, SendResult } from "./send-page";
 import { captureService } from "./service";
@@ -18,10 +19,11 @@ export function useAllowance() {
 
 export function useLatestNotebookId() {
   const { status, userId } = useAuth();
+  const online = useOnline();
   return useQuery({
     queryKey: ["latest-notebook", userId],
     queryFn: () => captureService.latestNotebookId(),
-    enabled: status === "ready",
+    enabled: status === "ready" && online,
     retry: false,
   });
 }

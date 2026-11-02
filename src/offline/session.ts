@@ -4,6 +4,7 @@ export type SessionDeps = {
   open: (userId: string) => Promise<AccountStore>;
   setStore: (store: AccountStore | null) => void;
   sync: (store: AccountStore) => Promise<unknown>;
+  sendQueue: (store: AccountStore) => Promise<unknown>;
   isOnline: () => boolean;
 };
 
@@ -40,6 +41,11 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
     const open = held();
     if (open === null || !deps.isOnline()) {
       return;
+    }
+    try {
+      await deps.sendQueue(open);
+    } catch {
+      await Promise.resolve();
     }
     try {
       await deps.sync(open);

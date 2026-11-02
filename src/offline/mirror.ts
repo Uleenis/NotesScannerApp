@@ -1,5 +1,6 @@
 import { File } from "expo-file-system";
 
+import type { Allowance } from "@/capture/allowance";
 import type { ChapterSummary } from "@/notebooks/chapters";
 import type { NotebookSummary } from "@/notebooks/notebooks";
 import type { ShownAlert } from "@/pages/alerts";
@@ -17,6 +18,7 @@ import {
   replaceNotebooks,
   replacePages,
 } from "./library";
+import { putLimit } from "./limit";
 import { hasPhoto, keepPhoto, touchPhoto } from "./page-photos";
 import { announceStore } from "./store-ready";
 import type { AccountStore } from "./store";
@@ -29,6 +31,7 @@ export type Mirror = {
   page: (id: string, value: PageRecord | null) => Promise<void>;
   alerts: (pageId: string, value: ShownAlert[]) => Promise<void>;
   rendering: (pageId: string, value: StoredRendering | null) => Promise<void>;
+  limit: (allowance: Allowance) => Promise<void>;
   sentPhoto: (pageId: string, photoUri: string) => Promise<void>;
   openedPhoto: (pageId: string, load: () => Promise<PhotoFetch>) => Promise<void>;
 };
@@ -114,6 +117,7 @@ export function createMirror(store: AccountStore | null): Mirror {
     page: (id, value) => withStore((open) => (value === null ? dropPage(open, id) : putPage(open, record(value)))),
     alerts: (pageId, value) => withStore((open) => putAlerts(open, pageId, value)),
     rendering: (pageId, value) => withStore((open) => putRendering(open, pageId, value)),
+    limit: (allowance) => withStore((open) => putLimit(open, allowance)),
     sentPhoto: (pageId, photoUri) =>
       withStore(async (open) => {
         await keepPhoto(open, pageId, await new File(photoUri).bytes());

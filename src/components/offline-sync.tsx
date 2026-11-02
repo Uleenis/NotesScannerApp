@@ -3,8 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { useAuth } from "@/auth/auth-provider";
+import { realQueueDeps } from "@/capture/queue-service";
 import { defaultSyncDeps, signedInUser } from "@/offline/default-sync";
 import { setMirrorIdentity, setMirrorStore } from "@/offline/mirror";
+import { sendQueue } from "@/offline/queue-send";
+import { noteLost } from "@/offline/queue-state";
 import { createOfflineSession } from "@/offline/session";
 import { openAccountStore } from "@/offline/store";
 import { syncStore } from "@/offline/sync";
@@ -24,9 +27,14 @@ export function OfflineSync() {
 
   const [session] = useState(() =>
     createOfflineSession({
-      open: async (id) => (await openAccountStore(id)).store,
+      open: async (id) => {
+        const opened = await openAccountStore(id);
+        noteLost(opened.lostPending);
+        return opened.store;
+      },
       setStore: setMirrorStore,
       sync: (store) => syncStore(store, defaultSyncDeps(store.userId, () => now.free && AppState.currentState === "active")),
+      sendQueue: (store) => sendQueue(store, realQueueDeps()),
       isOnline: () => now.online,
     }),
   );

@@ -6,12 +6,15 @@ import { LargeTitle } from "@/components/large-title";
 import { LoadError } from "@/components/load-error";
 import { MenuButton } from "@/components/menu-button";
 import { PageRow } from "@/components/reading/page-row";
+import { WaitingRow } from "@/components/reading/waiting-row";
 import { ScanButton } from "@/components/scan-button";
 import { planChapter } from "@/export/document";
 import { useExportItem } from "@/export/use-export";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
 import { useGate } from "@/offline/use-gate";
+import { useWaitingPages } from "@/offline/use-waiting";
+import { waitingInChapter } from "@/offline/waiting";
 import { useChapters, useDeleteChapter, useNotebook } from "@/notebooks/queries";
 import type { DeleteResult } from "@/notebooks/removal";
 import { usePages } from "@/pages/queries";
@@ -27,6 +30,7 @@ export default function ChapterScreen() {
   const deletion = useDeleteChapter();
   const exportItem = useExportItem();
   const gate = useGate();
+  const waiting = useWaitingPages();
 
   if (chapters.data === undefined) {
     return chapters.isError ? <LoadError message={t.chapter.loadFailed} onRetry={() => chapters.refetch()} /> : null;
@@ -38,6 +42,8 @@ export default function ChapterScreen() {
   const notebookId = chapter.notebookId;
   const chapterName = chapter.name;
   const chapterPages = (pages.data ?? []).filter((page) => page.chapterId === id).sort((a, b) => b.number - a.number);
+
+  const waitingHere = waitingInChapter(waiting ?? [], id);
 
   function backToNotebook() {
     router.dismissTo(`/notebook/${notebookId}`);
@@ -84,7 +90,7 @@ export default function ChapterScreen() {
       <LargeTitle text={chapter.name} />
       <View style={styles.container}>
         <Text style={styles.count}>{t.notebook.pageCount(chapter.pageCount)}</Text>
-        {chapter.pageCount === 0 ? (
+        {chapter.pageCount === 0 && waitingHere.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>{t.chapter.emptyTitle}</Text>
             <Text style={styles.emptyBody}>{t.chapter.emptyBody}</Text>
@@ -95,6 +101,9 @@ export default function ChapterScreen() {
           ) : null
         ) : (
           <ScrollView contentContainerStyle={styles.list}>
+            {waitingHere.map((entry) => (
+              <WaitingRow key={entry.id} entry={entry} onPress={() => router.push(`/waiting/${entry.id}`)} />
+            ))}
             {chapterPages.map((page) => (
               <PageRow key={page.id} page={page} onPress={() => router.push(`/page/${page.id}`)} />
             ))}

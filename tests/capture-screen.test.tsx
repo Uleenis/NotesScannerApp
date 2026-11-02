@@ -13,6 +13,7 @@ import { captureService } from "@/capture/service";
 import type { SharpnessCheck } from "@/capture/sharpness";
 import { strings } from "@/i18n";
 import { notebookService } from "@/notebooks/service";
+import { setOnline } from "@/offline/network";
 import { pageService } from "@/pages/service";
 import { deferred } from "./fake-auth-client";
 import { histoire, installFakeNotebooks, sciences } from "./fake-notebook-service";
@@ -50,6 +51,7 @@ jest.mock("@/capture/service", () => ({
     allowance: jest.fn(),
     latestNotebookId: jest.fn(),
     send: jest.fn(),
+    enqueue: jest.fn(),
     prepareScan: jest.fn(),
     prepareImport: jest.fn(),
     discardPhoto: jest.fn(),
@@ -107,6 +109,7 @@ beforeEach(() => {
   jest.mocked(defaultAuthServices.syncLanguage).mockResolvedValue(true);
   jest.mocked(captureService.allowance).mockReset().mockResolvedValue(open);
   jest.mocked(captureService.latestNotebookId).mockReset().mockResolvedValue(histoire.id);
+  jest.mocked(captureService.enqueue).mockReset().mockImplementation(async (input) => ({ status: "queued", id: `queued-${input.photoUri.replace(/D/g, "")}` }));
   jest.mocked(captureService.send).mockReset().mockImplementation(async (input) => ({ status: "sent", pageId: `page-${input.photoUri.replace(/\D/g, "")}` }));
   jest.mocked(captureService.prepareScan).mockReset().mockImplementation(async (uri) => uri.replace("scans/s", "ready/r"));
   jest.mocked(captureService.prepareImport).mockReset().mockImplementation(async (uri, quarters) => uri.replace("ImagePicker/i", "ready/r").replace(".jpg", quarters === 0 ? ".jpg" : `-t${quarters}.jpg`));
@@ -121,6 +124,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setOnline(true);
   alert.mockRestore();
 });
 
@@ -312,9 +316,10 @@ test("two quick taps on scan open one capture and one scanner", async () => {
   expect(scanPages).toHaveBeenCalledTimes(1);
 });
 
-test("without a network the capture is blocked with its message and the scanner stays closed [28]", async () => {
+test("without a network and without a known limit the capture is blocked with its message and the scanner stays closed [28]", async () => {
   jest.mocked(useNetworkState).mockReturnValue(offline);
-  const pathname = await openCapture();
+  jest.mocked(captureService.allowance).mockResolvedValue(null);
+  const pathname = await openApp("/capture");
 
   expect(pathname()).toBe("/capture");
   expect(await screen.findByText(fr.capture.noConnection)).toBeTruthy();
@@ -338,8 +343,9 @@ test("an unknown network state does not block the scanner", async () => {
 
 test("offline, the message and the cancel button show at once, without waiting for the last notebook [28]", async () => {
   jest.mocked(useNetworkState).mockReturnValue(offline);
+  jest.mocked(captureService.allowance).mockResolvedValue(null);
   jest.mocked(captureService.latestNotebookId).mockReturnValue(never());
-  await openCapture();
+  await openApp("/capture");
 
   expect(await screen.findByText(fr.capture.noConnection)).toBeTruthy();
   expect(screen.getByText(fr.common.cancel)).toBeTruthy();
@@ -826,6 +832,7 @@ describe("network lost during a series [6][20]", () => {
     await interrupted();
     jest.mocked(useNetworkState).mockReturnValue(offline);
     await act(async () => {
+      setOnline(false);
       await jest.advanceTimersByTimeAsync(2000);
     });
     await screen.findByText(fr.capture.noConnection);
@@ -1324,5 +1331,113 @@ describe("import from the gallery [9][10][19]", () => {
     expect(await screen.findByText(en.capture.reviewPage(1, 2))).toBeTruthy();
     expect(screen.getByText(en.capture.remove)).toBeTruthy();
     expect(screen.getByText(en.capture.keep)).toBeTruthy();
+  });
+});
+
+describe("capturing without a network", () => {
+  beforeEach(() => {
+    jest.mocked(useNetworkState).mockReturnValue(offline);
+  });
+
+  test("the scanner opens with the limit known and says the pages will wait [8][16]", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue({ ...open, remaining: 4 });
+    const pathname = await openCapture();
+
+    expect(pathname()).toBe("/capture");
+    expect(scanPages).toHaveBeenCalledWith({ limit: 4 });
+    expect(captureService.latestNotebookId).not.toHaveBeenCalled();
+  });
+
+  test("the idle screen says the pages will wait on the phone", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue(open);
+    await openCapture();
+
+    expect(await screen.findByText(fr.capture.queueHint)).toBeTruthy();
+    expect(screen.queryByText(fr.capture.noConnection)).toBeNull();
+  });
+
+  test("scanned pages are kept in the queue in order, none is sent, and the notebook opens [16]", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue(open);
+    jest.mocked(scanPages).mockResolvedValue(scanned(3));
+    const pathname = await openCapture();
+    await settle();
+
+    expect(jest.mocked(captureService.enqueue).mock.calls.map(([input]) => input.photoUri)).toHaveLength(3);
+    expect(jest.mocked(captureService.enqueue).mock.calls[0][0]).toMatchObject({ notebookId: histoire.id, chapterId: null, source: "camera" });
+    expect(captureService.send).not.toHaveBeenCalled();
+    expect(pathname()).toBe(`/notebook/${histoire.id}`);
+  });
+
+  test("imported pages are queued with their source", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue(open);
+    jest.mocked(pickImages).mockResolvedValue(picked(1));
+    await openApp("/");
+    await screen.findByText(histoire.name);
+    await loaded();
+    jest.mocked(scanPages).mockResolvedValue(cancelled);
+    await pressScan();
+    await fireEvent.press(await screen.findByText(fr.capture.import));
+    await settle();
+    await fireEvent.press(await screen.findByText(fr.capture.keep));
+    await settle();
+
+    expect(captureService.enqueue).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(captureService.enqueue).mock.calls[0][0]).toMatchObject({ source: "import" });
+  });
+
+  test("a page the phone cannot keep is told, and the pages that fit are queued [9]", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue(open);
+    jest.mocked(scanPages).mockResolvedValue(scanned(2));
+    jest.mocked(captureService.enqueue).mockResolvedValueOnce({ status: "failed" }).mockResolvedValue({ status: "queued", id: "q" });
+    const pathname = await openCapture();
+    await settle();
+
+    expect(await screen.findByText(fr.capture.notSaved(1))).toBeTruthy();
+    expect(pathname()).toBe("/capture");
+    await fireEvent.press(screen.getByText(fr.limit.understood));
+    expect(pathname()).toBe(`/notebook/${histoire.id}`);
+  });
+
+  test("when no page can be kept nothing is queued and closing goes back", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue(open);
+    jest.mocked(scanPages).mockResolvedValue(scanned(1));
+    jest.mocked(captureService.enqueue).mockResolvedValue({ status: "failed" });
+    const pathname = await openCapture();
+    await settle();
+
+    expect(await screen.findByText(fr.capture.notSaved(1))).toBeTruthy();
+    await fireEvent.press(screen.getByText(fr.limit.understood));
+    expect(pathname()).toBe("/");
+  });
+
+  test("when the known limit is used up the limit sheet opens and the scanner stays closed [8]", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue({ ...open, remaining: 0, used: 15, blockedReason: "monthly_limit" });
+    const pathname = await openCapture();
+
+    expect(pathname()).toBe("/limit");
+    expect(scanPages).not.toHaveBeenCalled();
+  });
+
+  test("the scan button says there is no connection when no limit was ever read [8]", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue(null);
+    const pathname = await openCapture();
+
+    expect(pathname()).toBe("/");
+    expect(alert).toHaveBeenCalledWith(fr.capture.noConnection);
+    expect(scanPages).not.toHaveBeenCalled();
+  });
+
+  test("the capture of a chapter queues its pages in the chapter", async () => {
+    jest.mocked(captureService.allowance).mockResolvedValue(open);
+    jest.mocked(scanPages).mockResolvedValue(scanned(2));
+    jest.mocked(notebookService.chapters).mockResolvedValue([{ id: "chap-1", notebookId: sciences.id, name: "Cells", pageCount: 0 }]);
+    const pathname = await openApp(`/chapter/chap-1`);
+    await screen.findByText("Cells");
+    await loaded();
+    await pressScan();
+    await settle();
+
+    expect(jest.mocked(captureService.enqueue).mock.calls[0][0]).toMatchObject({ notebookId: sciences.id, chapterId: "chap-1" });
+    expect(pathname()).toBe("/chapter/chap-1");
   });
 });

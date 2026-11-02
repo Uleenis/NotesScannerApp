@@ -7,12 +7,15 @@ import { LoadError } from "@/components/load-error";
 import { MenuButton } from "@/components/menu-button";
 import { NotebookRow } from "@/components/notebook-row";
 import { PageRow } from "@/components/reading/page-row";
+import { WaitingRow } from "@/components/reading/waiting-row";
 import { ScanButton } from "@/components/scan-button";
 import { planNotebook } from "@/export/document";
 import { useExportItem } from "@/export/use-export";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
 import { useGate } from "@/offline/use-gate";
+import { useWaitingPages } from "@/offline/use-waiting";
+import { waitingOutsideChapters } from "@/offline/waiting";
 import { useChapters, useDeleteNotebook, useNotebook } from "@/notebooks/queries";
 import { useLevelItem } from "@/notebooks/use-level-item";
 import type { DeleteResult } from "@/notebooks/removal";
@@ -29,6 +32,7 @@ export default function NotebookScreen() {
   const exportItem = useExportItem();
   const levelItem = useLevelItem(id);
   const gate = useGate();
+  const waiting = useWaitingPages();
 
   if (notebook.data === null) {
     return <Redirect href="/" />;
@@ -50,6 +54,8 @@ export default function NotebookScreen() {
   const outsideChapters = (pages.data ?? [])
     .filter((page) => page.notebookId === id && page.chapterId === null)
     .sort((a, b) => b.number - a.number);
+
+  const waitingHere = waitingOutsideChapters(waiting ?? [], id, new Set(notebookChapters.map((chapter) => chapter.id)));
 
   async function remove() {
     const result = await deletion.mutateAsync(id).catch((): DeleteResult => ({ status: "error" }));
@@ -111,7 +117,7 @@ export default function NotebookScreen() {
       <LargeTitle text={notebook.data.name} />
       <View style={styles.container}>
         <Text style={styles.count}>{t.notebook.pageCount(pageCount)}</Text>
-        {pageCount === 0 && !hasChapters ? (
+        {pageCount === 0 && !hasChapters && waitingHere.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>{t.notebook.emptyTitle}</Text>
             <Text style={styles.emptyBody}>{t.notebook.emptyBody}</Text>
@@ -129,9 +135,12 @@ export default function NotebookScreen() {
                     onPress={() => router.push(`/chapter/${chapter.id}`)}
                   />
                 ))}
-                {outsideChapters.length > 0 ? <Text style={styles.section}>{t.notebook.pagesHeading}</Text> : null}
+                {outsideChapters.length + waitingHere.length > 0 ? <Text style={styles.section}>{t.notebook.pagesHeading}</Text> : null}
               </>
             ) : null}
+            {waitingHere.map((entry) => (
+              <WaitingRow key={entry.id} entry={entry} onPress={() => router.push(`/waiting/${entry.id}`)} />
+            ))}
             {pages.data === undefined
               ? pages.isError
                 ? <LoadError message={t.notebook.pagesLoadFailed} onRetry={() => pages.refetch()} />
