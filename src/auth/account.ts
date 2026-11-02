@@ -165,9 +165,7 @@ export function signOut(deps: AccountDeps): Promise<Outcome> {
   return guarded(async () => {
     const left = await sessionUser(deps);
     const result = answered(await deps.auth.signOut({ scope: "local" }));
-    if (result.ok) {
-      await forget(deps, left, null);
-    }
+    await forget(deps, left, result.ok ? null : await sessionUser(deps));
     return result;
   });
 }

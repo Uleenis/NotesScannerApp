@@ -565,13 +565,24 @@ describe("the phone forgets the account it leaves", () => {
     expect(signOutCall.mock.invocationCallOrder[0]).toBeLessThan(leave.mock.invocationCallOrder[0]);
   });
 
-  test("signing out that fails wipes nothing", async () => {
+  test("signing out that fails while the session stays wipes nothing", async () => {
     const { deps, signOut: signOutCall, leave } = fakeDeps();
     signOutCall.mockResolvedValue({ error: new TypeError("Network request failed") });
 
     expect(await signOut(deps)).toEqual({ ok: false, reason: "offline" });
 
     expect(leave).not.toHaveBeenCalled();
+  });
+
+  test("signing out that answers a failure after the client removed the session still wipes the store of the account left", async () => {
+    const { deps, getSession, signOut: signOutCall, leave } = fakeDeps();
+    signedInAfter(getSession, "unused");
+    getSession.mockResolvedValue({ data: { session: null }, error: null });
+    signOutCall.mockResolvedValue({ error: Object.assign(new Error("fetch"), { name: "AuthRetryableFetchError" }) });
+
+    expect(await signOut(deps)).toEqual({ ok: false, reason: "offline" });
+
+    expect(leave).toHaveBeenCalledWith("anonymous-user");
   });
 
   test("signing out is done even when the wipe fails, and wipes nothing without a session", async () => {

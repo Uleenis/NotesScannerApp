@@ -167,21 +167,37 @@ async function wipe(userId: string, clearViews: boolean): Promise<number> {
   });
 }
 
-function eraseEntry(entry: Directory | File): Promise<unknown> {
-  if (entry instanceof Directory && isUuid(entry.name)) {
-    return wipe(entry.name, false);
+async function holdsWaitingPages(userId: string, folder: Directory): Promise<boolean> {
+  if (countPhotos(folder, "queue") === 0) {
+    return false;
   }
-  entry.delete();
-  return Promise.resolve();
+  try {
+    return (await readKey(userId)).status === "found";
+  } catch {
+    return true;
+  }
 }
 
-export async function sweepOtherAccounts(keep: string): Promise<void> {
+async function eraseEntry(entry: Directory | File): Promise<void> {
+  if (entry instanceof Directory && isUuid(entry.name)) {
+    if (!(await holdsWaitingPages(entry.name, entry))) {
+      await wipe(entry.name, false);
+    }
+    return;
+  }
+  entry.delete();
+}
+
+export async function sweepOtherAccounts(keep: string, still: () => boolean = () => true): Promise<void> {
   checkedUuid(keep);
   const root = offlineRoot();
   if (!root.exists) {
     return;
   }
   for (const entry of root.list()) {
+    if (!still()) {
+      return;
+    }
     if (entry instanceof Directory && entry.name === keep) {
       continue;
     }

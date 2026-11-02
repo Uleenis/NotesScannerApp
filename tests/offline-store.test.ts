@@ -448,7 +448,6 @@ describe("sweeping the stores of other accounts", () => {
     const { store } = await openAccountStore(USER);
     await store.queuePhotos.save(PAGE, photo());
     const { store: other } = await openAccountStore(OTHER);
-    await other.queuePhotos.save(PAGE, photo());
     await other.pagePhotos.save(PAGE_TWO, photo());
 
     await sweepOtherAccounts(USER);
@@ -519,5 +518,62 @@ describe("sweeping while a photo of the signed-in account is on screen", () => {
 
     expect(fakeFiles.has(shown.uri)).toBe(true);
     expect(fakeSecure.values.has(`offline-key.${OTHER}`)).toBe(false);
+  });
+});
+
+describe("a sweep told to stop", () => {
+  it("erases no further folder once it should stop", async () => {
+    await openAccountStore(OTHER);
+    await openAccountStore(PAGE);
+    await openAccountStore(USER);
+    let left = 1;
+
+    await sweepOtherAccounts(USER, () => left-- > 0);
+
+    const keys = [OTHER, PAGE].filter((id) => fakeSecure.values.has(`offline-key.${id}`));
+    expect(keys).toHaveLength(1);
+  });
+});
+
+describe("sweeping an account that still has waiting pages", () => {
+  it("keeps its folder and key, so that its pages are sent if it signs in again, and opens it only for that account", async () => {
+    const { store: other } = await openAccountStore(OTHER);
+    await other.queuePhotos.save(PAGE, photo());
+    await other.close();
+    await openAccountStore(USER);
+
+    await sweepOtherAccounts(USER);
+
+    expect(fakeSecure.values.has(`offline-key.${OTHER}`)).toBe(true);
+    expect(countWaitingFiles(OTHER)).toBe(1);
+    const { store: again, lostPending } = await openAccountStore(OTHER);
+    expect(lostPending).toBe(0);
+    expect((await again.queuePhotos.open(PAGE)).status).toBe("ok");
+  });
+
+  it("erases it when its key is gone, since nothing could ever read its pages", async () => {
+    const { store: other } = await openAccountStore(OTHER);
+    await other.queuePhotos.save(PAGE, photo());
+    await other.close();
+    fakeSecure.values.delete(`offline-key.${OTHER}`);
+    await openAccountStore(USER);
+
+    await sweepOtherAccounts(USER);
+
+    expect([...fakeFiles.keys()].filter((uri) => uri.startsWith(`file:///docs/offline/${OTHER}`))).toEqual([]);
+  });
+
+  it("keeps it when the key cannot be read just now", async () => {
+    const { store: other } = await openAccountStore(OTHER);
+    await other.queuePhotos.save(PAGE, photo());
+    await other.close();
+    await openAccountStore(USER);
+    const read = jest.spyOn(SecureStore, "getItemAsync").mockRejectedValue(new Error("locked"));
+
+    await sweepOtherAccounts(USER);
+
+    read.mockRestore();
+    expect(countWaitingFiles(OTHER)).toBe(1);
+    expect(fakeSecure.values.has(`offline-key.${OTHER}`)).toBe(true);
   });
 });

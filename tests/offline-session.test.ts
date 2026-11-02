@@ -417,3 +417,33 @@ describe("leaving an account while its store is still being prepared", () => {
     expect(state.wiped).toEqual([USER]);
   });
 });
+
+describe("a sweep overtaken by another account", () => {
+  it("is told to stop as soon as another account, or nobody, is wanted", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const checks: (() => boolean)[] = [];
+    const { session } = setup({
+      sweep: async (keep, still) => {
+        checks.push(still);
+        if (keep === USER) {
+          await gate;
+        }
+      },
+    });
+    const first = session.start(USER);
+    await Promise.resolve();
+    expect(checks[0]()).toBe(true);
+
+    await session.start(OTHER_USER);
+    expect(checks[0]()).toBe(false);
+    expect(checks[1]()).toBe(true);
+
+    await session.start(null);
+    expect(checks[1]()).toBe(false);
+    release();
+    await first;
+  });
+});

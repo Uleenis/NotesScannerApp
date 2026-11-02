@@ -6,7 +6,7 @@ export type SessionDeps = {
   sync: (store: AccountStore) => Promise<unknown>;
   sendQueue: (store: AccountStore) => Promise<unknown>;
   isOnline: () => boolean;
-  sweep: (keep: string) => Promise<void>;
+  sweep: (keep: string, still: () => boolean) => Promise<void>;
   wipe: (userId: string) => Promise<number>;
 };
 
@@ -47,7 +47,7 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
     }
     swept = userId;
     try {
-      await deps.sweep(userId);
+      await deps.sweep(userId, () => swept === userId);
     } catch {
       return;
     }
@@ -98,6 +98,9 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
       generation += 1;
       const mine = generation;
       wanted = userId;
+      if (swept !== userId) {
+        swept = null;
+      }
       await release();
       if (userId === null) {
         return;
