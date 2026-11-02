@@ -8,11 +8,15 @@ import { LargeTitle } from "@/components/large-title";
 import { LoadError } from "@/components/load-error";
 import { NotebookRow } from "@/components/notebook-row";
 import { OfflineLine } from "@/components/offline-line";
+import { QueueNotices } from "@/components/queue-notices";
 import { LatestPageCard } from "@/components/reading/latest-page-card";
+import { WaitingRow } from "@/components/reading/waiting-row";
 import { ScanButton } from "@/components/scan-button";
 import { useAllowance } from "@/capture/queries";
 import { useStrings } from "@/i18n";
 import { useGate } from "@/offline/use-gate";
+import { useWaitingPages } from "@/offline/use-waiting";
+import { waitingWithoutNotebook } from "@/offline/waiting";
 import { useNotebooks } from "@/notebooks/queries";
 import { dateParts } from "@/pages/dates";
 import { newestFirst } from "@/pages/pages";
@@ -28,6 +32,7 @@ function LibraryBody() {
   const notebooks = useNotebooks();
   const pages = usePages();
   const allowance = useAllowance();
+  const waiting = useWaitingPages();
 
   if (notebooks.data === undefined) {
     return notebooks.isError ? (
@@ -41,6 +46,7 @@ function LibraryBody() {
   const known = pages.data ?? [];
   const latest = newestFirst(known).slice(0, LATEST_PAGES);
   const notebookNames = new Map(notebooks.data.map((notebook) => [notebook.id, notebook.name]));
+  const withoutNotebook = waitingWithoutNotebook(waiting ?? [], new Set(notebooks.data.map((notebook) => notebook.id)));
   const showReminder = allowance.data?.isAnonymous === true && known.length > 0;
 
   function detail(notebook: { id: string; pageCount: number }): string {
@@ -82,6 +88,14 @@ function LibraryBody() {
             onPress={() => router.push(`/notebook/${notebook.id}`)}
           />
         ))}
+        {withoutNotebook.length === 0 ? null : (
+          <>
+            <Text style={styles.section}>{t.waiting.title}</Text>
+            {withoutNotebook.map((entry) => (
+              <WaitingRow key={entry.id} entry={entry} onPress={() => router.push(`/waiting/${entry.id}`)} />
+            ))}
+          </>
+        )}
         <Pressable accessibilityRole="button" onPress={openNewNotebook} style={styles.newNotebook}>
           <Ionicons name="add" size={24} color={colors.ink} />
           <Text style={styles.newNotebookLabel}>{t.library.newNotebook}</Text>
@@ -105,6 +119,7 @@ export default function LibraryScreen() {
       />
       <LargeTitle text={t.library.title} />
       <OfflineLine />
+      <QueueNotices />
       <LibraryBody />
     </>
   );

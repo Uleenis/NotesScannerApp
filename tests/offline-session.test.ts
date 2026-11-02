@@ -21,6 +21,9 @@ function setup(overrides: Partial<SessionDeps> = {}) {
     stores: [] as (AccountStore & { closed: boolean })[],
     current: null as AccountStore | null,
     synced: [] as string[],
+    queued: [] as string[],
+    order: [] as string[],
+    failQueue: false,
     opens: 0,
     failOpen: false,
   };
@@ -39,6 +42,14 @@ function setup(overrides: Partial<SessionDeps> = {}) {
     },
     sync: async (store) => {
       state.synced.push(store.userId);
+      state.order.push("sync");
+    },
+    sendQueue: async (store) => {
+      state.queued.push(store.userId);
+      state.order.push("queue");
+      if (state.failQueue) {
+        throw new Error("queue");
+      }
     },
     isOnline: () => state.online,
     ...overrides,
@@ -218,5 +229,44 @@ describe("when to synchronise", () => {
     await session.network(true);
     expect(state.synced).toEqual([USER]);
     expect(state.current).toBeNull();
+  });
+});
+
+describe("sending the waiting pages", () => {
+  it("sends the queue before synchronising, at the start, when online", async () => {
+    const { state, session } = setup();
+    await session.start(USER);
+    expect(state.order).toEqual(["queue", "sync"]);
+    expect(state.queued).toEqual([USER]);
+  });
+
+  it("does not send without a network", async () => {
+    const { state, session } = setup();
+    state.online = false;
+    await session.start(USER);
+    expect(state.queued).toEqual([]);
+  });
+
+  it("sends at the return to the foreground and at the return of the network", async () => {
+    const { state, session } = setup();
+    await session.start(USER);
+    await session.foreground();
+    await session.network(true);
+    await session.network(false);
+    expect(state.queued).toEqual([USER, USER, USER]);
+  });
+
+  it("still synchronises when the sending of the queue fails", async () => {
+    const { state, session } = setup();
+    state.failQueue = true;
+    await session.start(USER);
+    expect(state.synced).toEqual([USER]);
+  });
+
+  it("sends nothing for an account that is not signed in", async () => {
+    const { state, session } = setup();
+    await session.start(null);
+    await session.foreground();
+    expect(state.queued).toEqual([]);
   });
 });

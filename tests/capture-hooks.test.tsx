@@ -1,13 +1,12 @@
 import { act, renderHook } from "@testing-library/react-native";
-import { useNetworkState } from "expo-network";
 import { AppState } from "react-native";
 
 import { useCameraAccess, type CameraAccess } from "@/capture/use-camera-access";
 import { useOffline } from "@/capture/use-network";
+import { setOnline } from "@/offline/network";
 import { cameraModule, granted, installPermission, refused, undetermined } from "./fake-camera";
 
 jest.mock("expo-camera", () => require("./fake-camera").cameraModule);
-jest.mock("expo-network", () => ({ useNetworkState: jest.fn() }));
 
 function observe() {
   const seen: CameraAccess[] = [];
@@ -96,13 +95,14 @@ test("the permission is read again when the app comes back to the foreground", a
 });
 
 test.each([
-  ["no connection at all", { isConnected: false, isInternetReachable: false }, true],
-  ["not connected", { isConnected: false }, true],
-  ["connected but the internet is not confirmed", { isConnected: true, isInternetReachable: false }, false],
-  ["connected and reachable", { isConnected: true, isInternetReachable: true }, false],
-  ["a state not known yet", {}, false],
-])("offline: %s", async (_, state, expected) => {
-  jest.mocked(useNetworkState).mockReturnValue(state);
+  ["the network is gone", false, true],
+  ["the network is there, or not known yet", true, false],
+])("offline follows the one flag of the network: %s", async (_, online, expected) => {
+  setOnline(online);
+  const hook = await renderHook(() => useOffline());
 
-  expect((await renderHook(() => useOffline())).result.current).toBe(expected);
+  expect(hook.result.current).toBe(expected);
+  await act(async () => setOnline(!online));
+  expect(hook.result.current).toBe(!expected);
+  setOnline(true);
 });

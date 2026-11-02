@@ -75,7 +75,8 @@ function Capture({
   const chapterId = requestedChapter !== undefined && selected.id === requested ? requestedChapter : null;
 
   const waiting = ((requested === undefined && latest.isLoading) || allowance.isLoading) && !gaveUpWaiting;
-  const series = useSeries({ notebookId: selected.id, chapterId }, seriesLimit(allowance.data), !waiting && !offline);
+  const noLimitKnown = offline && (allowance.data === null || allowance.data === undefined);
+  const series = useSeries({ notebookId: selected.id, chapterId }, seriesLimit(allowance.data), !waiting && !noLimitKnown);
   const { phase } = series;
   const counter = remainingCounter(allowance.data);
 
@@ -110,6 +111,8 @@ function Capture({
         return <SeriesNotice busy lines={[t.capture.preparing(current.page, current.total)]} />;
       case "sending":
         return <SeriesNotice busy lines={[t.capture.sendingSeries(current.page, current.total)]} />;
+      case "queueing":
+        return <SeriesNotice busy lines={[t.capture.queueing(current.page, current.total)]} />;
       case "interrupted":
         return (
           <SeriesNotice
@@ -123,6 +126,7 @@ function Capture({
             actions={[{ label: t.limit.understood, onPress: series.close }]}
             lines={[
               ...(current.notSent > 0 ? [t.capture.notSent(current.notSent)] : []),
+              ...(current.notSaved > 0 ? [t.capture.notSaved(current.notSaved)] : []),
               ...(current.block === null ? [] : [blockReason(t, current.block)]),
               ...(current.leftOut > 0 ? [t.capture.leftOut(current.leftOut)] : []),
             ]}
@@ -135,12 +139,13 @@ function Capture({
 
   let body: ReactNode = null;
   if (phase.kind === "idle") {
-    if (offline) {
+    if (noLimitKnown) {
       body = <BlockedCapture message={t.capture.noConnection} />;
     } else if (!waiting) {
       body = (
         <View style={styles.idle}>
           <Text style={styles.hint}>{t.capture.hint}</Text>
+          {offline ? <Text style={styles.notice}>{t.capture.queueHint}</Text> : null}
           {phase.noScanner ? <Text style={styles.notice}>{t.capture.scannerUnavailable}</Text> : null}
           {phase.notice === "failed" ? <Text style={styles.notice}>{t.capture.scannerFailed}</Text> : null}
           {phase.notice === "importFailed" ? <Text style={styles.notice}>{t.capture.importFailed}</Text> : null}

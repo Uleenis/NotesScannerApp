@@ -176,6 +176,33 @@ export const fr: Strings = {
     leave: "Quitter",
     notSent: (count: number) => (count === 1 ? "1 page n'est pas partie." : `${count} pages ne sont pas parties.`),
     leftOut: (count: number) => (count === 1 ? "1 page n'a pas pu être lue et a été laissée de côté." : `${count} pages n'ont pas pu être lues et ont été laissées de côté.`),
+    queueHint: "Pas de connexion. Tes pages attendront sur le téléphone et partiront dès que le réseau revient.",
+    queueing: (page: number, total: number) => `Enregistrement de la page ${page} sur ${total}…`,
+    notSaved: (count: number) =>
+      count === 1 ? "1 page n'a pas pu être enregistrée sur le téléphone." : `${count} pages n'ont pas pu être enregistrées sur le téléphone.`,
+  },
+  waiting: {
+    state: "En attente du réseau",
+    title: "Page en attente",
+    body: "Cette page sera lue dès que le réseau revient.",
+    blocked: {
+      monthly_limit: "Limite du mois atteinte",
+      anonymous_limit: "Crée un compte pour continuer",
+      anonymous_daily_cap: "Réessaie demain",
+      notebook: "Carnet introuvable",
+    },
+    notebookGone: "Le carnet de cette page n'existe plus. Choisis-en un autre pour l'envoyer.",
+    chooseNotebook: "Choisir un carnet",
+    delete: "Supprimer",
+    deleteTitle: "Supprimer cette page ?",
+    deleteBody: "Elle n'a pas encore été envoyée et sera perdue.",
+    unavailable: "Cette page en attente n'a pas pu être ouverte.",
+    lost: (count: number) =>
+      count === 1
+        ? "1 page en attente a été perdue : le téléphone n'a pas pu relire ses notes enregistrées."
+        : `${count} pages en attente ont été perdues : le téléphone n'a pas pu relire ses notes enregistrées.`,
+    rejected: (count: number) =>
+      count === 1 ? "1 page en attente n'a pas pu être lue et a été retirée." : `${count} pages en attente n'ont pas pu être lues et ont été retirées.`,
   },
   limit: {
     monthTitle: (max: number) => `Tes ${max} pages du mois sont lues`,

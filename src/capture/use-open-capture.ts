@@ -2,13 +2,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useRef } from "react";
 
+import { Alert } from "react-native";
+
 import { useAuth } from "@/auth/auth-provider";
+import { useStrings } from "@/i18n";
+import { isOnline } from "@/offline/network";
 import { blockFor } from "./allowance";
 import { limitParams } from "./limit-route";
 import { freshAllowance, useAllowance } from "./queries";
 
 export function useOpenCapture(notebookId?: string, chapterId?: string | null): () => Promise<void> {
   const { userId } = useAuth();
+  const t = useStrings();
   const queryClient = useQueryClient();
   useAllowance();
   const opening = useRef(false);
@@ -19,7 +24,12 @@ export function useOpenCapture(notebookId?: string, chapterId?: string | null): 
     }
     opening.current = true;
     try {
-      const block = blockFor(await freshAllowance(queryClient, userId));
+      const allowance = await freshAllowance(queryClient, userId);
+      if (!isOnline() && (allowance === null || allowance === undefined)) {
+        Alert.alert(t.capture.noConnection);
+        return;
+      }
+      const block = blockFor(allowance);
       if (block !== null) {
         router.push({ pathname: "/limit", params: limitParams(block) });
         return;
