@@ -1,7 +1,7 @@
 import {
-  LIST_CAP,
   dropNotebook,
   dropPage,
+  isSynced,
   putAlerts,
   putChapter,
   putNotebook,
@@ -9,6 +9,8 @@ import {
   putRendering,
   readAlerts,
   readLibrary,
+  readNotebook,
+  readPage,
   readRendering,
   replaceChapters,
   replaceNotebooks,
@@ -151,28 +153,39 @@ describe("filling from the server", () => {
   });
 });
 
-describe("a list as long as the server's limit", () => {
-  it("removes nothing, because the server may have cut it", async () => {
-    const all = Array.from({ length: LIST_CAP + 5 }, (_, n) => page(n + 1, 1));
+describe("a list longer than one answer of the server", () => {
+  const LONG = 1005;
+
+  it("is replaced like any other list, and what it no longer holds is removed", async () => {
+    const all = Array.from({ length: LONG }, (_, n) => page(n + 1, 1));
     await replacePages(store, all);
     await replaceNotebooks(store, [notebook(1), notebook(2)]);
-    await replaceChapters(store, [chapter(1, 1), chapter(2, 1)]);
-    await keepPhoto(store, all[LIST_CAP + 2].id, jpeg(1024), { now: 1 });
-    await replacePages(store, all.slice(0, LIST_CAP));
-    await replaceNotebooks(store, Array.from({ length: LIST_CAP }, (_, n) => notebook(n + 10)));
-    await replaceChapters(store, Array.from({ length: LIST_CAP }, (_, n) => chapter(n + 10, 1)));
+    await keepPhoto(store, all[LONG - 1].id, jpeg(1024), { now: 1 });
+    await replacePages(store, all.slice(0, LONG - 10));
+    await replaceNotebooks(store, Array.from({ length: LONG }, (_, n) => notebook(n + 1)));
     const library = await readLibrary(store);
-    expect(library.pages).toHaveLength(LIST_CAP + 5);
-    expect(library.notebooks).toHaveLength(LIST_CAP + 2);
-    expect(library.chapters).toHaveLength(LIST_CAP + 2);
-    expect(await hasPhoto(store, all[LIST_CAP + 2].id)).toBe(true);
+    expect(library.pages).toHaveLength(LONG - 10);
+    expect(library.notebooks).toHaveLength(LONG);
+    expect(await hasPhoto(store, all[LONG - 1].id)).toBe(false);
+  });
+});
+
+describe("what the store knows of the lists", () => {
+  it("marks a list as known once the server returned it, even an empty one", async () => {
+    expect(await isSynced(store, "pages")).toBe(false);
+    await replacePages(store, []);
+    expect(await isSynced(store, "pages")).toBe(true);
+    expect(await isSynced(store, "notebooks")).toBe(false);
+    expect(await isSynced(store, "chapters")).toBe(false);
   });
 
-  it("removes again as soon as the list is shorter than the limit", async () => {
-    const all = Array.from({ length: LIST_CAP + 5 }, (_, n) => page(n + 1, 1));
-    await replacePages(store, all);
-    await replacePages(store, all.slice(0, LIST_CAP - 1));
-    expect((await readLibrary(store)).pages).toHaveLength(LIST_CAP - 1);
+  it("reads one notebook and one numbered page", async () => {
+    await replaceNotebooks(store, [notebook(1)]);
+    await replacePages(store, [page(2, 1), page(1, 1)]);
+    expect(await readNotebook(store, notebook(1).id)).toEqual(notebook(1));
+    expect(await readNotebook(store, notebook(2).id)).toBeNull();
+    expect(await readPage(store, page(2, 1).id)).toEqual({ ...page(2, 1), number: 2 });
+    expect(await readPage(store, page(9, 1).id)).toBeNull();
   });
 });
 

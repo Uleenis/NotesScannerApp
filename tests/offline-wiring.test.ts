@@ -23,6 +23,8 @@ jest.mock("@/offline/mirror", () => ({
     mockCalls.push("begin");
     return mockMirror;
   },
+  getMirrorStore: () => null,
+  readsForSignedIn: async () => false,
 }));
 jest.mock("@/lib/supabase", () => ({ getSupabase: () => ({}) }));
 jest.mock("expo-file-system", () => ({ File: class {} }));

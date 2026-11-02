@@ -13,6 +13,7 @@ import { sweepScans } from "@/capture/sweep";
 import { ActionSheetHost } from "@/components/action-sheet-host";
 import { ExportHost } from "@/components/export-host";
 import { ForgetOtherAccounts } from "@/components/forget-other-accounts";
+import { NetworkWatch } from "@/components/network-watch";
 import { OfflineSync } from "@/components/offline-sync";
 import { createQueryClient, followAppFocus } from "@/lib/query-client";
 import { stackScreenOptions } from "@/navigation-options";
@@ -46,6 +47,7 @@ export default function RootLayout() {
       <AuthProvider services={defaultAuthServices}>
         <QueryClientProvider client={queryClient}>
           <ForgetOtherAccounts />
+          <NetworkWatch />
           <OfflineSync />
           <StatusBar style="dark" />
           <Stack screenOptions={stackScreenOptions}>

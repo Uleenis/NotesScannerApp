@@ -1,5 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
+import { cachedAlerts, cachedPage, cachedPages, viaCache } from "@/offline/cached";
 import { fetchPhotoAt } from "@/offline/fetch-photo";
+import { openLocalPhoto, type LocalPhoto } from "@/offline/local-photo";
 import { beginMirror } from "@/offline/mirror";
 import { throughMirror } from "@/offline/through";
 import type { DeleteResult } from "@/notebooks/removal";
@@ -30,6 +32,7 @@ export type PageService = {
   count: () => Promise<number>;
   get: (id: string) => Promise<NumberedPage | null>;
   photoUrl: (userId: string, pageId: string) => Promise<string>;
+  localPhoto: (pageId: string) => Promise<LocalPhoto>;
   photoPixels: (uri: string) => Promise<PhotoSize | null>;
   startReading: (pageId: string) => Promise<StartResult>;
   setPageType: (pageId: string, pageType: SwitchableType) => Promise<SetTypeResult>;
@@ -44,15 +47,23 @@ export type PageService = {
 
 export const pageService: PageService = {
   list: () =>
-    throughMirror(
-      () => listPages(getSupabase()),
-      (mirror, pages) => mirror.pages(pages),
+    viaCache(
+      () =>
+        throughMirror(
+          () => listPages(getSupabase()),
+          (mirror, pages) => mirror.pages(pages),
+        ),
+      cachedPages,
     ),
   count: () => countPages(getSupabase()),
   get: (id) =>
-    throughMirror(
-      () => getPage(getSupabase(), id),
-      (mirror, page) => mirror.page(id, page),
+    viaCache(
+      () =>
+        throughMirror(
+          () => getPage(getSupabase(), id),
+          (mirror, page) => mirror.page(id, page),
+        ),
+      cachedPage(id),
     ),
   photoUrl: async (userId, pageId) => {
     const mirror = beginMirror();
@@ -60,6 +71,7 @@ export const pageService: PageService = {
     void mirror.openedPhoto(pageId, () => fetchPhotoAt(fetch, url)).catch(() => undefined);
     return url;
   },
+  localPhoto: (pageId) => openLocalPhoto(pageId),
   photoPixels: (uri) => readPhotoPixels(uri),
   startReading: (pageId) => startReading(getSupabase(), pageId),
   setPageType: (pageId, pageType) => setPageType(getSupabase(), pageId, pageType),
@@ -69,9 +81,13 @@ export const pageService: PageService = {
   correct: (pageId, tokenIndex, text, chosenFrom) => addCorrection(getSupabase(), pageId, tokenIndex, text, chosenFrom),
   edit: (pageId, text, words, gaps) => editPage(getSupabase(), pageId, text, words, gaps),
   alerts: (pageId) =>
-    throughMirror(
-      () => listAlerts(getSupabase(), pageId),
-      (mirror, alerts) => mirror.alerts(pageId, alerts),
+    viaCache(
+      () =>
+        throughMirror(
+          () => listAlerts(getSupabase(), pageId),
+          (mirror, alerts) => mirror.alerts(pageId, alerts),
+        ),
+      cachedAlerts(pageId),
     ),
   second: (pageId) => readSecond(getSupabase(), pageId),
 };

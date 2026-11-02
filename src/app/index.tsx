@@ -7,10 +7,12 @@ import { FirstLaunch } from "@/components/first-launch";
 import { LargeTitle } from "@/components/large-title";
 import { LoadError } from "@/components/load-error";
 import { NotebookRow } from "@/components/notebook-row";
+import { OfflineLine } from "@/components/offline-line";
 import { LatestPageCard } from "@/components/reading/latest-page-card";
 import { ScanButton } from "@/components/scan-button";
 import { useAllowance } from "@/capture/queries";
 import { useStrings } from "@/i18n";
+import { useGate } from "@/offline/use-gate";
 import { useNotebooks } from "@/notebooks/queries";
 import { dateParts } from "@/pages/dates";
 import { newestFirst } from "@/pages/pages";
@@ -19,12 +21,10 @@ import { colors, radius, typography } from "@/theme";
 
 const LATEST_PAGES = 10;
 
-function openNewNotebook() {
-  router.push("/new-notebook");
-}
-
 function LibraryBody() {
   const t = useStrings();
+  const gate = useGate();
+  const openNewNotebook = gate(() => router.push("/new-notebook"));
   const notebooks = useNotebooks();
   const pages = usePages();
   const allowance = useAllowance();
@@ -53,7 +53,7 @@ function LibraryBody() {
   return (
     <>
       <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic">
-        <Pressable accessibilityRole="button" onPress={() => router.push("/search")} style={styles.search}>
+        <Pressable accessibilityRole="button" onPress={gate(() => router.push("/search"))} style={styles.search}>
           <Ionicons name="search" size={20} color={colors.inkSecondary} />
           <Text style={styles.searchLabel}>{t.search.open}</Text>
         </Pressable>
@@ -104,6 +104,7 @@ export default function LibraryScreen() {
         }}
       />
       <LargeTitle text={t.library.title} />
+      <OfflineLine />
       <LibraryBody />
     </>
   );

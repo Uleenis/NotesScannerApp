@@ -5,6 +5,7 @@ import { Alert } from "react-native";
 import { useAuth } from "@/auth/auth-provider";
 import { useStrings } from "@/i18n";
 import { showMenu, type MenuItem } from "@/lib/action-menu";
+import { useGate } from "@/offline/use-gate";
 import { trainingStageQuery } from "@/training/queries";
 import type { TrainingStage } from "@/training/api";
 import { CORRECTION_LEVELS, type CorrectionLevel, type SetLevelResult } from "./level";
@@ -14,6 +15,7 @@ export function useLevelItem(notebookId: string): MenuItem {
   const t = useStrings();
   const { userId } = useAuth();
   const queryClient = useQueryClient();
+  const gate = useGate();
 
   const stageNow = useCallback(() => queryClient.fetchQuery(trainingStageQuery(userId)), [queryClient, userId]);
 
@@ -70,5 +72,5 @@ export function useLevelItem(notebookId: string): MenuItem {
     }
   }, [choose, notebookId, queryClient, stageNow, t, userId]);
 
-  return { label: t.notebook.level.label, onPress: () => void open() };
+  return { label: t.notebook.level.label, onPress: gate(() => void open()) };
 }

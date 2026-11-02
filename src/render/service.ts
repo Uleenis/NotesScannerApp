@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { cachedRendering, viaCache } from "@/offline/cached";
 import { throughMirror } from "@/offline/through";
 import { readRendering, renderPage, type RenderOutcome, type StoredRendering } from "./api";
 
@@ -9,9 +10,13 @@ export type RenderService = {
 
 export const renderService: RenderService = {
   read: (pageId) =>
-    throughMirror(
-      () => readRendering(getSupabase(), pageId),
-      (mirror, rendering) => mirror.rendering(pageId, rendering),
+    viaCache(
+      () =>
+        throughMirror(
+          () => readRendering(getSupabase(), pageId),
+          (mirror, rendering) => mirror.rendering(pageId, rendering),
+        ),
+      cachedRendering(pageId),
     ),
   render: (pageId) => renderPage(getSupabase(), pageId),
 };

@@ -1,6 +1,6 @@
 import type { ChapterSummary } from "@/notebooks/chapters";
 import type { NotebookSummary } from "@/notebooks/notebooks";
-import type { PageRecord } from "@/pages/pages";
+import { numberPages, type NumberedPage, type PageRecord } from "@/pages/pages";
 import type { ShownAlert } from "@/pages/alerts";
 import type { StoredRendering } from "@/render/api";
 import { checkedUuid } from "./bytes";
@@ -8,11 +8,12 @@ import { deleteWhereIn, removePhotoFiles } from "./page-photos";
 import type { AccountStore } from "./store";
 import { inWrite } from "./writes";
 
+export type ListKind = "notebooks" | "chapters" | "pages";
+
 export type CachedLibrary = { notebooks: NotebookSummary[]; chapters: ChapterSummary[]; pages: PageRecord[] };
 
 type Database = AccountStore["database"];
 
-export const LIST_CAP = 1000;
 export const ORPHAN_GRACE_MS = 10 * 60_000;
 
 const STATUSES: readonly string[] = ["queued", "processing", "read", "failed"];
@@ -158,6 +159,10 @@ async function sweepOrphans(store: AccountStore): Promise<string[]> {
   return rows.map((row) => row.page_id);
 }
 
+async function markSynced(store: AccountStore, kind: ListKind): Promise<void> {
+  await store.database.runAsync("insert into synced (kind, at) values (?, ?) on conflict (kind) do update set at = excluded.at", [kind, Date.now()]);
+}
+
 async function existingIds(store: AccountStore, table: "notebooks" | "chapters" | "pages"): Promise<string[]> {
   const rows = await store.database.getAllAsync<{ id: string }>(`select id from ${table}`);
   return rows.map((row) => row.id);
@@ -168,15 +173,14 @@ export async function replaceNotebooks(store: AccountStore, notebooks: NotebookS
   const files = await inWrite(store, async () => {
     let erased: string[] = [];
     await store.database.withTransactionAsync(async () => {
-      if (records.length < LIST_CAP) {
-        const keep = new Set(records.map((record) => record.id));
-        const gone = (await existingIds(store, "notebooks")).filter((id) => !keep.has(id));
-        erased = await forgetNotebooks(store, gone);
-        await store.database.runAsync("delete from notebooks");
-      }
+      const keep = new Set(records.map((record) => record.id));
+      const gone = (await existingIds(store, "notebooks")).filter((id) => !keep.has(id));
+      erased = await forgetNotebooks(store, gone);
+      await store.database.runAsync("delete from notebooks");
       for (const record of records) {
         await insertNotebook(store.database, record);
       }
+      await markSynced(store, "notebooks");
     });
     return erased;
   });
@@ -187,12 +191,11 @@ export async function replaceChapters(store: AccountStore, chapters: ChapterSumm
   const records = chapters.map(storedChapter);
   await inWrite(store, () =>
     store.database.withTransactionAsync(async () => {
-      if (records.length < LIST_CAP) {
-        await store.database.runAsync("delete from chapters");
-      }
+      await store.database.runAsync("delete from chapters");
       for (const record of records) {
         await insertChapter(store.database, record);
       }
+      await markSynced(store, "chapters");
     }),
   );
 }
@@ -205,13 +208,11 @@ export async function replacePages(store: AccountStore, pages: PageRecord[]): Pr
       for (const record of records) {
         await insertPage(store.database, record);
       }
-      if (records.length >= LIST_CAP) {
-        return;
-      }
       const keep = new Set(records.map((record) => record.id));
       const gone = (await existingIds(store, "pages")).filter((id) => !keep.has(id));
       await forgetPages(store, gone);
       erased = [...gone, ...(await sweepOrphans(store))];
+      await markSynced(store, "pages");
     });
     return erased;
   });
@@ -315,8 +316,8 @@ export async function readRendering(store: AccountStore, pageId: string): Promis
   return { text: parsed.text, basedOn: parsed.basedOn };
 }
 
-async function readRows<T>(store: AccountStore, sql: string, read: (value: unknown) => T | null): Promise<T[]> {
-  const rows = await store.database.getAllAsync<{ data: string }>(sql);
+async function readRows<T>(store: AccountStore, sql: string, read: (value: unknown) => T | null, params: string[] = []): Promise<T[]> {
+  const rows = await store.database.getAllAsync<{ data: string }>(sql, params);
   const found: T[] = [];
   for (const row of rows) {
     const value = read(parse(row.data));
@@ -333,4 +334,24 @@ export async function readLibrary(store: AccountStore): Promise<CachedLibrary> {
     chapters: await readRows(store, "select data from chapters order by rowid", asChapter),
     pages: await readRows(store, "select data from pages order by rowid", asPage),
   };
+}
+
+export async function isSynced(store: AccountStore, kind: ListKind): Promise<boolean> {
+  const row = await store.database.getFirstAsync<{ found: number }>("select 1 as found from synced where kind = ?", [kind]);
+  return row !== null;
+}
+
+export async function readNotebook(store: AccountStore, notebookId: string): Promise<NotebookSummary | null> {
+  const row = await store.database.getFirstAsync<{ data: string }>("select data from notebooks where id = ?", [checkedUuid(notebookId)]);
+  return row === null ? null : asNotebook(parse(row.data));
+}
+
+export async function readPage(store: AccountStore, pageId: string): Promise<NumberedPage | null> {
+  const id = checkedUuid(pageId);
+  const row = await store.database.getFirstAsync<{ notebook_id: string }>("select notebook_id from pages where id = ?", [id]);
+  if (row === null) {
+    return null;
+  }
+  const siblings = await readRows(store, "select data from pages where notebook_id = ?", asPage, [row.notebook_id]);
+  return numberPages(siblings).find((page) => page.id === id) ?? null;
 }

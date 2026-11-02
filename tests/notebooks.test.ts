@@ -32,6 +32,10 @@ function fakeClient(script: Script) {
   const sorted = Object.assign(settled(script.rows), {
     order: (column: string) => {
       record("order", column);
+      return sorted;
+    },
+    range: (from: number, to: number) => {
+      record("range", from, to);
       return settled(script.rows);
     },
     limit: (count: number) => {

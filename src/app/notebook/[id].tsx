@@ -12,6 +12,7 @@ import { planNotebook } from "@/export/document";
 import { useExportItem } from "@/export/use-export";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
+import { useGate } from "@/offline/use-gate";
 import { useChapters, useDeleteNotebook, useNotebook } from "@/notebooks/queries";
 import { useLevelItem } from "@/notebooks/use-level-item";
 import type { DeleteResult } from "@/notebooks/removal";
@@ -27,6 +28,7 @@ export default function NotebookScreen() {
   const deletion = useDeleteNotebook();
   const exportItem = useExportItem();
   const levelItem = useLevelItem(id);
+  const gate = useGate();
 
   if (notebook.data === null) {
     return <Redirect href="/" />;
@@ -74,21 +76,22 @@ export default function NotebookScreen() {
           ];
     showMenu(
       [
-        { label: t.search.open, onPress: () => router.push({ pathname: "/search", params: { notebook: id } }) },
+        { label: t.search.open, onPress: gate(() => router.push({ pathname: "/search", params: { notebook: id } })) },
         ...exportEntries,
-        { label: t.notebook.newChapter, onPress: () => router.push({ pathname: "/new-chapter", params: { notebook: id } }) },
-        { label: t.notebook.rename, onPress: () => router.push({ pathname: "/rename", params: { kind: "notebook", id } }) },
+        { label: t.notebook.newChapter, onPress: gate(() => router.push({ pathname: "/new-chapter", params: { notebook: id } })) },
+        { label: t.notebook.rename, onPress: gate(() => router.push({ pathname: "/rename", params: { kind: "notebook", id } })) },
         levelItem,
         {
           label: t.notebook.delete,
           destructive: true,
-          onPress: () =>
+          onPress: gate(() =>
             confirmDeletion(
               t.notebook.deleteTitle(pageCount),
               t.notebook.deleteBody,
               { cancel: t.common.cancel, confirm: t.notebook.delete },
               () => void remove(),
             ),
+          ),
         },
       ],
       t.common.cancel,

@@ -16,6 +16,7 @@ create table page_renderings (page_id text primary key not null, data text not n
 create table known_limit (id integer primary key not null check (id = 1), data text not null, read_at text not null);
 create table queue (id text primary key not null, rank integer not null unique, data text not null);
 create table photos (page_id text primary key not null, bytes integer not null check (bytes > 0), opened_at integer not null);`,
+  `create table synced (kind text primary key not null check (kind in ('notebooks', 'chapters', 'pages')), at integer not null);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
