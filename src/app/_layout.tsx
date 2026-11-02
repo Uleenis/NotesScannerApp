@@ -15,6 +15,7 @@ import { ExportHost } from "@/components/export-host";
 import { ForgetOtherAccounts } from "@/components/forget-other-accounts";
 import { NetworkWatch } from "@/components/network-watch";
 import { OfflineSync } from "@/components/offline-sync";
+import { QueueWatch } from "@/components/queue-watch";
 import { createQueryClient, followAppFocus } from "@/lib/query-client";
 import { stackScreenOptions } from "@/navigation-options";
 import { colors, fontAssets } from "@/theme";
@@ -49,6 +50,7 @@ export default function RootLayout() {
           <ForgetOtherAccounts />
           <NetworkWatch />
           <OfflineSync />
+          <QueueWatch />
           <StatusBar style="dark" />
           <Stack screenOptions={stackScreenOptions}>
             <Stack.Screen name="index" />

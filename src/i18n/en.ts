@@ -174,6 +174,33 @@ export const en = {
     leave: "Leave",
     notSent: (count: number) => (count === 1 ? "1 page was not sent." : `${count} pages were not sent.`),
     leftOut: (count: number) => (count === 1 ? "1 page could not be read and was left out." : `${count} pages could not be read and were left out.`),
+    queueHint: "No connection. Your pages will wait on the phone and be sent when the network is back.",
+    queueing: (page: number, total: number) => `Saving page ${page} of ${total}…`,
+    notSaved: (count: number) =>
+      count === 1 ? "1 page could not be saved on the phone." : `${count} pages could not be saved on the phone.`,
+  },
+  waiting: {
+    state: "Waiting for the network",
+    title: "Page waiting",
+    body: "This page will be read as soon as the network returns.",
+    blocked: {
+      monthly_limit: "Monthly limit reached",
+      anonymous_limit: "Create an account to continue",
+      anonymous_daily_cap: "Try again tomorrow",
+      notebook: "Notebook not found",
+    },
+    notebookGone: "The notebook of this page no longer exists. Choose another one to send it.",
+    chooseNotebook: "Choose a notebook",
+    delete: "Delete",
+    deleteTitle: "Delete this page?",
+    deleteBody: "It has not been sent yet and will be lost.",
+    unavailable: "This waiting page could not be opened.",
+    lost: (count: number) =>
+      count === 1
+        ? "1 waiting page was lost: the phone could not read its saved notes."
+        : `${count} waiting pages were lost: the phone could not read its saved notes.`,
+    rejected: (count: number) =>
+      count === 1 ? "1 waiting page could not be read and was removed." : `${count} waiting pages could not be read and were removed.`,
   },
   limit: {
     monthTitle: (max: number) => `Your ${max} pages this month are read`,
