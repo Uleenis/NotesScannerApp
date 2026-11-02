@@ -166,6 +166,18 @@ describe("the original photo", () => {
     await waitFor(() => expect(outline()).toBe(colors.rule));
   });
 
+  test("closes the sheet on a second tap of the thumbnail, and never opens a second sheet", async () => {
+    const pathname = await openPage();
+    await screen.findByText(TITLE);
+
+    await fireEvent.press(screen.getByLabelText(fr.document.openPhoto));
+    await screen.findByTestId("zoomable-photo");
+    await fireEvent.press(screen.getByLabelText(fr.document.openPhoto, { includeHiddenElements: true }));
+
+    await waitFor(() => expect(pathname()).toBe("/page/page-1"));
+    expect(screen.queryAllByTestId("photo-sheet-bar", { includeHiddenElements: true })).toHaveLength(0);
+  });
+
   test("shows the photo the server signed for this page, and never edits it", async () => {
     await openPage();
     await screen.findByText(TITLE);

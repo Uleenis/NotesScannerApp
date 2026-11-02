@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Redirect, Stack, router, useIsFocused, useLocalSearchParams } from "expo-router";
+import { Redirect, Stack, router, useIsFocused, useLocalSearchParams, usePathname } from "expo-router";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
@@ -59,6 +59,7 @@ function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: Lo
   const start = useStartReading();
   const exportItem = useExportItem();
   const focused = useIsFocused();
+  const pathname = usePathname();
   const gate = useGate();
   const online = useOnline();
 
@@ -203,7 +204,13 @@ function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: Lo
   }
 
   function openPhoto() {
-    router.push({ pathname: "/page/[id]/photo", params: { id: page.id } });
+    if (pathname === `/page/${page.id}/photo`) {
+      router.back();
+      return;
+    }
+    if (focused) {
+      router.push({ pathname: "/page/[id]/photo", params: { id: page.id } });
+    }
   }
 
   const back: ViewAction = { label: t.reading.backTo(backName), onPress: goBack };
