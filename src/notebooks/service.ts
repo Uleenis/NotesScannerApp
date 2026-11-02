@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { cachedChapters, cachedNotebook, cachedNotebooks, viaCache } from "@/offline/cached";
 import { throughMirror } from "@/offline/through";
 import {
   createChapter,
@@ -33,22 +34,34 @@ export type NotebookService = {
 
 export const notebookService: NotebookService = {
   list: () =>
-    throughMirror(
-      () => listNotebooks(getSupabase()),
-      (mirror, notebooks) => mirror.notebooks(notebooks),
+    viaCache(
+      () =>
+        throughMirror(
+          () => listNotebooks(getSupabase()),
+          (mirror, notebooks) => mirror.notebooks(notebooks),
+        ),
+      cachedNotebooks,
     ),
   get: (id) =>
-    throughMirror(
-      () => getNotebook(getSupabase(), id),
-      (mirror, notebook) => mirror.notebook(id, notebook),
+    viaCache(
+      () =>
+        throughMirror(
+          () => getNotebook(getSupabase(), id),
+          (mirror, notebook) => mirror.notebook(id, notebook),
+        ),
+      cachedNotebook(id),
     ),
   create: (name) => createNotebook(getSupabase(), name),
   rename: (id, name) => renameNotebook(getSupabase(), id, name),
   remove: (id) => deleteNotebook(getSupabase(), id),
   chapters: () =>
-    throughMirror(
-      () => listChapters(getSupabase()),
-      (mirror, chapters) => mirror.chapters(chapters),
+    viaCache(
+      () =>
+        throughMirror(
+          () => listChapters(getSupabase()),
+          (mirror, chapters) => mirror.chapters(chapters),
+        ),
+      cachedChapters,
     ),
   createChapter: (notebookId, name) => createChapter(getSupabase(), notebookId, name),
   renameChapter: (id, name) => renameChapter(getSupabase(), id, name),

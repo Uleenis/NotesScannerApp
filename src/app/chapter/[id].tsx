@@ -11,6 +11,7 @@ import { planChapter } from "@/export/document";
 import { useExportItem } from "@/export/use-export";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
+import { useGate } from "@/offline/use-gate";
 import { useChapters, useDeleteChapter, useNotebook } from "@/notebooks/queries";
 import type { DeleteResult } from "@/notebooks/removal";
 import { usePages } from "@/pages/queries";
@@ -25,6 +26,7 @@ export default function ChapterScreen() {
   const notebook = useNotebook(chapter?.notebookId ?? null);
   const deletion = useDeleteChapter();
   const exportItem = useExportItem();
+  const gate = useGate();
 
   if (chapters.data === undefined) {
     return chapters.isError ? <LoadError message={t.chapter.loadFailed} onRetry={() => chapters.refetch()} /> : null;
@@ -54,12 +56,13 @@ export default function ChapterScreen() {
     showMenu(
       [
         ...(pages.data === undefined ? [] : [exportItem(planChapter(chapterName, chapterPages))]),
-        { label: t.chapter.rename, onPress: () => router.push({ pathname: "/rename", params: { kind: "chapter", id } }) },
+        { label: t.chapter.rename, onPress: gate(() => router.push({ pathname: "/rename", params: { kind: "chapter", id } })) },
         {
           label: t.chapter.delete,
           destructive: true,
-          onPress: () =>
+          onPress: gate(() =>
             confirmDeletion(t.chapter.deleteTitle, t.chapter.deleteBody, { cancel: t.common.cancel, confirm: t.chapter.delete }, () => void remove()),
+          ),
         },
       ],
       t.common.cancel,

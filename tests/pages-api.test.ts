@@ -8,7 +8,7 @@ type Call = [string, unknown[]];
 function query(outcome: Outcome) {
   const calls: Call[] = [];
   const chain: Record<string, unknown> = {};
-  for (const name of ["select", "not", "order", "eq"]) {
+  for (const name of ["select", "not", "order", "eq", "range"]) {
     chain[name] = (...args: unknown[]) => {
       calls.push([name, args]);
       return chain;

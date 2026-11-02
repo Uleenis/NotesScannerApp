@@ -19,6 +19,8 @@ import { pageName, planPage } from "@/export/document";
 import { useExportItem } from "@/export/use-export";
 import { useStrings } from "@/i18n";
 import { confirmDeletion, showMenu } from "@/lib/action-menu";
+import { isOnline, useOnline, whenOnline } from "@/offline/network";
+import { useGate } from "@/offline/use-gate";
 import { useChapters, useNotebook } from "@/notebooks/queries";
 import type { DeleteResult } from "@/notebooks/removal";
 import type { NumberedPage, StartResult } from "@/pages/pages";
@@ -57,6 +59,8 @@ function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: Lo
   const start = useStartReading();
   const exportItem = useExportItem();
   const focused = useIsFocused();
+  const gate = useGate();
+  const online = useOnline();
 
   const [problem, setProblem] = useState<Problem | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -135,7 +139,7 @@ function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: Lo
   }
 
   const beginUnseen = useEffectEvent(async () => {
-    if (!focusedNow.current) {
+    if (!focusedNow.current || !isOnline()) {
       return;
     }
     const fresh = await refetchPage();
@@ -156,7 +160,7 @@ function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: Lo
     }
     const timer = setTimeout(() => void beginUnseen(), delay);
     return () => clearTimeout(timer);
-  }, [page.status, page.queueReason, page.uploadedAt, focused]);
+  }, [page.status, page.queueReason, page.uploadedAt, focused, online]);
 
   function backToNotebook() {
     router.dismissTo(`/notebook/${page.notebookId}`);
@@ -185,12 +189,13 @@ function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: Lo
     showMenu(
       [
         exportItem(planPage(pageName(page, t.document.pageNumber), page)),
-        { label: t.pageMenu.move, onPress: () => router.push({ pathname: "/page/[id]/move", params: { id: page.id } }) },
+        { label: t.pageMenu.move, onPress: gate(() => router.push({ pathname: "/page/[id]/move", params: { id: page.id } })) },
         {
           label: t.pageMenu.delete,
           destructive: true,
-          onPress: () =>
+          onPress: gate(() =>
             confirmDeletion(t.pageMenu.deleteTitle, t.pageMenu.deleteBody, { cancel: t.common.cancel, confirm: t.pageMenu.delete }, () => void remove()),
+          ),
         },
       ],
       t.common.cancel,
@@ -203,7 +208,7 @@ function LoadedPage({ page, notebookName, chapter, now, found, refetchPage }: Lo
 
   const back: ViewAction = { label: t.reading.backTo(backName), onPress: goBack };
   const scanNext: ViewAction = { label: t.reading.scanNext, onPress: () => void openCapture() };
-  const relaunch: ViewAction = { label: t.reading.relaunch, onPress: () => void begin(true) };
+  const relaunch: ViewAction = { label: t.reading.relaunch, onPress: () => whenOnline(t.offline.needsNetwork, () => void begin(true)) };
 
   function reading() {
     const common = { pageNumber: page.number, photoUrl: photo.data };

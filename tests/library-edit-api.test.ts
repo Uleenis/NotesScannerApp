@@ -12,7 +12,7 @@ type Call = [string, unknown[]];
 function query(outcome: Outcome) {
   const calls: Call[] = [];
   const chain: Record<string, unknown> = {};
-  for (const name of ["select", "not", "order", "eq", "limit", "insert", "update"]) {
+  for (const name of ["select", "not", "order", "eq", "limit", "insert", "update", "range"]) {
     chain[name] = (...args: unknown[]) => {
       calls.push([name, args]);
       return chain;
@@ -87,6 +87,7 @@ describe("chapters", () => {
       ["order", ["notebook_id"]],
       ["order", ["position"]],
       ["order", ["id"]],
+      ["range", [0, 999]],
     ]);
   });
 

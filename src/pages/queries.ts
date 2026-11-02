@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/auth/auth-provider";
 import type { DeleteResult } from "@/notebooks/removal";
+import { useOnline } from "@/offline/network";
 import type { MoveResult, PageStatus, SetTypeResult, StartResult, SwitchableType } from "./pages";
 import { pageService } from "./service";
 import { ALERTS_POLL_MAX, ALERTS_POLL_MS, LIST_POLL_MS, PAGE_POLL_MS, WORDS_POLL_MAX, WORDS_POLL_MS } from "./timing";
@@ -65,14 +66,54 @@ export function usePage(id: string) {
   return query;
 }
 
-export function usePhotoUrl(pageId: string) {
+export type PhotoSource = { data: string | undefined; isError: boolean };
+
+function useLocalPhoto(pageId: string, wanted: boolean): PhotoSource {
+  const [state, setState] = useState<{ pageId: string; uri: string | null; failed: boolean } | null>(null);
+  useEffect(() => {
+    if (!wanted) {
+      return;
+    }
+    let live = true;
+    let release: (() => void) | null = null;
+    Promise.resolve()
+      .then(() => pageService.localPhoto(pageId))
+      .then((photo) => {
+        if (!live) {
+          photo.release();
+          return;
+        }
+        release = photo.release;
+        setState({ pageId, uri: photo.uri, failed: false });
+      })
+      .catch(() => {
+        if (live) {
+          setState({ pageId, uri: null, failed: true });
+        }
+      });
+    return () => {
+      live = false;
+      release?.();
+      setState(null);
+    };
+  }, [pageId, wanted]);
+  const mine = wanted && state !== null && state.pageId === pageId ? state : null;
+  return { data: mine?.uri ?? undefined, isError: mine?.failed ?? false };
+}
+
+export function usePhotoUrl(pageId: string): PhotoSource {
   const { status, userId } = useAuth();
-  return useQuery({
+  const online = useOnline();
+  const ready = status === "ready" && userId !== null;
+  const signed = useQuery({
     queryKey: ["photo-url", userId, pageId],
     queryFn: () => (userId === null ? Promise.reject(new Error("No account.")) : pageService.photoUrl(userId, pageId)),
-    enabled: status === "ready" && userId !== null,
+    enabled: ready && online,
     staleTime: PHOTO_URL_STALE_MS,
   });
+  const fromStore = !online || signed.isError;
+  const local = useLocalPhoto(pageId, ready && fromStore);
+  return fromStore ? local : { data: signed.data, isError: false };
 }
 
 export function usePhotoPixels(pageId: string, uri: string | undefined, wanted: boolean) {
@@ -139,12 +180,13 @@ export function useDeletePage(pageId: string) {
 
 export function usePageWords(pageId: string, enabled: boolean, text: string, expectWords: boolean) {
   const { status, userId } = useAuth();
+  const online = useOnline();
   const focused = useIsFocused();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["page-words", userId, pageId],
     queryFn: () => pageService.words(pageId),
-    enabled: enabled && status === "ready",
+    enabled: enabled && status === "ready" && online,
   });
 
   const unplaced = expectWords && query.data !== undefined && (query.data.words.length === 0 || placeWords(text, query.data) === null);
@@ -210,11 +252,12 @@ export function usePageAlerts(pageId: string, enabled: boolean) {
 
 export function usePageSecond(pageId: string, enabled: boolean) {
   const { status, userId } = useAuth();
+  const online = useOnline();
   const focused = useIsFocused();
   return useQuery({
     queryKey: ["page-second", userId, pageId],
     queryFn: () => pageService.second(pageId),
-    enabled: enabled && status === "ready",
+    enabled: enabled && status === "ready" && online,
     refetchInterval: (query) => (focused && query.state.data === null && query.state.dataUpdateCount < ALERTS_POLL_MAX ? ALERTS_POLL_MS : false),
   });
 }

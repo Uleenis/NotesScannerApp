@@ -131,9 +131,9 @@ describe("the key of an account", () => {
     const created = fakeDatabases.get(`${FOLDER}/store.db`);
     await reopen();
 
-    expect(created?.userVersion).toBe(1);
+    expect(created?.userVersion).toBe(2);
     expect([...(created?.tables ?? [])].sort()).toEqual(
-      ["chapters", "known_limit", "notebooks", "page_alerts", "page_renderings", "pages", "photos", "queue"].sort(),
+      ["chapters", "known_limit", "notebooks", "page_alerts", "page_renderings", "pages", "photos", "queue", "synced"].sort(),
     );
   });
 
@@ -169,7 +169,7 @@ describe("the key of an account", () => {
     expect(fakeSecure.calls.some((call) => call.action === "delete" && call.key === KEY_NAME)).toBe(true);
     expect(await rebuilt.pagePhotos.open(PAGE)).toEqual({ status: "missing" });
     expect(await rebuilt.queuePhotos.open(PAGE)).toEqual({ status: "missing" });
-    expect(fakeDatabases.get(`${FOLDER}/store.db`)?.userVersion).toBe(1);
+    expect(fakeDatabases.get(`${FOLDER}/store.db`)?.userVersion).toBe(2);
   });
 
   it("when the secure store fails for a moment, opens nothing and erases nothing; the next opening finds everything", async () => {
@@ -210,7 +210,7 @@ describe("the key of an account", () => {
     await store.close();
     const database = fakeDatabases.get(`${FOLDER}/store.db`);
     if (database !== undefined) {
-      database.userVersion = 2;
+      database.userVersion = 3;
     }
 
     await expect(openAccountStore(USER)).rejects.toThrow("store_newer");

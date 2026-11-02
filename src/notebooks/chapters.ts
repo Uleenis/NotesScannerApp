@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { field } from "@/capture/api";
+import { readAllRows } from "@/lib/paged";
 
 export type ChapterSummary = { id: string; notebookId: string; name: string; pageCount: number };
 
@@ -48,15 +49,18 @@ function readNextPosition(rows: unknown): number | null {
 }
 
 export async function listChapters(client: ChapterClient): Promise<ChapterSummary[]> {
-  const { data, error } = await client
-    .from("chapters")
-    .select("id, notebook_id, name, position, pages(count)")
-    .not("pages.uploaded_at", "is", null)
-    .order("notebook_id")
-    .order("position")
-    .order("id");
-  const chapters = Array.isArray(data) ? data.map(readChapter) : null;
-  if (error || chapters === null || chapters.includes(null)) {
+  const rows = await readAllRows((from, to) =>
+    client
+      .from("chapters")
+      .select("id, notebook_id, name, position, pages(count)")
+      .not("pages.uploaded_at", "is", null)
+      .order("notebook_id")
+      .order("position")
+      .order("id")
+      .range(from, to),
+  );
+  const chapters = rows === null ? null : rows.map(readChapter);
+  if (chapters === null || chapters.includes(null)) {
     throw new Error("The chapters could not be loaded.");
   }
   return chapters.filter((chapter) => chapter !== null);

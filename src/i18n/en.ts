@@ -27,6 +27,10 @@ export const en = {
     retry: "Try again",
     scan: "Scan",
   },
+  offline: {
+    banner: "Offline",
+    needsNetwork: "No connection. Try again with a network.",
+  },
   library: {
     title: "Library",
     notebooks: "Notebooks",
@@ -208,6 +212,7 @@ export const en = {
     loadFailed: "This page could not be loaded.",
   },
   rendering: {
+    offline: "Formatting needs a connection. The faithful text stays shown.",
     switchLabel: "Display of the page",
     faithful: "Faithful",
     enriched: "Formatted",
@@ -263,6 +268,7 @@ export const en = {
     frameLabel: "The word found on the photo",
   },
   photo: {
+    offlineMissing: "Photo available with a connection.",
     title: "Original photo",
     close: "Close",
     loadFailed: "The photo could not be loaded.",

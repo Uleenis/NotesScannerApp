@@ -48,6 +48,10 @@ export function setMirrorIdentity(read: (() => Promise<string | null>) | null): 
   identity = read;
 }
 
+export async function readsForSignedIn(store: AccountStore): Promise<boolean> {
+  return identity === null || (await identity()) === store.userId;
+}
+
 export function getMirrorStore(): AccountStore | null {
   return current;
 }

@@ -1,5 +1,6 @@
 import { FunctionsFetchError, FunctionsHttpError, type SupabaseClient } from "@supabase/supabase-js";
 
+import { readAllRows } from "@/lib/paged";
 import type { BlockReason } from "@/capture/allowance";
 import { field, isBlockReason, looksLikeNetworkFailure, refusalCode } from "@/capture/api";
 import { callDeletion, callLibrary, type DeleteResult, type LibraryFailure } from "@/notebooks/removal";
@@ -121,16 +122,19 @@ export function newestFirst(pages: NumberedPage[]): NumberedPage[] {
 }
 
 export async function listPages(client: PagesClient): Promise<NumberedPage[]> {
-  const { data, error } = await client
-    .from("pages")
-    .select(PAGE_COLUMNS)
-    .not("uploaded_at", "is", null)
-    .order("captured_at", { ascending: true })
-    .order("id");
-  if (error || !Array.isArray(data)) {
+  const rows = await readAllRows((from, to) =>
+    client
+      .from("pages")
+      .select(PAGE_COLUMNS)
+      .not("uploaded_at", "is", null)
+      .order("captured_at", { ascending: true })
+      .order("id")
+      .range(from, to),
+  );
+  if (rows === null) {
     throw new Error("The pages could not be loaded.");
   }
-  return numberPages(data.map(readPage));
+  return numberPages(rows.map(readPage));
 }
 
 export async function countPages(client: Pick<SupabaseClient, "from">): Promise<number> {

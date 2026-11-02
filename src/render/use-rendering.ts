@@ -2,11 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useReducer } from "react";
 
 import { useAuth } from "@/auth/auth-provider";
+import { useOnline } from "@/offline/network";
 import type { NumberedPage } from "@/pages/pages";
 import { renderingFingerprint, type StoredRendering } from "./api";
 import { renderService } from "./service";
 
-export type RenderingView = { status: "off" } | { status: "loading" } | { status: "waiting" } | { status: "ready"; text: string } | { status: "fallback" };
+export type RenderingView = { status: "off" } | { status: "loading" } | { status: "waiting" } | { status: "ready"; text: string } | { status: "fallback" } | { status: "offline" };
 
 type Attempt = { state: "pending"; done: Promise<void> } | { state: "failed"; retry: boolean };
 
@@ -26,6 +27,7 @@ export function forgetRenderFailure(pageId: string): void {
 
 export function useRendering(page: NumberedPage, active: boolean): RenderingView {
   const { status, userId } = useAuth();
+  const online = useOnline();
   const queryClient = useQueryClient();
   const [, refresh] = useReducer((count: number) => count + 1, 0);
   const text = page.text ?? "";
@@ -40,7 +42,7 @@ export function useRendering(page: NumberedPage, active: boolean): RenderingView
   const current: StoredRendering | null = stored.data !== undefined && stored.data !== null && stored.data.basedOn === fingerprint ? stored.data : null;
   const key = `${userId}:${page.id}:${fingerprint}`;
   const attempt = attempts.get(key);
-  const mustAsk = active && stored.isSuccess && current === null;
+  const mustAsk = active && stored.isSuccess && current === null && online;
 
   useEffect(() => {
     if (!mustAsk) {
@@ -87,6 +89,9 @@ export function useRendering(page: NumberedPage, active: boolean): RenderingView
   }
   if (current !== null) {
     return { status: "ready", text: current.text };
+  }
+  if (!online) {
+    return { status: "offline" };
   }
   return attempt?.state === "failed" ? { status: "fallback" } : { status: "waiting" };
 }

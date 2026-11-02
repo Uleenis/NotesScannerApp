@@ -14,6 +14,9 @@ export const PAGE_SERVICE_MOCK = {
   list: jest.fn(async () => []),
   get: jest.fn(),
   photoUrl: jest.fn(),
+  localPhoto: jest.fn(async () => {
+    throw new Error("photo_unavailable");
+  }),
   startReading: jest.fn(),
   setPageType: jest.fn(),
   move: jest.fn(),

@@ -29,6 +29,10 @@ export const fr: Strings = {
     retry: "Réessayer",
     scan: "Scanner",
   },
+  offline: {
+    banner: "Hors connexion",
+    needsNetwork: "Pas de connexion. Réessaie avec du réseau.",
+  },
   library: {
     title: "Bibliothèque",
     notebooks: "Carnets",
@@ -210,6 +214,7 @@ export const fr: Strings = {
     loadFailed: "Cette page n'a pas pu être chargée.",
   },
   rendering: {
+    offline: "La mise en forme demande une connexion. Le texte fidèle reste affiché.",
     switchLabel: "Affichage de la page",
     faithful: "Fidèle",
     enriched: "Enrichi",
@@ -265,6 +270,7 @@ export const fr: Strings = {
     frameLabel: "Le mot trouvé sur la photo",
   },
   photo: {
+    offlineMissing: "Photo disponible avec une connexion.",
     title: "Photo d'origine",
     close: "Fermer",
     loadFailed: "La photo n'a pas pu être chargée.",

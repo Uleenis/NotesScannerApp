@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 
 import { useStrings } from "@/i18n";
 import type { Strings } from "@/i18n/en";
@@ -10,12 +10,16 @@ import { displayPieces } from "@/pages/display";
 import { mathDocument, type MathRow } from "@/pages/formulas";
 import type { NumberedPage, PageType } from "@/pages/pages";
 import { confirmDeletion } from "@/lib/action-menu";
+import { useOnline, whenOnline } from "@/offline/network";
+import { useGate } from "@/offline/use-gate";
 import { useCorrectWord, usePageAlerts, usePageSecond, usePageWords, useSetPageType } from "@/pages/queries";
 import { MAX_FORMULAS_PER_PAGE } from "@/pages/tex";
 import { useTextEdit } from "@/pages/use-text-edit";
 import { placeWords, type ChosenFrom, type PlacedWord } from "@/pages/words";
+import { renderingFingerprint } from "@/render/api";
 import { parseRendering } from "@/render/markdown";
-import { setRenderMode, useRenderMode } from "@/render/mode";
+import { setRenderMode, useRenderMode, type RenderMode } from "@/render/mode";
+import { renderService } from "@/render/service";
 import { forgetRenderFailure, useRendering } from "@/render/use-rendering";
 import { colors, typography } from "@/theme";
 import { KeyboardLift } from "../keyboard-lift";
@@ -57,11 +61,13 @@ function MathSwitch({ page, mayLoseWork, onSwitch }: { page: NumberedPage; mayLo
   }
 
   function ask(math: boolean) {
-    if (mayLoseWork) {
-      confirmDeletion(t.document.switchLosesTitle, t.document.switchLosesBody, { cancel: t.common.cancel, confirm: t.document.switchLosesConfirm }, () => void toggle(math));
-    } else {
-      void toggle(math);
-    }
+    whenOnline(t.offline.needsNetwork, () => {
+      if (mayLoseWork) {
+        confirmDeletion(t.document.switchLosesTitle, t.document.switchLosesBody, { cancel: t.common.cancel, confirm: t.document.switchLosesConfirm }, () => void toggle(math));
+      } else {
+        void toggle(math);
+      }
+    });
   }
 
   return (
@@ -110,6 +116,8 @@ function MathBody({ rows }: { rows: MathRow[] }) {
 
 export function DocumentView({ page, found = null }: { page: NumberedPage; found?: number | null }) {
   const t = useStrings();
+  const gate = useGate();
+  const online = useOnline();
   const isMath = page.pageType === "math";
   const math = isMath ? mathDocument(page.text ?? "") : null;
   const parts = dateParts(page.capturedAt, new Date());
@@ -140,29 +148,54 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
   const current = editing === null ? null : (words.find((placed) => placed.word.index === editing) ?? null);
   const mayLoseWork = stored.data === undefined || stored.data.corrections.length > 0 || stored.data.gaps.length > 0;
   const textEdit = useTextEdit(page, placed, clean === null ? (page.text ?? "") : clean.text, clean === null ? NO_WORDS : clean.hidden);
-  const editable = read && ((page.pageType === "text" && words.length > 0) || page.pageType === "math");
+  const editable = read && ((page.pageType === "text" && (words.length > 0 || !online)) || page.pageType === "math");
   const writing = textEdit.draft !== null;
   const renderMode = useRenderMode();
   const [suspended, setSuspended] = useState(false);
   const renderable = read && (page.pageType === "text" || page.pageType === "math") && stripUnderline(page.text ?? "").trim() !== "";
-  const wordsReady = page.pageType === "math" ? stored.data !== undefined : placed.length > 0;
+  const wordsReady = !online || (page.pageType === "math" ? stored.data !== undefined : placed.length > 0);
   const wantsRich = renderable && renderMode === "enriched" && !suspended && !writing && wordsReady;
   const rendering = useRendering(page, wantsRich);
   const richText = rendering.status === "ready" ? rendering.text : null;
   const rich = useMemo(() => (richText === null ? null : parseRendering(richText)), [richText]);
   const showRich = rich !== null && rich.length > 0;
   const waitingForRich = wantsRich && (rendering.status === "waiting" || rendering.status === "loading");
+  const richOffline = wantsRich && rendering.status === "offline";
+  const blockedTap = !online && correctable ? () => Alert.alert(t.offline.needsNetwork) : undefined;
   const fellBack = wantsRich && (rendering.status === "fallback" || (rendering.status === "ready" && !showRich));
   const shownAlerts = (alerts.data ?? []).filter((kind) => (kind === "math_incomplete" ? page.pageType === "math" : page.pageType === "text"));
 
   function edit(index: number, touchedY: number | null) {
-    setFailed(false);
-    setEditing(index);
-    if (touchedY === null) {
-      setRevealed(null);
+    whenOnline(t.offline.needsNetwork, () => {
+      setFailed(false);
+      setEditing(index);
+      if (touchedY === null) {
+        setRevealed(null);
+        return;
+      }
+      frame.current?.measureInWindow((_x, top) => setRevealed(touchedY - top + scrolled.current));
+    });
+  }
+
+  function chooseMode(mode: RenderMode) {
+    const apply = () => {
+      setSuspended(false);
+      if (mode === "enriched") {
+        forgetRenderFailure(page.id);
+      }
+      setEditing(null);
+      setRenderMode(mode);
+    };
+    if (mode !== "enriched" || online) {
+      apply();
       return;
     }
-    frame.current?.measureInWindow((_x, top) => setRevealed(touchedY - top + scrolled.current));
+    const fingerprint = renderingFingerprint(page.text ?? "");
+    void renderService
+      .read(page.id)
+      .then((kept) => kept !== null && kept.basedOn === fingerprint)
+      .catch(() => false)
+      .then((has) => (has ? apply() : Alert.alert(t.offline.needsNetwork)));
   }
 
   useEffect(() => {
@@ -202,6 +235,7 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
         words={words}
         editing={editing}
         onEdit={edit}
+        onPress={blockedTap}
       />
     ) : (
       <Text accessibilityRole="header" selectable style={styles.title}>
@@ -216,13 +250,13 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
         <Pressable
           accessibilityRole="button"
           hitSlop={8}
-          onPress={() => {
+          onPress={gate(() => {
             setEditing(null);
             if (wantsRich) {
               setSuspended(true);
             }
             textEdit.start();
-          }}
+          })}
           style={styles.editAction}
         >
           <Text style={styles.editText}>{t.document.edit}</Text>
@@ -256,17 +290,11 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
             {renderable ? (
               <RenderSwitch
                 mode={wantsRich ? "enriched" : "faithful"}
-                onChange={(mode) => {
-                  setSuspended(false);
-                  if (mode === "enriched") {
-                    forgetRenderFailure(page.id);
-                  }
-                  setEditing(null);
-                  setRenderMode(mode);
-                }}
+                onChange={chooseMode}
               />
             ) : null}
             {waitingForRich ? <Text style={[styles.secondary, styles.alert]}>{t.rendering.waiting}</Text> : null}
+            {richOffline ? <Text style={[styles.secondary, styles.alert]}>{t.rendering.offline}</Text> : null}
             {fellBack ? <Text style={[styles.secondary, styles.alert]}>{t.rendering.fallback}</Text> : null}
             {showRich ? null : title}
             {shownAlerts.map((kind) => (
@@ -296,6 +324,7 @@ export function DocumentView({ page, found = null }: { page: NumberedPage; found
                     words={words}
                     editing={editing}
                     onEdit={edit}
+                    onPress={blockedTap}
                   />
                 ),
               )

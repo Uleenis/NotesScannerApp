@@ -3,17 +3,19 @@ import { router } from "expo-router";
 import { Pressable } from "react-native";
 
 import { useStrings } from "@/i18n";
+import { useGate } from "@/offline/use-gate";
 import { colors } from "@/theme";
 
 export function AccountButton() {
   const t = useStrings();
+  const gate = useGate();
 
   return (
     <Pressable
       accessibilityLabel={t.account.title}
       accessibilityRole="button"
       hitSlop={8}
-      onPress={() => router.push("/account")}
+      onPress={gate(() => router.push("/account"))}
     >
       <Ionicons name="person-circle-outline" size={28} color={colors.ink} />
     </Pressable>

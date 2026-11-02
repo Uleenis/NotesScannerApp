@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { readAllRows } from "@/lib/paged";
+
 export type NotebookSummary = { id: string; name: string; pageCount: number };
 
 export type CreateNotebookResult =
@@ -56,14 +58,17 @@ function readNextPosition(rows: unknown): number | null {
 }
 
 export async function listNotebooks(client: NotebookClient): Promise<NotebookSummary[]> {
-  const { data, error } = await client
-    .from("notebooks")
-    .select("id, name, position, pages(count)")
-    .not("pages.uploaded_at", "is", null)
-    .order("position")
-    .order("id");
-  const notebooks = Array.isArray(data) ? data.map(readNotebook) : null;
-  if (error || notebooks === null || notebooks.includes(null)) {
+  const rows = await readAllRows((from, to) =>
+    client
+      .from("notebooks")
+      .select("id, name, position, pages(count)")
+      .not("pages.uploaded_at", "is", null)
+      .order("position")
+      .order("id")
+      .range(from, to),
+  );
+  const notebooks = rows === null ? null : rows.map(readNotebook);
+  if (notebooks === null || notebooks.includes(null)) {
     throw new Error("The notebooks could not be loaded.");
   }
   return notebooks.filter((notebook) => notebook !== null);

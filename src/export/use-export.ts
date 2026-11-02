@@ -4,6 +4,7 @@ import { Alert } from "react-native";
 import { useLanguage, useStrings } from "@/i18n";
 import { useRenderMode } from "@/render/mode";
 import { showMenu, type MenuItem } from "@/lib/action-menu";
+import { useGate } from "@/offline/use-gate";
 import { beginExport, endExport } from "./activity";
 import type { ExportPlan } from "./document";
 import { runExport, type ExportFormat, type ExportResult } from "./run";
@@ -13,6 +14,7 @@ export function useExportItem(): (plan: ExportPlan) => MenuItem {
   const t = useStrings();
   const language = useLanguage();
   const renderMode = useRenderMode();
+  const gate = useGate();
 
   const message = useCallback(
     (result: ExportResult): string | null => {
@@ -55,7 +57,7 @@ export function useExportItem(): (plan: ExportPlan) => MenuItem {
   return useCallback(
     (plan) => ({
       label: t.export.label,
-      onPress: () =>
+      onPress: gate(() =>
         showMenu(
           [
             { label: t.export.pdf, onPress: () => start(plan, "pdf") },
@@ -63,7 +65,8 @@ export function useExportItem(): (plan: ExportPlan) => MenuItem {
           ],
           t.common.cancel,
         ),
+      ),
     }),
-    [t, start],
+    [t, start, gate],
   );
 }
