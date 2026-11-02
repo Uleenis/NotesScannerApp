@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useIsFocused } from "expo-router";
 import { useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
@@ -16,6 +16,7 @@ type Props = { pageId: string; tokenIndex: number };
 
 export function FoundPhoto({ pageId, tokenIndex }: Props) {
   const t = useStrings();
+  const focused = useIsFocused();
   const anchor = useAnchor(pageId, tokenIndex);
   const photo = usePhotoUrl(pageId);
   const [size, setSize] = useState<PhotoSize | null>(null);
@@ -50,7 +51,11 @@ export function FoundPhoto({ pageId, tokenIndex }: Props) {
       accessibilityRole="button"
       accessibilityLabel={t.document.openPhoto}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      onPress={() => router.push({ pathname: "/page/[id]/photo", params: { id: pageId, found: String(tokenIndex) } })}
+      onPress={() => {
+        if (focused) {
+          router.push({ pathname: "/page/[id]/photo", params: { id: pageId, found: String(tokenIndex) } });
+        }
+      }}
       style={styles.area}
       testID="found-photo"
     >
