@@ -1,8 +1,8 @@
-import { Directory, Paths } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import type { SQLiteDatabase } from "expo-sqlite";
 
 import { excludeFromBackup } from "./backup";
-import { checkedUuid } from "./bytes";
+import { checkedUuid, isUuid } from "./bytes";
 import { deriveKeys } from "./cipher";
 import { StoreUnreadable, openDatabase } from "./database";
 import { createKey, deleteKey, readKey } from "./key";
@@ -148,7 +148,11 @@ export async function closeAccountStores(): Promise<void> {
   await Promise.all(openings.map(closeOpening));
 }
 
-export async function wipeAccountStore(userId: string): Promise<number> {
+export function countWaitingFiles(userId: string): number {
+  return countPhotos(accountFolder(userId), "queue");
+}
+
+async function wipe(userId: string, clearViews: boolean): Promise<number> {
   const folder = accountFolder(userId);
   const opening = stores.get(userId);
   stores.delete(userId);
@@ -156,7 +160,39 @@ export async function wipeAccountStore(userId: string): Promise<number> {
     if (opening !== undefined) {
       await closeOpening(opening);
     }
-    clearViewFiles();
+    if (clearViews) {
+      clearViewFiles();
+    }
     return erase(userId, folder);
   });
+}
+
+function eraseEntry(entry: Directory | File): Promise<unknown> {
+  if (entry instanceof Directory && isUuid(entry.name)) {
+    return wipe(entry.name, false);
+  }
+  entry.delete();
+  return Promise.resolve();
+}
+
+export async function sweepOtherAccounts(keep: string): Promise<void> {
+  checkedUuid(keep);
+  const root = offlineRoot();
+  if (!root.exists) {
+    return;
+  }
+  for (const entry of root.list()) {
+    if (entry instanceof Directory && entry.name === keep) {
+      continue;
+    }
+    try {
+      await eraseEntry(entry);
+    } catch {
+      continue;
+    }
+  }
+}
+
+export async function wipeAccountStore(userId: string): Promise<number> {
+  return wipe(userId, true);
 }

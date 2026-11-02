@@ -1,6 +1,7 @@
+import { Directory, File, Paths } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
 
-import { closeAccountStores, openAccountStore, wipeAccountStore } from "@/offline/store";
+import { closeAccountStores, countWaitingFiles, openAccountStore, sweepOtherAccounts, wipeAccountStore } from "@/offline/store";
 import { PHOTO_BYTES_MAX } from "@/offline/photos";
 import { VIEW_FOLDER, eraseViewFile, writeViewFile } from "@/offline/view";
 
@@ -439,5 +440,84 @@ describe("a photo shown from a file", () => {
     eraseViewFile(file);
     eraseViewFile(file);
     expect(fakeFiles.has(file.uri)).toBe(false);
+  });
+});
+
+describe("sweeping the stores of other accounts", () => {
+  it("erases the folders and keys of every other account and keeps the signed-in one whole", async () => {
+    const { store } = await openAccountStore(USER);
+    await store.queuePhotos.save(PAGE, photo());
+    const { store: other } = await openAccountStore(OTHER);
+    await other.queuePhotos.save(PAGE, photo());
+    await other.pagePhotos.save(PAGE_TWO, photo());
+
+    await sweepOtherAccounts(USER);
+
+    expect([...fakeFiles.keys()].filter((uri) => uri.startsWith(`file:///docs/offline/${OTHER}`))).toEqual([]);
+    expect(fakeSecure.values.has(`offline-key.${OTHER}`)).toBe(false);
+    expect(other.isOpen()).toBe(false);
+    expect((await store.queuePhotos.open(PAGE)).status).toBe("ok");
+    expect(fakeSecure.values.has(KEY_NAME)).toBe(true);
+  });
+
+  it("erases anything else left in the offline folder, and nothing outside it", async () => {
+    const root = new Directory(Paths.document, "offline");
+    root.create({ intermediates: true, idempotent: true });
+    new Directory(root, "not-an-account").create();
+    const stray = new File(root, "stray.bin");
+    stray.create();
+    const outside = new File(Paths.document, "kept.txt");
+    outside.create();
+    await openAccountStore(USER);
+
+    await sweepOtherAccounts(USER);
+
+    expect(root.list().map((entry) => entry.uri)).toEqual([FOLDER]);
+    expect(outside.exists).toBe(true);
+  });
+
+  it("goes on with the next account when one cannot be erased", async () => {
+    await openAccountStore(OTHER);
+    await openAccountStore(PAGE);
+    fakeFaults.directoryDelete = true;
+
+    await sweepOtherAccounts(USER);
+
+    expect(fakeSecure.values.has(`offline-key.${OTHER}`)).toBe(false);
+    expect(fakeSecure.values.has(`offline-key.${PAGE}`)).toBe(false);
+    fakeFaults.directoryDelete = false;
+  });
+
+  it("does nothing when the offline folder does not exist, and refuses an id that is not an account", async () => {
+    await expect(sweepOtherAccounts(USER)).resolves.toBeUndefined();
+    await expect(sweepOtherAccounts("../")).rejects.toThrow("invalid_id");
+  });
+});
+
+describe("the waiting pages of an account on the phone", () => {
+  it("are counted from the files of its queue, without opening its store or its key", async () => {
+    const { store } = await openAccountStore(USER);
+    await store.queuePhotos.save(PAGE, photo());
+    await store.queuePhotos.save(PAGE_TWO, photo());
+    await store.close();
+    const reads = fakeSecure.calls.length;
+
+    expect(countWaitingFiles(USER)).toBe(2);
+    expect(countWaitingFiles(OTHER)).toBe(0);
+    expect(fakeSecure.calls.length).toBe(reads);
+    expect(() => countWaitingFiles("../")).toThrow("invalid_id");
+  });
+});
+
+describe("sweeping while a photo of the signed-in account is on screen", () => {
+  it("leaves the clear photo files of the screen alone", async () => {
+    await openAccountStore(OTHER);
+    await openAccountStore(USER);
+    const shown = writeViewFile(photo());
+
+    await sweepOtherAccounts(USER);
+
+    expect(fakeFiles.has(shown.uri)).toBe(true);
+    expect(fakeSecure.values.has(`offline-key.${OTHER}`)).toBe(false);
   });
 });

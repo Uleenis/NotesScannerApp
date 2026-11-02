@@ -16,5 +16,6 @@ export function installFakeAccount() {
   service.completeTransfer.mockReset().mockResolvedValue({ ok: true, userId: "found-user" });
   service.signOut.mockReset().mockResolvedValue(OK);
   service.deleteAccount.mockReset().mockResolvedValue(OK);
+  service.waitingPages.mockReset().mockResolvedValue(0);
   return service;
 }

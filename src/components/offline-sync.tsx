@@ -4,12 +4,13 @@ import { AppState } from "react-native";
 
 import { useAuth } from "@/auth/auth-provider";
 import { realQueueDeps } from "@/capture/queue-service";
+import { setOfflineSession } from "@/offline/accounts";
 import { defaultSyncDeps, signedInUser } from "@/offline/default-sync";
 import { setMirrorIdentity, setMirrorStore } from "@/offline/mirror";
 import { sendQueue } from "@/offline/queue-send";
 import { noteLost } from "@/offline/queue-state";
 import { createOfflineSession } from "@/offline/session";
-import { openAccountStore } from "@/offline/store";
+import { openAccountStore, sweepOtherAccounts, wipeAccountStore } from "@/offline/store";
 import { syncStore } from "@/offline/sync";
 
 const FREE_NETWORKS: readonly string[] = ["WIFI", "ETHERNET"];
@@ -17,7 +18,7 @@ const FREE_NETWORKS: readonly string[] = ["WIFI", "ETHERNET"];
 let now = { online: true, free: false };
 
 export function OfflineSync() {
-  const { status, userId } = useAuth();
+  const auth = useAuth();
   const network = useNetworkState();
   const online = network.isConnected !== false;
   const free = online && network.type !== undefined && FREE_NETWORKS.includes(network.type);
@@ -36,10 +37,13 @@ export function OfflineSync() {
       sync: (store) => syncStore(store, defaultSyncDeps(store.userId, () => now.free && AppState.currentState === "active")),
       sendQueue: (store) => sendQueue(store, realQueueDeps()),
       isOnline: () => now.online,
+      sweep: sweepOtherAccounts,
+      wipe: wipeAccountStore,
     }),
   );
 
-  const account = status === "ready" ? userId : null;
+  const account = auth.status === "ready" ? auth.userId : null;
+  const confirmed = auth.status !== "ready" || auth.provisional !== true;
 
   useEffect(() => {
     setMirrorIdentity(signedInUser);
@@ -47,8 +51,13 @@ export function OfflineSync() {
   }, []);
 
   useEffect(() => {
-    void session.start(account);
-  }, [session, account]);
+    setOfflineSession(session);
+    return () => setOfflineSession(null);
+  }, [session]);
+
+  useEffect(() => {
+    void session.start(account, confirmed);
+  }, [session, account, confirmed]);
 
   useEffect(() => () => void session.stop(), [session]);
 

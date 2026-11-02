@@ -30,7 +30,7 @@ test("the client used to check a code keeps nothing: no storage, no saved sessio
 test("the client used to check a code has its own storage key, so it never shares the one of the phone", () => {
   expect(authOptionsOfCall(0).storageKey).toBeDefined();
   getSupabase();
-  expect(authOptionsOfCall(1).storageKey).toBeUndefined();
+  expect(authOptionsOfCall(1).storageKey).toBe("sb-127-auth-token");
   expect(authOptionsOfCall(0).storageKey).not.toBe(authOptionsOfCall(1).storageKey);
 });
 

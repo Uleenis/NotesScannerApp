@@ -25,6 +25,7 @@ export default function AccountScreen() {
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
   const busy = useRef(false);
+  const asking = useRef(false);
   const exportData = useMyDataExport();
 
   const registered = auth.status === "ready" && !auth.isAnonymous;
@@ -65,11 +66,40 @@ export default function AccountScreen() {
     );
   }
 
-  function askToDelete() {
-    if (busy.current) {
+  async function waitingLost(): Promise<number | null> {
+    if (busy.current || asking.current) {
+      return null;
+    }
+    asking.current = true;
+    try {
+      return auth.status === "ready" ? await accountService.waitingPages(auth.userId) : 0;
+    } finally {
+      asking.current = false;
+    }
+  }
+
+  async function askToSignOut() {
+    const waiting = await waitingLost();
+    if (waiting === null) {
       return;
     }
-    Alert.alert(t.account.deleteConfirmTitle, t.account.deleteConfirmBody, [
+    if (waiting === 0) {
+      signOut();
+      return;
+    }
+    Alert.alert(t.account.signOutTitle, t.account.waitingLost(waiting), [
+      { text: t.common.cancel, style: "cancel" },
+      { text: t.account.signOut, style: "default", onPress: signOut },
+    ]);
+  }
+
+  async function askToDelete() {
+    const waiting = await waitingLost();
+    if (waiting === null) {
+      return;
+    }
+    const body = waiting === 0 ? t.account.deleteConfirmBody : `${t.account.deleteConfirmBody}\n\n${t.account.waitingLost(waiting)}`;
+    Alert.alert(t.account.deleteConfirmTitle, body, [
       { text: t.common.cancel, style: "cancel" },
       { text: t.account.deleteConfirm, style: "destructive", onPress: deleteAccount },
     ]);
@@ -107,13 +137,13 @@ export default function AccountScreen() {
         <Text style={styles.note}>{t.myData.note}</Text>
         <AccountGroup>
           {registered ? (
-            <AccountRow label={t.account.signOut} onPress={signOut} disabled={working} last />
+            <AccountRow label={t.account.signOut} onPress={() => void askToSignOut()} disabled={working} last />
           ) : (
             <AccountRow label={t.account.createAccount} onPress={() => router.push("/sign-in")} disabled={working} last />
           )}
         </AccountGroup>
         <AccountGroup>
-          <AccountRow label={t.account.delete} onPress={askToDelete} disabled={working} danger last />
+          <AccountRow label={t.account.delete} onPress={() => void askToDelete()} disabled={working} danger last />
         </AccountGroup>
         {__DEV__ ? (
           <AccountGroup>

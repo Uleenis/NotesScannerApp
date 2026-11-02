@@ -1,4 +1,4 @@
-import { accountChange, createSessionManager } from "@/auth/session";
+import { accountChange, createSessionManager, signedInAccount } from "@/auth/session";
 import { created, deferred, failed, fakeAuthClient, noSession, sessionOf } from "./fake-auth-client";
 
 test("creates an anonymous account when no session exists", async () => {
@@ -151,4 +151,120 @@ test.each(["INITIAL_SESSION", "PASSWORD_RECOVERY", "MFA_CHALLENGE_VERIFIED"])("i
 
 test("ignores a sign-in event that carries no session", () => {
   expect(accountChange("SIGNED_IN", null)).toBeUndefined();
+});
+
+describe("a phone whose session cannot be renewed without a network", () => {
+  const STORED = { userId: "stored-user", isAnonymous: false, expired: true };
+
+  function retryable(): Error {
+    return Object.assign(new Error("Network request failed"), { name: "AuthRetryableFetchError" });
+  }
+
+  function probe(stored: typeof STORED | null, offline = false) {
+    return { stored: jest.fn(async () => stored), offline: jest.fn(async () => offline) };
+  }
+
+  test("keeps the account of the stored session, as provisional, when the renewal fails for want of a network", async () => {
+    const { client, getSession, signInAnonymously } = fakeAuthClient();
+    getSession.mockResolvedValue({ data: { session: null }, error: retryable() });
+
+    const result = await createSessionManager(client, probe(STORED)).ensureSession();
+
+    expect(result).toEqual({ status: "ready", userId: "stored-user", email: null, isAnonymous: false, provisional: true });
+    expect(signInAnonymously).not.toHaveBeenCalled();
+  });
+
+  test("keeps it too when reading the session throws a network failure", async () => {
+    const { client, getSession } = fakeAuthClient();
+    getSession.mockRejectedValue(new TypeError("Network request failed"));
+
+    const result = await createSessionManager(client, probe({ ...STORED, isAnonymous: true })).ensureSession();
+
+    expect(result).toEqual({ status: "ready", userId: "stored-user", email: null, isAnonymous: true, provisional: true });
+  });
+
+  test("does not wait for the renewal when the stored session has expired and the phone says it has no network", async () => {
+    const { client, getSession } = fakeAuthClient();
+
+    const result = await createSessionManager(client, probe(STORED, true)).ensureSession();
+
+    expect(result).toEqual({ status: "ready", userId: "stored-user", email: null, isAnonymous: false, provisional: true });
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  test("still reads the session when it has not expired, even without a network", async () => {
+    const { client, getSession } = fakeAuthClient();
+    getSession.mockResolvedValue(sessionOf("stored-user", { isAnonymous: false, email: "reader@example.test" }));
+
+    const result = await createSessionManager(client, probe({ ...STORED, expired: false }, true)).ensureSession();
+
+    expect(result).toEqual({ status: "ready", userId: "stored-user", email: "reader@example.test", isAnonymous: false });
+    expect(getSession).toHaveBeenCalledTimes(1);
+  });
+
+  test("is unavailable when the failure is not a network failure", async () => {
+    const { client, getSession, signInAnonymously } = fakeAuthClient();
+    getSession.mockResolvedValue({ data: { session: null }, error: Object.assign(new Error("refused"), { name: "AuthApiError", status: 400 }) });
+
+    expect(await createSessionManager(client, probe(STORED)).ensureSession()).toEqual({ status: "unavailable" });
+    expect(signInAnonymously).not.toHaveBeenCalled();
+  });
+
+  test("is unavailable when no session is stored", async () => {
+    const { client, getSession } = fakeAuthClient();
+    getSession.mockResolvedValue({ data: { session: null }, error: retryable() });
+
+    expect(await createSessionManager(client, probe(null, true)).ensureSession()).toEqual({ status: "unavailable" });
+  });
+
+  test("never keeps a stored account when no session comes back and none is being renewed: a new account is made", async () => {
+    const { client, getSession, signInAnonymously } = fakeAuthClient();
+    getSession.mockResolvedValue(noSession());
+    signInAnonymously.mockResolvedValue({ data: { user: null, session: null }, error: retryable() });
+
+    expect(await createSessionManager(client, probe({ ...STORED, expired: false })).ensureSession()).toEqual({ status: "unavailable" });
+  });
+
+  test("is unavailable when the stored session or the network cannot be read", async () => {
+    const { client, getSession } = fakeAuthClient();
+    getSession.mockResolvedValue({ data: { session: null }, error: retryable() });
+    const broken = { stored: jest.fn(async () => Promise.reject(new Error("locked"))), offline: jest.fn(async () => Promise.reject(new Error("no"))) };
+
+    expect(await createSessionManager(client, broken).ensureSession()).toEqual({ status: "unavailable" });
+  });
+});
+
+describe("the account the store of the phone may be read for", () => {
+  const STORED = { userId: "stored-user", isAnonymous: false, expired: true };
+
+  test("is the account of the session when it can be read", async () => {
+    const { client, getSession } = fakeAuthClient();
+    getSession.mockResolvedValue(sessionOf("session-user"));
+
+    expect(await signedInAccount(client, { stored: async () => STORED, offline: async () => false })).toBe("session-user");
+  });
+
+  test("is the account of the stored session when the renewal fails for want of a network", async () => {
+    const { client, getSession } = fakeAuthClient();
+    getSession.mockResolvedValue({ data: { session: null }, error: Object.assign(new Error("fetch"), { name: "AuthRetryableFetchError" }) });
+
+    expect(await signedInAccount(client, { stored: async () => STORED, offline: async () => false })).toBe("stored-user");
+    expect(await signedInAccount(client, { stored: async () => null, offline: async () => false })).toBeNull();
+  });
+
+  test("is the account of the stored session without asking when it has expired and the phone has no network", async () => {
+    const { client, getSession } = fakeAuthClient();
+
+    expect(await signedInAccount(client, { stored: async () => STORED, offline: async () => true })).toBe("stored-user");
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  test("is nobody when there is no session or when the failure is not a network failure", async () => {
+    const { client, getSession } = fakeAuthClient();
+    getSession.mockResolvedValueOnce(noSession());
+    getSession.mockResolvedValueOnce({ data: { session: null }, error: Object.assign(new Error("refused"), { name: "AuthApiError" }) });
+
+    expect(await signedInAccount(client, { stored: async () => STORED, offline: async () => false })).toBeNull();
+    expect(await signedInAccount(client, { stored: async () => STORED, offline: async () => false })).toBeNull();
+  });
 });

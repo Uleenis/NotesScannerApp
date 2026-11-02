@@ -320,6 +320,8 @@ export const fr: Strings = {
     legalMiddle: " et la ",
     privacy: "politique de confidentialité",
     legalAfter: ".",
+    switchTitle: "Se connecter à un autre compte ?",
+    switchConfirm: "Continuer",
   },
   code: {
     title: "Entre le code",
@@ -361,6 +363,8 @@ export const fr: Strings = {
     deleteFailed: "La suppression n'a pas abouti. Réessaie.",
     deleteOffline: "Pas de connexion. Le compte n'a pas été supprimé.",
     signOutFailed: "La déconnexion n'a pas abouti. Réessaie.",
+    signOutTitle: "Se déconnecter ?",
+    waitingLost: (pages: number) => (pages === 1 ? "1 page non envoyée sera perdue." : `${pages} pages non envoyées seront perdues.`),
   },
   training: {
     row: "Ton écriture",

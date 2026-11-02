@@ -7,5 +7,6 @@ export const accountServiceModule = {
     completeTransfer: jest.fn(),
     signOut: jest.fn(),
     deleteAccount: jest.fn(),
+    waitingPages: jest.fn(),
   },
 };

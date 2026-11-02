@@ -21,6 +21,7 @@ jest.mock("@/lib/supabase", () => ({
   getStatelessSupabase: () => mockStateless,
 }));
 jest.mock("@/pages/service", () => ({ pageService: { count: jest.fn() } }));
+jest.mock("@/offline/accounts", () => ({ leaveAccount: jest.fn(async () => undefined), waitingPages: jest.fn(async () => 0) }));
 
 const FOUND = { data: { session: { access_token: "found-access", refresh_token: "found-refresh", user: { id: "found-user" } } }, error: null };
 
@@ -30,7 +31,7 @@ beforeEach(() => {
       fn.mockReset();
     }
   }
-  mockMain.auth.getSession.mockResolvedValue({ data: { session: { access_token: "anonymous-access" } }, error: null });
+  mockMain.auth.getSession.mockResolvedValue({ data: { session: { access_token: "anonymous-access", user: { id: "anonymous-user" } } }, error: null });
   mockMain.auth.verifyOtp.mockResolvedValue({ error: null });
   mockMain.auth.setSession.mockResolvedValue({ error: null });
   mockMain.functions.invoke.mockResolvedValue({ error: null });

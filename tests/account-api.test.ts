@@ -39,7 +39,10 @@ function functionError(status: number): Error {
 }
 
 function fakeDeps() {
-  const getSession = jest.fn(async () => ({ data: { session: { access_token: "anonymous-access" } }, error: null as unknown }));
+  const getSession = jest.fn(async () => ({
+    data: { session: { access_token: "anonymous-access", user: { id: "anonymous-user" } } as { access_token: string; user: { id: string } } | null },
+    error: null as unknown,
+  }));
   const getUser = jest.fn(async (): Promise<Outcome> => OK);
   const updateUser = jest.fn(async (_attributes: { email: string }): Promise<Outcome> => OK);
   const signInWithOtp = jest.fn(async (_credentials: { email: string; options: { shouldCreateUser: false } }): Promise<Outcome> => OK);
@@ -49,11 +52,13 @@ function fakeDeps() {
   const invoke = jest.fn(async (_name: string, _options?: { headers: Record<string, string> }): Promise<Outcome> => OK);
   const verifyWithoutSession = jest.fn(async (_params: { email: string; token: string; type: "email" }): Promise<Verified> => FOUND);
   const countPages = jest.fn(async () => 0);
+  const leave = jest.fn(async (_userId: string) => undefined);
   const deps: AccountDeps = {
     auth: { getSession, getUser, updateUser, signInWithOtp, verifyOtp, setSession, signOut: signOutCall },
     stateless: { verifyOtp: verifyWithoutSession },
     functions: { invoke },
     countPages,
+    leave,
   };
   return {
     deps,
@@ -67,6 +72,7 @@ function fakeDeps() {
     invoke,
     verifyWithoutSession,
     countPages,
+    leave,
   };
 }
 
@@ -300,8 +306,8 @@ describe("completing the transfer", () => {
   test("reads the token of the account of the phone again at every try", async () => {
     const { deps, getSession, invoke } = fakeDeps();
     getSession
-      .mockResolvedValueOnce({ data: { session: { access_token: "first" } }, error: null })
-      .mockResolvedValueOnce({ data: { session: { access_token: "second" } }, error: null });
+      .mockResolvedValueOnce({ data: { session: { access_token: "first", user: { id: "anonymous-user" } } }, error: null })
+      .mockResolvedValueOnce({ data: { session: { access_token: "second", user: { id: "anonymous-user" } } }, error: null });
     invoke.mockResolvedValueOnce({ error: functionError(500) });
 
     await completeTransfer(deps, PENDING);
@@ -388,7 +394,7 @@ describe("completing the transfer", () => {
 
   test("fails without calling the transfer when the phone has no session", async () => {
     const { deps, getSession, invoke, setSession } = fakeDeps();
-    getSession.mockResolvedValue({ data: { session: null as unknown as { access_token: string } }, error: null });
+    getSession.mockResolvedValue({ data: { session: null }, error: null });
 
     expect(await completeTransfer(deps, PENDING)).toEqual({ ok: false, reason: "failed" });
 
@@ -538,5 +544,118 @@ describe("reading the failures", () => {
 
   test.each(["me@example.test", "a.b+c@sub.example.test"])("%s is an e-mail address", (email) => {
     expect(isEmailAddress(email)).toBe(true);
+  });
+});
+
+describe("the phone forgets the account it leaves", () => {
+  function signedInAfter(getSession: ReturnType<typeof fakeDeps>["getSession"], userId: string) {
+    getSession.mockResolvedValueOnce({
+      data: { session: { access_token: "anonymous-access", user: { id: "anonymous-user" } } },
+      error: null,
+    });
+    getSession.mockResolvedValue({ data: { session: { access_token: "new-access", user: { id: userId } } }, error: null });
+  }
+
+  test("signing out wipes the store of the account once its session has ended", async () => {
+    const { deps, signOut: signOutCall, leave } = fakeDeps();
+
+    expect(await signOut(deps)).toEqual({ ok: true });
+
+    expect(leave).toHaveBeenCalledWith("anonymous-user");
+    expect(signOutCall.mock.invocationCallOrder[0]).toBeLessThan(leave.mock.invocationCallOrder[0]);
+  });
+
+  test("signing out that fails wipes nothing", async () => {
+    const { deps, signOut: signOutCall, leave } = fakeDeps();
+    signOutCall.mockResolvedValue({ error: new TypeError("Network request failed") });
+
+    expect(await signOut(deps)).toEqual({ ok: false, reason: "offline" });
+
+    expect(leave).not.toHaveBeenCalled();
+  });
+
+  test("signing out is done even when the wipe fails, and wipes nothing without a session", async () => {
+    const { deps, getSession, leave } = fakeDeps();
+    leave.mockRejectedValueOnce(new Error("busy"));
+
+    expect(await signOut(deps)).toEqual({ ok: true });
+
+    getSession.mockResolvedValue({ data: { session: null }, error: null });
+    leave.mockClear();
+    expect(await signOut(deps)).toEqual({ ok: true });
+    expect(leave).not.toHaveBeenCalled();
+  });
+
+  test("deleting the account wipes its store after its session has ended", async () => {
+    const { deps, signOut: signOutCall, leave } = fakeDeps();
+
+    expect(await deleteAccount(deps)).toEqual({ ok: true });
+
+    expect(leave).toHaveBeenCalledWith("anonymous-user");
+    expect(signOutCall.mock.invocationCallOrder[0]).toBeLessThan(leave.mock.invocationCallOrder[0]);
+  });
+
+  test("deleting the account wipes its store even when ending the local session fails", async () => {
+    const { deps, signOut: signOutCall, leave } = fakeDeps();
+    signOutCall.mockRejectedValue(new Error("storage"));
+
+    expect(await deleteAccount(deps)).toEqual({ ok: true });
+
+    expect(leave).toHaveBeenCalledWith("anonymous-user");
+  });
+
+  test("an account the server did not delete keeps its store", async () => {
+    const { deps, invoke, leave } = fakeDeps();
+    invoke.mockResolvedValue({ error: functionError(500) });
+
+    expect(await deleteAccount(deps)).toEqual({ ok: false, reason: "failed" });
+
+    expect(leave).not.toHaveBeenCalled();
+  });
+
+  test("a sign-in to another account without pages to bring wipes the store of the account left", async () => {
+    const { deps, getSession, leave } = fakeDeps();
+    signedInAfter(getSession, "found-user");
+
+    expect(await confirmSignIn(deps, "reader@example.test", "123456", true)).toEqual({ ok: true, transfer: null });
+
+    expect(leave).toHaveBeenCalledWith("anonymous-user");
+  });
+
+  test("a sign-in that fails, or that keeps the same account, wipes nothing", async () => {
+    const { deps, getSession, verifyOtp, leave } = fakeDeps();
+    verifyOtp.mockResolvedValueOnce({ error: authError("otp_expired", 403) });
+
+    expect(await confirmSignIn(deps, "reader@example.test", "123456", true)).toEqual({ ok: false, reason: "wrong_code" });
+    signedInAfter(getSession, "anonymous-user");
+    expect(await confirmSignIn(deps, "reader@example.test", "123456", true)).toEqual({ ok: true, transfer: null });
+
+    expect(leave).not.toHaveBeenCalled();
+  });
+
+  test("a sign-up keeps the account and its store", async () => {
+    const { deps, leave } = fakeDeps();
+
+    expect(await confirmSignUp(deps, "reader@example.test", "123456")).toEqual({ ok: true });
+
+    expect(leave).not.toHaveBeenCalled();
+  });
+
+  test("a sign-in with pages hands them over first and wipes the store of the anonymous account once the account found is taken", async () => {
+    const { deps, setSession, leave } = fakeDeps();
+
+    expect(await completeTransfer(deps, PENDING)).toEqual({ ok: true, userId: "found-user" });
+
+    expect(leave).toHaveBeenCalledWith("anonymous-user");
+    expect(setSession.mock.invocationCallOrder[0]).toBeLessThan(leave.mock.invocationCallOrder[0]);
+  });
+
+  test("a transfer whose account found could not be taken wipes nothing", async () => {
+    const { deps, setSession, leave } = fakeDeps();
+    setSession.mockResolvedValue({ error: new TypeError("Network request failed") });
+
+    expect(await completeTransfer(deps, PENDING)).toEqual({ ok: false, reason: "offline" });
+
+    expect(leave).not.toHaveBeenCalled();
   });
 });

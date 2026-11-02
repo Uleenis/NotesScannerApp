@@ -1,5 +1,6 @@
 import { pageService } from "@/pages/service";
 import { getStatelessSupabase, getSupabase } from "@/lib/supabase";
+import { leaveAccount, waitingPages } from "@/offline/accounts";
 import {
   completeTransfer,
   confirmSignIn,
@@ -27,6 +28,7 @@ function deps(): AccountDeps {
     stateless: { verifyOtp: (params) => getStatelessSupabase().auth.verifyOtp(params) },
     functions: { invoke: (name, options) => client.functions.invoke(name, options) },
     countPages: () => pageService.count(),
+    leave: (userId) => leaveAccount(userId),
   };
 }
 
@@ -38,6 +40,7 @@ export const accountService = {
   completeTransfer: (pending: PendingTransfer) => completeTransfer(deps(), pending),
   signOut: () => signOut(deps()),
   deleteAccount: () => deleteAccount(deps()),
+  waitingPages: (userId: string) => waitingPages(userId),
 };
 
 export type AccountService = typeof accountService;

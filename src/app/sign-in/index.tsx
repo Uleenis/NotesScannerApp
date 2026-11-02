@@ -1,9 +1,10 @@
 import { Stack, router } from "expo-router";
 import { useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { accountService } from "@/auth/account-service";
 import type { AccountFailure } from "@/auth/account-errors";
+import { useAuth } from "@/auth/auth-provider";
 import { HeaderTextButton } from "@/components/header-text-button";
 import { PrimaryButton } from "@/components/primary-button";
 import { useStrings } from "@/i18n";
@@ -15,6 +16,7 @@ type Mode = "signup" | "signin";
 
 export default function SignInScreen() {
   const t = useStrings();
+  const auth = useAuth();
   const [mode, setMode] = useState<Mode>("signup");
   const [email, setEmail] = useState("");
   const [focused, setFocused] = useState(false);
@@ -52,8 +54,31 @@ export default function SignInScreen() {
     }
   }
 
+  async function confirmThenSend() {
+    if (busy.current) {
+      return;
+    }
+    if (mode === "signin" && auth.status === "ready") {
+      busy.current = true;
+      let waiting = 0;
+      try {
+        waiting = await accountService.waitingPages(auth.userId);
+      } finally {
+        busy.current = false;
+      }
+      if (waiting > 0) {
+        Alert.alert(t.signIn.switchTitle, t.account.waitingLost(waiting), [
+          { text: t.common.cancel, style: "cancel" },
+          { text: t.signIn.switchConfirm, style: "default", onPress: () => void sendCode() },
+        ]);
+        return;
+      }
+    }
+    await sendCode();
+  }
+
   function receiveCode() {
-    void sendCode();
+    void confirmThenSend();
   }
 
   const signingUp = mode === "signup";

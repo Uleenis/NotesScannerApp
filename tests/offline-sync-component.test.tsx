@@ -11,8 +11,13 @@ const mockSession = {
   foreground: jest.fn(async () => undefined),
   network: jest.fn(async () => undefined),
 };
-let mockDeps: { sync: (store: { userId: string }) => Promise<unknown>; isOnline: () => boolean } | null = null;
-let mockAuth: { status: string; userId: string | null } = { status: "ready", userId: USER };
+let mockDeps: {
+  sync: (store: { userId: string }) => Promise<unknown>;
+  isOnline: () => boolean;
+  sweep: (keep: string) => Promise<void>;
+  wipe: (userId: string) => Promise<number>;
+} | null = null;
+let mockAuth: { status: string; userId: string | null; provisional?: boolean } = { status: "ready", userId: USER };
 let mockNetwork: { isConnected?: boolean; type?: string } = { isConnected: true, type: "WIFI" };
 
 jest.mock("@/auth/auth-provider", () => ({ useAuth: () => mockAuth }));
@@ -25,7 +30,15 @@ jest.mock("@/offline/session", () => ({
 }));
 const mockIdentity = jest.fn();
 jest.mock("@/offline/mirror", () => ({ setMirrorStore: jest.fn(), setMirrorIdentity: (...args: unknown[]) => mockIdentity(...args) }));
-jest.mock("@/offline/store", () => ({ openAccountStore: jest.fn() }));
+const mockRegister = jest.fn();
+jest.mock("@/offline/accounts", () => ({ setOfflineSession: (...args: unknown[]) => mockRegister(...args) }));
+const mockSweep = jest.fn(async () => undefined);
+const mockWipe = jest.fn(async () => 0);
+jest.mock("@/offline/store", () => ({
+  openAccountStore: jest.fn(),
+  sweepOtherAccounts: (...args: unknown[]) => mockSweep(...(args as [])),
+  wipeAccountStore: (...args: unknown[]) => mockWipe(...(args as [])),
+}));
 const mockSyncStore = jest.fn(async () => ({ status: "done", downloaded: 0 }));
 jest.mock("@/offline/sync", () => ({ syncStore: (...args: unknown[]) => mockSyncStore(...(args as [])) }));
 const mockDefaultDeps = jest.fn((userId: string, canDownload: () => boolean) => ({ userId, canDownload }));
@@ -51,7 +64,7 @@ beforeEach(() => {
 describe("the offline session of the app", () => {
   it("starts with the signed-in account and stops with the app", async () => {
     const view = await render(<OfflineSync />);
-    expect(mockSession.start).toHaveBeenCalledWith(USER);
+    expect(mockSession.start).toHaveBeenCalledWith(USER, true);
     await view.unmount();
     expect(mockSession.stop).toHaveBeenCalled();
     expect(remove).toHaveBeenCalled();
@@ -68,14 +81,14 @@ describe("the offline session of the app", () => {
   it("starts with nobody while the account is not ready", async () => {
     mockAuth = { status: "loading", userId: null };
     await render(<OfflineSync />);
-    expect(mockSession.start).toHaveBeenCalledWith(null);
+    expect(mockSession.start).toHaveBeenCalledWith(null, true);
   });
 
   it("follows a change of account", async () => {
     const view = await render(<OfflineSync />);
     mockAuth = { status: "ready", userId: "7d2e4f6a-8b1c-4d3e-a5f7-9b1d3f5a7c9e" };
     await view.rerender(<OfflineSync />);
-    expect(mockSession.start).toHaveBeenLastCalledWith("7d2e4f6a-8b1c-4d3e-a5f7-9b1d3f5a7c9e");
+    expect(mockSession.start).toHaveBeenLastCalledWith("7d2e4f6a-8b1c-4d3e-a5f7-9b1d3f5a7c9e", true);
   });
 
   it("tells the session about the return to the foreground", async () => {
@@ -132,5 +145,32 @@ describe("the offline session of the app", () => {
     mockNetwork = { isConnected: false, type: "WIFI" };
     await view.rerender(<OfflineSync />);
     expect(canDownload()).toBe(false);
+  });
+});
+
+describe("the accounts of the phone", () => {
+  it("opens the store of an account kept without a network but does not sweep for it until it is confirmed", async () => {
+    mockAuth = { status: "ready", userId: USER, provisional: true };
+    const view = await render(<OfflineSync />);
+    expect(mockSession.start).toHaveBeenLastCalledWith(USER, false);
+
+    mockAuth = { status: "ready", userId: USER };
+    await view.rerender(<OfflineSync />);
+    expect(mockSession.start).toHaveBeenLastCalledWith(USER, true);
+  });
+
+  it("gives the session to the leaving of an account, and takes it back with the app", async () => {
+    const view = await render(<OfflineSync />);
+    expect(mockRegister).toHaveBeenLastCalledWith(mockSession);
+    await view.unmount();
+    expect(mockRegister).toHaveBeenLastCalledWith(null);
+  });
+
+  it("sweeps and wipes through the store", async () => {
+    await render(<OfflineSync />);
+    await mockDeps?.sweep(USER);
+    await mockDeps?.wipe(USER);
+    expect(mockSweep).toHaveBeenCalledWith(USER);
+    expect(mockWipe).toHaveBeenCalledWith(USER);
   });
 });
