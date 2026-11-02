@@ -1,7 +1,7 @@
 import { listChapters, type ChapterClient } from "@/notebooks/chapters";
 import { listNotebooks, type NotebookClient } from "@/notebooks/notebooks";
 import { MAX_ROWS, PAGE_ROWS, readAllRows } from "@/lib/paged";
-import { listPages, type PagesClient } from "@/pages/pages";
+import { getPage, listPages, type PagesClient } from "@/pages/pages";
 
 type Chunk = { data: unknown[] | null; error: { code: string } | null };
 
@@ -126,6 +126,37 @@ describe("the three lists", () => {
     const pages = await listPages(builder(pageRows(1500), ranges) as unknown as PagesClient);
     expect(pages).toHaveLength(1500);
     expect(Math.max(...pages.map((page) => page.number))).toBe(1500);
+    expect(ranges).toHaveLength(2);
+  });
+
+  it("numbers a page among every page of its notebook, past the server limit", async () => {
+    const rows = pageRows(1500);
+    const wanted = rows[1400];
+    const ranges: [number, number][] = [];
+    const siblings = rows.map((row, index) => ({ id: row.id, captured_at: `2026-10-01T10:${String(Math.floor(index / 60)).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}.000Z` }));
+    wanted.captured_at = siblings[1400].captured_at;
+    const self: unknown = new Proxy(
+      {},
+      {
+        get: (_target, name) => {
+          if (name === "maybeSingle") {
+            return () => Promise.resolve({ data: wanted, error: null });
+          }
+          if (name === "range") {
+            return (from: number, to: number) => {
+              ranges.push([from, to]);
+              return Promise.resolve({ data: siblings.slice(from, to + 1), error: null });
+            };
+          }
+          if (name === "then") {
+            return undefined;
+          }
+          return () => self;
+        },
+      },
+    );
+    const found = await getPage({ from: () => self } as unknown as PagesClient, wanted.id);
+    expect(found?.number).toBe(1401);
     expect(ranges).toHaveLength(2);
   });
 

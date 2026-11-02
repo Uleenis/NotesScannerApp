@@ -42,7 +42,7 @@ export function useRendering(page: NumberedPage, active: boolean): RenderingView
   const current: StoredRendering | null = stored.data !== undefined && stored.data !== null && stored.data.basedOn === fingerprint ? stored.data : null;
   const key = `${userId}:${page.id}:${fingerprint}`;
   const attempt = attempts.get(key);
-  const mustAsk = active && stored.isSuccess && current === null && online;
+  const mustAsk = active && stored.isSuccess && current === null && online && !stored.isFetching;
 
   useEffect(() => {
     if (!mustAsk) {

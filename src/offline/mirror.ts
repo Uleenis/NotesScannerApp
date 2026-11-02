@@ -18,6 +18,7 @@ import {
   replacePages,
 } from "./library";
 import { hasPhoto, keepPhoto, touchPhoto } from "./page-photos";
+import { announceStore } from "./store-ready";
 import type { AccountStore } from "./store";
 
 export type Mirror = {
@@ -42,6 +43,7 @@ const loading = new Map<string, Promise<void>>();
 
 export function setMirrorStore(store: AccountStore | null): void {
   current = store;
+  announceStore(store !== null);
 }
 
 export function setMirrorIdentity(read: (() => Promise<string | null>) | null): void {

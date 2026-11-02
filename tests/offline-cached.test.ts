@@ -121,7 +121,7 @@ describe("viaCache", () => {
     expect(await viaCache(request, cachedNotebooks)).toEqual([notebook(1), notebook(2)]);
   });
 
-  it("fails like the server when the store knows nothing of the list", async () => {
+  it("asks the server when the store knows nothing, and fails like it when it fails", async () => {
     setOnline(false);
     const request = jest.fn(async () => [notebook(7)]);
     expect(await viaCache(request, cachedNotebooks)).toEqual([notebook(7)]);

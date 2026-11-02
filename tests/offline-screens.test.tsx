@@ -275,6 +275,19 @@ describe("the photo of a page without network [6]", () => {
     expect(release).toHaveBeenCalledTimes(1);
   });
 
+  test("erases the clear file of a photo that was decrypted after the page was left", async () => {
+    goOffline();
+    const release = jest.fn();
+    let finish: (photo: { uri: string; release: () => void }) => void = () => undefined;
+    jest.mocked(pageService.localPhoto).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    await openApp("/page/page-1");
+    await screen.findByText("Les suites");
+    await waitFor(() => expect(pageService.localPhoto).toHaveBeenCalled());
+    await act(async () => screen.unmount());
+    await act(async () => finish({ uri: "file:///cache/offline-view/late.jpg", release }));
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
   test("says the photo comes with a connection when it is not kept", async () => {
     goOffline();
     jest.mocked(pageService.localPhoto).mockRejectedValue(new Error("photo_unavailable"));

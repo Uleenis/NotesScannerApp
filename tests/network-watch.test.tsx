@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render } from "@testing-library/react-native";
+import { act, render } from "@testing-library/react-native";
 
 import { NetworkWatch } from "@/components/network-watch";
+import { announceStore } from "@/offline/store-ready";
 import { isOnline, setOnline } from "@/offline/network";
 
 let mockNetwork: { isConnected?: boolean } = { isConnected: true };
@@ -61,6 +62,26 @@ describe("the network flag of the app", () => {
       </QueryClientProvider>,
     );
     expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads only the queries that failed when the store becomes available, as after a start without network", async () => {
+    const client = new QueryClient();
+    await client.prefetchQuery({ queryKey: ["failed"], queryFn: () => Promise.reject(new Error("down")), retry: false });
+    await client.prefetchQuery({ queryKey: ["fine"], queryFn: async () => 1 });
+    const invalidate = jest.spyOn(client, "invalidateQueries");
+    const view = await mount(client);
+    expect(invalidate).not.toHaveBeenCalled();
+    await view.rerender(
+      <QueryClientProvider client={client}>
+        <NetworkWatch />
+      </QueryClientProvider>,
+    );
+    await act(async () => announceStore(true));
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    const predicate = invalidate.mock.calls[0][0]?.predicate;
+    expect(predicate?.(client.getQueryCache().find({ queryKey: ["failed"] })!)).toBe(true);
+    expect(predicate?.(client.getQueryCache().find({ queryKey: ["fine"] })!)).toBe(false);
+    await act(async () => announceStore(false));
   });
 
   it("goes back to online when the app is torn down", async () => {

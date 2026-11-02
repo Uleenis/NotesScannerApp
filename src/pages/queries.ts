@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/auth/auth-provider";
 import type { DeleteResult } from "@/notebooks/removal";
 import { useOnline } from "@/offline/network";
+import { useStoreReady } from "@/offline/store-ready";
 import type { MoveResult, PageStatus, SetTypeResult, StartResult, SwitchableType } from "./pages";
 import { pageService } from "./service";
 import { ALERTS_POLL_MAX, ALERTS_POLL_MS, LIST_POLL_MS, PAGE_POLL_MS, WORDS_POLL_MAX, WORDS_POLL_MS } from "./timing";
@@ -69,6 +70,7 @@ export function usePage(id: string) {
 export type PhotoSource = { data: string | undefined; isError: boolean };
 
 function useLocalPhoto(pageId: string, wanted: boolean): PhotoSource {
+  const storeReady = useStoreReady();
   const [state, setState] = useState<{ pageId: string; uri: string | null; failed: boolean } | null>(null);
   useEffect(() => {
     if (!wanted) {
@@ -96,7 +98,7 @@ function useLocalPhoto(pageId: string, wanted: boolean): PhotoSource {
       release?.();
       setState(null);
     };
-  }, [pageId, wanted]);
+  }, [pageId, wanted, storeReady]);
   const mine = wanted && state !== null && state.pageId === pageId ? state : null;
   return { data: mine?.uri ?? undefined, isError: mine?.failed ?? false };
 }

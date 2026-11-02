@@ -155,11 +155,20 @@ export async function getPage(client: PagesClient, id: string): Promise<Numbered
   }
   const page = readPage(found.data);
 
-  const siblings = await client.from("pages").select("id, captured_at").eq("notebook_id", page.notebookId).not("uploaded_at", "is", null);
-  if (siblings.error || !Array.isArray(siblings.data)) {
+  const siblings = await readAllRows((from, to) =>
+    client
+      .from("pages")
+      .select("id, captured_at")
+      .eq("notebook_id", page.notebookId)
+      .not("uploaded_at", "is", null)
+      .order("captured_at", { ascending: true })
+      .order("id")
+      .range(from, to),
+  );
+  if (siblings === null) {
     throw new Error("The page could not be numbered.");
   }
-  const earlier = siblings.data.filter((row) => {
+  const earlier = siblings.filter((row) => {
     const otherId = field(row, "id");
     const otherCapturedAt = field(row, "captured_at");
     if (typeof otherId !== "string" || typeof otherCapturedAt !== "string") {
