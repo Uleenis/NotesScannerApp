@@ -1,6 +1,7 @@
 import type { SendResult } from "@/capture/send-page";
+import { readsForSignedIn } from "./mirror";
 import { keepPhoto } from "./page-photos";
-import { openQueuedPhoto, readQueue, removeQueued, updateQueued, type QueuedPage } from "./queue";
+import { openQueuedPhoto, readQueue, readQueued, removeQueued, updateQueued, type QueuedPage } from "./queue";
 import { noteRejected } from "./queue-state";
 import type { AccountStore } from "./store";
 
@@ -34,8 +35,11 @@ async function run(store: AccountStore, deps: QueueSendDeps): Promise<QueueRun> 
   const result: QueueRun = { sent: 0, rejected: 0, stop: null };
   try {
     for (const entry of await readQueue(store)) {
-      if (!store.isOpen()) {
+      if (!store.isOpen() || !(await readsForSignedIn(store))) {
         break;
+      }
+      if ((await readQueued(store, entry.id)) === null) {
+        continue;
       }
       const target = await deps.targets(entry.notebookId, entry.chapterId);
       if (target.status === "network") {
@@ -73,7 +77,9 @@ async function run(store: AccountStore, deps: QueueSendDeps): Promise<QueueRun> 
         continue;
       }
       if (answer.status === "sent") {
-        await keepPhoto(store, answer.pageId, opened.bytes).catch(() => undefined);
+        if ((await readQueued(store, entry.id)) !== null) {
+          await keepPhoto(store, answer.pageId, opened.bytes).catch(() => undefined);
+        }
         await removeQueued(store, entry.id);
         result.sent += 1;
         deps.refresh(answer.pageId);

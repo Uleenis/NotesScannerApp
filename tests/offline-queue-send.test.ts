@@ -1,12 +1,13 @@
 import type { SendResult } from "@/capture/send-page";
 import { hasPhoto, openPhoto } from "@/offline/page-photos";
-import { enqueuePage, readQueue, readQueued, updateQueued } from "@/offline/queue";
+import { setMirrorIdentity } from "@/offline/mirror";
+import { enqueuePage, readQueue, readQueued, removeQueued, updateQueued } from "@/offline/queue";
 import { sendQueue, type QueueSendDeps } from "@/offline/queue-send";
 import { dismissNotices, getNotices } from "@/offline/queue-state";
 import { closeAccountStores, openAccountStore, type AccountStore } from "@/offline/store";
 
 import { fakeFiles, resetOffline } from "./fake-offline";
-import { USER, jpeg, uuid } from "./offline-fixtures";
+import { OTHER_USER, USER, jpeg, uuid } from "./offline-fixtures";
 
 jest.mock("expo-file-system", () => jest.requireActual("./fake-offline").fileSystem);
 jest.mock("expo-sqlite", () => jest.requireActual("./fake-offline").sqlite);
@@ -287,5 +288,54 @@ describe("sending the queue", () => {
   it("does nothing on an empty queue", async () => {
     const run = setup();
     expect(await sendQueue(store, run.deps)).toEqual({ sent: 0, rejected: 0, stop: null });
+  });
+});
+
+describe("sending the queue while the user acts", () => {
+  it("does not send a page the user deleted after the run began", async () => {
+    const first = await add(1);
+    const second = await add(2);
+    const run = setup({
+      targets: async (_notebookId, chapterId) => {
+        if (run.sent.length === 0) {
+          await removeQueued(store, second);
+        }
+        return { status: "ok", chapterId };
+      },
+    });
+    const result = await sendQueue(store, run.deps);
+    expect(run.sent.map((entry) => entry.id)).toEqual([first]);
+    expect(result).toEqual({ sent: 1, rejected: 0, stop: null });
+    expect(getNotices().rejected).toBe(0);
+  });
+
+  it("stops when the store is no longer the one of the signed-in account", async () => {
+    await add(1);
+    await add(2);
+    setMirrorIdentity(async () => OTHER_USER);
+    try {
+      const run = setup();
+      expect(await sendQueue(store, run.deps)).toEqual({ sent: 0, rejected: 0, stop: null });
+      expect(run.sent).toEqual([]);
+      expect(await readQueue(store)).toHaveLength(2);
+    } finally {
+      setMirrorIdentity(null);
+    }
+  });
+});
+
+describe("a page deleted while it is being sent", () => {
+  it("keeps no photo for it once the server has taken it, and counts it as sent", async () => {
+    const id = await add(1);
+    const run = setup({
+      send: async ({ entry }) => {
+        await removeQueued(store, entry.id);
+        return { status: "sent", pageId: uuid(950) };
+      },
+    });
+    const result = await sendQueue(store, run.deps);
+    expect(result).toEqual({ sent: 1, rejected: 0, stop: null });
+    expect(await hasPhoto(store, uuid(950))).toBe(false);
+    expect(await readQueued(store, id)).toBeNull();
   });
 });
