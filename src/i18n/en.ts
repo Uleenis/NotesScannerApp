@@ -318,6 +318,8 @@ export const en = {
     legalMiddle: " and the ",
     privacy: "privacy policy",
     legalAfter: ".",
+    switchTitle: "Sign in to another account?",
+    switchConfirm: "Continue",
   },
   code: {
     title: "Enter the code",
@@ -359,6 +361,8 @@ export const en = {
     deleteFailed: "The account could not be deleted. Try again.",
     deleteOffline: "No connection. The account was not deleted.",
     signOutFailed: "You could not be signed out. Try again.",
+    signOutTitle: "Sign out?",
+    waitingLost: (pages: number) => (pages === 1 ? "1 unsent page will be lost." : `${pages} unsent pages will be lost.`),
   },
   training: {
     row: "Your handwriting",

@@ -6,19 +6,23 @@ export type SessionDeps = {
   sync: (store: AccountStore) => Promise<unknown>;
   sendQueue: (store: AccountStore) => Promise<unknown>;
   isOnline: () => boolean;
+  sweep: (keep: string, still: () => boolean) => Promise<void>;
+  wipe: (userId: string) => Promise<number>;
 };
 
 export type OfflineSession = {
-  start: (userId: string | null) => Promise<void>;
+  start: (userId: string | null, confirmed?: boolean) => Promise<void>;
   stop: () => Promise<void>;
   foreground: () => Promise<void>;
   network: (online: boolean) => Promise<void>;
+  leave: (userId: string) => Promise<number>;
 };
 
 export function createOfflineSession(deps: SessionDeps): OfflineSession {
   let wanted: string | null = null;
   let store: AccountStore | null = null;
   let generation = 0;
+  let swept: string | null = null;
 
   async function release(): Promise<void> {
     const left = store;
@@ -35,6 +39,18 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
       deps.setStore(null);
     }
     return store;
+  }
+
+  async function sweepFor(userId: string): Promise<void> {
+    if (swept === userId) {
+      return;
+    }
+    swept = userId;
+    try {
+      await deps.sweep(userId, () => swept === userId);
+    } catch {
+      return;
+    }
   }
 
   async function synchronise(): Promise<void> {
@@ -72,15 +88,27 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
   }
 
   return {
-    async start(userId) {
+    async start(userId, confirmed = true) {
       if (userId === wanted && (userId === null || store !== null)) {
+        if (userId !== null && confirmed) {
+          await sweepFor(userId);
+        }
         return;
       }
       generation += 1;
       const mine = generation;
       wanted = userId;
+      if (swept !== userId) {
+        swept = null;
+      }
       await release();
       if (userId === null) {
+        return;
+      }
+      if (confirmed) {
+        await sweepFor(userId);
+      }
+      if (mine !== generation) {
         return;
       }
       await open(userId);
@@ -106,6 +134,17 @@ export function createOfflineSession(deps: SessionDeps): OfflineSession {
       if (online) {
         await synchronise();
       }
+    },
+    async leave(userId) {
+      if (wanted === userId) {
+        generation += 1;
+        wanted = null;
+        await release();
+      }
+      if (swept === userId) {
+        swept = null;
+      }
+      return deps.wipe(userId);
     },
   };
 }

@@ -400,3 +400,62 @@ test("ignores a change announced after the app is closed", async () => {
 
   expect(ensureSession).toHaveBeenCalledTimes(1);
 });
+
+describe("an account kept from the stored session while the network is missing", () => {
+  const PROVISIONAL: AuthResult = { status: "ready", userId: "user-1", email: null, isAnonymous: false, provisional: true };
+  const CONFIRMED: AuthResult = { status: "ready", userId: "user-1", email: "reader@example.test", isAnonymous: false };
+
+  function ProvisionalProbe() {
+    const auth = useAuth();
+    return <Text testID="provisional">{auth.status === "ready" && auth.provisional === true ? "provisional" : "confirmed"}</Text>;
+  }
+
+  async function mountWithProvisional(services: AuthServices) {
+    return await render(
+      <AuthProvider services={services}>
+        <Probe />
+        <ProvisionalProbe />
+      </AuthProvider>,
+    );
+  }
+
+  test("shows the account at once, says it is provisional, and asks again until the session is renewed", async () => {
+    const { services, ensureSession } = fakeServices(PROVISIONAL, PROVISIONAL, CONFIRMED);
+    await mountWithProvisional(services);
+    await flush();
+
+    expect(screen.getByTestId("auth").props.children).toBe("ready:user-1");
+    expect(screen.getByTestId("provisional").props.children).toBe("provisional");
+
+    await advance(2000);
+    expect(ensureSession).toHaveBeenCalledTimes(2);
+    await advance(4000);
+    expect(ensureSession).toHaveBeenCalledTimes(3);
+    expect(screen.getByTestId("provisional").props.children).toBe("confirmed");
+
+    await advance(60000);
+    expect(ensureSession).toHaveBeenCalledTimes(3);
+  });
+
+  test("becomes confirmed when the auth client renews the session by itself", async () => {
+    const { services, emit } = fakeServices(PROVISIONAL);
+    await mountWithProvisional(services);
+    await flush();
+
+    await act(async () => {
+      emit({ userId: "user-1", email: "reader@example.test", isAnonymous: false });
+    });
+
+    expect(screen.getByTestId("provisional").props.children).toBe("confirmed");
+  });
+
+  test("writes no language while the account is provisional, then writes it once confirmed", async () => {
+    const { services, syncLanguage } = fakeServices(PROVISIONAL, CONFIRMED);
+    await mountWithProvisional(services);
+    await flush();
+    expect(syncLanguage).not.toHaveBeenCalled();
+
+    await advance(2000);
+    expect(syncLanguage).toHaveBeenCalledWith("user-1", "fr");
+  });
+});

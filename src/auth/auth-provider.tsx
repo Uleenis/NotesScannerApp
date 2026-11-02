@@ -7,7 +7,7 @@ import type { AccountChange, AccountUser, AuthResult } from "./session";
 export type AuthState =
   | { status: "loading"; userId: null }
   | { status: "unavailable"; userId: null }
-  | ({ status: "ready" } & AccountUser);
+  | ({ status: "ready"; provisional?: true } & AccountUser);
 
 export type AuthServices = {
   ensureSession: () => Promise<AuthResult>;
@@ -39,7 +39,8 @@ function keepsAccount(current: AuthResult | null, next: AuthResult): AuthResult 
     next.status === "ready" &&
     current.userId === next.userId &&
     current.email === next.email &&
-    current.isAnonymous === next.isAnonymous
+    current.isAnonymous === next.isAnonymous &&
+    current.provisional === next.provisional
   ) {
     return current;
   }
@@ -68,12 +69,12 @@ export function AuthProvider({ children, services }: { children: ReactNode; serv
       if (!active) {
         return;
       }
-      if (outcome.status === "ready") {
+      if (outcome.status === "ready" && outcome.provisional !== true) {
         ready = true;
         setResult((current) => keepsAccount(current, outcome));
         return;
       }
-      setResult(outcome);
+      setResult((current) => keepsAccount(current, outcome));
       timer = setTimeout(attempt, retryDelay(failures));
       failures += 1;
     }
@@ -109,7 +110,7 @@ export function AuthProvider({ children, services }: { children: ReactNode; serv
     };
   }, [services]);
 
-  const userId = result?.status === "ready" ? result.userId : null;
+  const userId = result?.status === "ready" && result.provisional !== true ? result.userId : null;
 
   useEffect(() => {
     if (userId !== null) {
@@ -121,9 +122,11 @@ export function AuthProvider({ children, services }: { children: ReactNode; serv
     if (result === null) {
       return LOADING;
     }
-    return result.status === "ready"
-      ? { status: "ready", userId: result.userId, email: result.email, isAnonymous: result.isAnonymous }
-      : { status: "unavailable", userId: null };
+    if (result.status !== "ready") {
+      return { status: "unavailable", userId: null };
+    }
+    const account: AuthState = { status: "ready", userId: result.userId, email: result.email, isAnonymous: result.isAnonymous };
+    return result.provisional === true ? { ...account, provisional: true } : account;
   }, [result]);
 
   return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;

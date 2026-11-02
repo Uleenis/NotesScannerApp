@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 import type { AuthServices } from "./auth-provider";
+import { accountProbe } from "./account-probe";
 import { syncInterfaceLanguage } from "./profile-language";
 import { accountChange, createSessionManager } from "./session";
 
@@ -7,7 +8,7 @@ let manager: ReturnType<typeof createSessionManager> | null = null;
 
 export const defaultAuthServices: AuthServices = {
   ensureSession() {
-    manager ??= createSessionManager(getSupabase());
+    manager ??= createSessionManager(getSupabase(), accountProbe);
     return manager.ensureSession();
   },
   syncLanguage(userId, language) {

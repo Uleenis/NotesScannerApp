@@ -30,8 +30,12 @@ export function isEmailAddress(value: string): boolean {
   return EMAIL.test(value);
 }
 
+export function isNetworkFailure(error: unknown): boolean {
+  return error instanceof TypeError || OFFLINE_NAMES.includes(String(field(error, "name")));
+}
+
 export function failureFor(error: unknown): AccountFailure {
-  if (error instanceof TypeError || OFFLINE_NAMES.includes(String(field(error, "name")))) {
+  if (isNetworkFailure(error)) {
     return "offline";
   }
   if (field(field(error, "context"), "status") === 409) {

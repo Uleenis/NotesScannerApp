@@ -79,6 +79,9 @@ class FakeDirectory {
   constructor(...parts: unknown[]) {
     this.uri = joinUri(parts);
   }
+  get name(): string {
+    return this.uri.slice(this.uri.lastIndexOf("/") + 1);
+  }
   get exists(): boolean {
     return fakeDirectories.has(this.uri);
   }
@@ -118,6 +121,9 @@ class FakeFile {
   uri: string;
   constructor(...parts: unknown[]) {
     this.uri = joinUri(parts);
+  }
+  get name(): string {
+    return this.uri.slice(this.uri.lastIndexOf("/") + 1);
   }
   get exists(): boolean {
     return fakeFiles.has(this.uri);

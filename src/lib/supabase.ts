@@ -2,11 +2,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 import { AppState } from "react-native";
 
+import { readStoredSession, storageKeyFor, type StoredAccount } from "@/auth/stored-account";
 import { readSupabaseConfig } from "./config";
 import { createChunkedStorage } from "./secure-session-storage";
 
 let client: SupabaseClient | null = null;
 let statelessClient: SupabaseClient | null = null;
+
+const sessionStorage = createChunkedStorage(SecureStore);
 
 function config() {
   return readSupabaseConfig({
@@ -25,6 +28,10 @@ export function getStatelessSupabase(): SupabaseClient {
   return statelessClient;
 }
 
+export async function readStoredAccount(): Promise<StoredAccount | null> {
+  return readStoredSession(await sessionStorage.getItem(storageKeyFor(config().url)), Date.now());
+}
+
 export function getSupabase(): SupabaseClient {
   if (client !== null) {
     return client;
@@ -32,7 +39,8 @@ export function getSupabase(): SupabaseClient {
   const { url, publishableKey } = config();
   const created = createClient(url, publishableKey, {
     auth: {
-      storage: createChunkedStorage(SecureStore),
+      storage: sessionStorage,
+      storageKey: storageKeyFor(url),
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,

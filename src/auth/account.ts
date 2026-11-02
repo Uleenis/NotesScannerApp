@@ -6,7 +6,7 @@ type FoundSession = { access_token: string; refresh_token: string; user: { id: s
 
 export type AccountDeps = {
   auth: {
-    getSession: () => Promise<{ data: { session: { access_token: string } | null }; error: unknown }>;
+    getSession: () => Promise<{ data: { session: { access_token: string; user: { id: string } } | null }; error: unknown }>;
     getUser: () => Promise<Answer>;
     updateUser: (attributes: { email: string }) => Promise<Answer>;
     signInWithOtp: (credentials: { email: string; options: { shouldCreateUser: false } }) => Promise<Answer>;
@@ -19,6 +19,7 @@ export type AccountDeps = {
   };
   functions: { invoke: (name: string, options?: { headers: Record<string, string> }) => Promise<Answer> };
   countPages: () => Promise<number>;
+  leave: (userId: string) => Promise<void>;
 };
 
 export type PendingTransfer = {
@@ -42,6 +43,25 @@ async function guarded<T extends object = object>(run: () => Promise<Outcome<T>>
 
 function answered(result: Answer): Outcome {
   return result.error ? { ok: false, reason: failureFor(result.error) } : { ok: true };
+}
+
+async function sessionUser(deps: AccountDeps): Promise<string | null> {
+  try {
+    return (await deps.auth.getSession()).data.session?.user.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function forget(deps: AccountDeps, left: string | null, now: string | null): Promise<void> {
+  if (left === null || left === now) {
+    return;
+  }
+  try {
+    await deps.leave(left);
+  } catch {
+    return;
+  }
 }
 
 export function startSignUp(deps: AccountDeps, email: string): Promise<Outcome> {
@@ -86,8 +106,13 @@ export function confirmSignIn(
     const params = { email: clean(email), token: code, type: "email" as const };
     const pages = isAnonymous ? await deps.countPages() : 0;
     if (pages === 0) {
+      const left = await sessionUser(deps);
       const result = await deps.auth.verifyOtp(params);
-      return result.error ? { ok: false, reason: failureFor(result.error) } : { ok: true, transfer: null };
+      if (result.error) {
+        return { ok: false, reason: failureFor(result.error) };
+      }
+      await forget(deps, left, await sessionUser(deps));
+      return { ok: true, transfer: null };
     }
     const result = await deps.stateless.verifyOtp(params);
     if (result.error) {
@@ -128,16 +153,26 @@ export function completeTransfer(deps: AccountDeps, pending: PendingTransfer): P
       access_token: pending.session.accessToken,
       refresh_token: pending.session.refreshToken,
     });
-    return adopted.error ? { ok: false, reason: failureFor(adopted.error) } : { ok: true, userId: pending.session.userId };
+    if (adopted.error) {
+      return { ok: false, reason: failureFor(adopted.error) };
+    }
+    await forget(deps, anonymous.user.id, pending.session.userId);
+    return { ok: true, userId: pending.session.userId };
   });
 }
 
 export function signOut(deps: AccountDeps): Promise<Outcome> {
-  return guarded(async () => answered(await deps.auth.signOut({ scope: "local" })));
+  return guarded(async () => {
+    const left = await sessionUser(deps);
+    const result = answered(await deps.auth.signOut({ scope: "local" }));
+    await forget(deps, left, result.ok ? null : await sessionUser(deps));
+    return result;
+  });
 }
 
 export function deleteAccount(deps: AccountDeps): Promise<Outcome> {
   return guarded(async () => {
+    const left = await sessionUser(deps);
     const asked = await deps.functions.invoke("delete-account");
     if (asked.error && !(await accountIsGone(deps, asked.error))) {
       return { ok: false, reason: failureFor(asked.error) };
@@ -145,8 +180,9 @@ export function deleteAccount(deps: AccountDeps): Promise<Outcome> {
     try {
       await deps.auth.signOut({ scope: "local" });
     } catch {
-      return { ok: true };
+      await Promise.resolve();
     }
+    await forget(deps, left, null);
     return { ok: true };
   });
 }

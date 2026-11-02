@@ -263,3 +263,61 @@ describe("the account of a user who has not signed up", () => {
     await waitFor(() => expect(pathname()).toBe("/"));
   });
 });
+
+describe("leaving an account while pages are waiting", () => {
+  test("asks before signing out, saying how many waiting pages will be lost", async () => {
+    service.waitingPages.mockResolvedValue(3);
+    const pathname = await openAccount();
+
+    await fireEvent.press(screen.getByText(fr.account.signOut));
+
+    await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
+    expect(service.waitingPages).toHaveBeenCalledWith("test-user");
+    expect(alert.mock.calls[0][0]).toBe(fr.account.signOutTitle);
+    expect(alert.mock.calls[0][1]).toBe(fr.account.waitingLost(3));
+    const buttons = alert.mock.calls[0][2] as AlertButton[];
+    expect(buttons.map((button) => [button.text, button.style])).toEqual([
+      [fr.common.cancel, "cancel"],
+      [fr.account.signOut, "default"],
+    ]);
+    expect(service.signOut).not.toHaveBeenCalled();
+
+    await act(async () => {
+      buttons[1].onPress?.();
+    });
+    expect(service.signOut).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(pathname()).toBe("/"));
+  });
+
+  test("signs nothing out when the confirmation is cancelled", async () => {
+    service.waitingPages.mockResolvedValue(1);
+    const pathname = await openAccount();
+    await fireEvent.press(screen.getByText(fr.account.signOut));
+    await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
+
+    const buttons = alert.mock.calls[0][2] as AlertButton[];
+    await act(async () => {
+      buttons[0].onPress?.();
+    });
+
+    expect(service.signOut).not.toHaveBeenCalled();
+    expect(pathname()).toBe("/account");
+  });
+
+  test("adds the waiting pages lost to the confirmation of the deletion", async () => {
+    service.waitingPages.mockResolvedValue(2);
+    await openAccount();
+
+    await fireEvent.press(screen.getByText(fr.account.delete));
+
+    await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
+    expect(alert.mock.calls[0][1]).toBe(`${fr.account.deleteConfirmBody}\n\n${fr.account.waitingLost(2)}`);
+  });
+
+  test("has the sentence in both languages", () => {
+    expect(fr.account.waitingLost(1)).toBe("1 page non envoyée sera perdue.");
+    expect(fr.account.waitingLost(3)).toBe("3 pages non envoyées seront perdues.");
+    expect(en.account.waitingLost(1)).toBe("1 unsent page will be lost.");
+    expect(en.account.waitingLost(3)).toBe("3 unsent pages will be lost.");
+  });
+});

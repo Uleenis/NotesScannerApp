@@ -26,6 +26,8 @@ function setup(overrides: Partial<SessionDeps> = {}) {
     failQueue: false,
     opens: 0,
     failOpen: false,
+    swept: [] as string[],
+    wiped: [] as string[],
   };
   const deps: SessionDeps = {
     open: async (userId) => {
@@ -52,6 +54,15 @@ function setup(overrides: Partial<SessionDeps> = {}) {
       }
     },
     isOnline: () => state.online,
+    sweep: async (keep) => {
+      state.swept.push(keep);
+      state.order.push(`sweep:${state.opens}`);
+    },
+    wipe: async (userId) => {
+      state.wiped.push(userId);
+      state.order.push("wipe");
+      return 2;
+    },
     ...overrides,
   };
   return { state, session: createOfflineSession(deps) };
@@ -166,10 +177,15 @@ describe("overlapping openings", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let entered: () => void = () => undefined;
+    const opening = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
     const stale = fakeStore(USER);
     const { state, session } = setup({
       open: async (userId) => {
         if (userId === USER) {
+          entered();
           await gate;
           return stale;
         }
@@ -177,6 +193,7 @@ describe("overlapping openings", () => {
       },
     });
     const first = session.start(USER);
+    await opening;
     await session.start(OTHER_USER);
     release();
     await first;
@@ -236,7 +253,7 @@ describe("sending the waiting pages", () => {
   it("sends the queue before synchronising, at the start, when online", async () => {
     const { state, session } = setup();
     await session.start(USER);
-    expect(state.order).toEqual(["queue", "sync"]);
+    expect(state.order).toEqual(["sweep:0", "queue", "sync"]);
     expect(state.queued).toEqual([USER]);
   });
 
@@ -268,5 +285,165 @@ describe("sending the waiting pages", () => {
     await session.start(null);
     await session.foreground();
     expect(state.queued).toEqual([]);
+  });
+});
+
+describe("the stores of other accounts", () => {
+  it("are swept once the signed-in account is confirmed, before its store opens, and once per account", async () => {
+    const { state, session } = setup();
+    await session.start(USER);
+    await session.start(USER);
+    await session.foreground();
+
+    expect(state.swept).toEqual([USER]);
+    expect(state.order[0]).toBe("sweep:0");
+  });
+
+  it("are not swept for an account kept from the stored session without a network, only once it is confirmed", async () => {
+    const { state, session } = setup();
+    state.online = false;
+    await session.start(USER, false);
+    expect(state.swept).toEqual([]);
+    expect(state.current?.userId).toBe(USER);
+
+    await session.start(USER, true);
+    expect(state.swept).toEqual([USER]);
+    expect(state.opens).toBe(1);
+  });
+
+  it("are swept again for the next account", async () => {
+    const { state, session } = setup();
+    await session.start(USER);
+    await session.start(null);
+    await session.start(OTHER_USER);
+
+    expect(state.swept).toEqual([USER, OTHER_USER]);
+  });
+
+  it("do not stop the store of the account from opening when the sweep fails", async () => {
+    const { state, session } = setup({
+      sweep: async () => {
+        throw new Error("busy");
+      },
+    });
+    await session.start(USER);
+
+    expect(state.current?.userId).toBe(USER);
+  });
+});
+
+describe("leaving an account", () => {
+  it("drops and closes its store, wipes it, and answers the waiting pages lost", async () => {
+    const { state, session } = setup();
+    await session.start(USER);
+
+    expect(await session.leave(USER)).toBe(2);
+
+    expect(state.current).toBeNull();
+    expect(state.stores[0].closed).toBe(true);
+    expect(state.wiped).toEqual([USER]);
+  });
+
+  it("never opens its store again afterwards, at the foreground or when the network returns", async () => {
+    const { state, session } = setup();
+    await session.start(USER);
+    await session.leave(USER);
+
+    await session.foreground();
+    await session.network(true);
+
+    expect(state.opens).toBe(1);
+    expect(state.current).toBeNull();
+  });
+
+  it("does not make current a store whose opening ends after the account was left", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered: () => void = () => undefined;
+    const opening = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { state, session } = setup({
+      open: async (userId) => {
+        entered();
+        await gate;
+        const store = fakeStore(userId);
+        state.stores.push(store);
+        return store;
+      },
+    });
+    const starting = session.start(USER);
+    await opening;
+    const leaving = session.leave(USER);
+    release();
+    await Promise.all([starting, leaving]);
+
+    expect(state.current).toBeNull();
+    expect(state.stores[0].closed).toBe(true);
+    expect(state.wiped).toEqual([USER]);
+  });
+
+  it("of an account that is not the current one wipes it and leaves the current store alone", async () => {
+    const { state, session } = setup();
+    await session.start(OTHER_USER);
+
+    await session.leave(USER);
+
+    expect(state.wiped).toEqual([USER]);
+    expect(state.current?.userId).toBe(OTHER_USER);
+  });
+});
+
+describe("leaving an account while its store is still being prepared", () => {
+  it("stops before the store opens, so the store of the account left never opens", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { state, session } = setup({
+      sweep: async () => {
+        await gate;
+      },
+    });
+    const starting = session.start(USER);
+    const leaving = session.leave(USER);
+    release();
+    await Promise.all([starting, leaving]);
+
+    expect(state.opens).toBe(0);
+    expect(state.current).toBeNull();
+    expect(state.wiped).toEqual([USER]);
+  });
+});
+
+describe("a sweep overtaken by another account", () => {
+  it("is told to stop as soon as another account, or nobody, is wanted", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const checks: (() => boolean)[] = [];
+    const { session } = setup({
+      sweep: async (keep, still) => {
+        checks.push(still);
+        if (keep === USER) {
+          await gate;
+        }
+      },
+    });
+    const first = session.start(USER);
+    await Promise.resolve();
+    expect(checks[0]()).toBe(true);
+
+    await session.start(OTHER_USER);
+    expect(checks[0]()).toBe(false);
+    expect(checks[1]()).toBe(true);
+
+    await session.start(null);
+    expect(checks[1]()).toBe(false);
+    release();
+    await first;
   });
 });

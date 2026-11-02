@@ -1,6 +1,6 @@
 import { useLocales } from "expo-localization";
 import { act, fireEvent, renderRouter, screen, waitFor } from "expo-router/testing-library";
-import { Linking } from "react-native";
+import { Alert, Linking, type AlertButton } from "react-native";
 
 import { defaultAuthServices } from "@/auth/default-services";
 import { strings } from "@/i18n";
@@ -216,5 +216,77 @@ describe("signing in to an existing account", () => {
 
     expect(await screen.findByText(message)).toBeTruthy();
     expect(pathname()).toBe("/sign-in");
+  });
+});
+
+describe("signing in to another account while pages are waiting", () => {
+  let alert: jest.SpyInstance;
+
+  beforeEach(() => {
+    alert = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    alert.mockRestore();
+  });
+
+  async function askForSignInCode() {
+    await openSignIn();
+    await fireEvent.press(screen.getByText(fr.signIn.signInLink));
+    await typeEmail("reader@example.test");
+    await fireEvent.press(screen.getByText(fr.signIn.receiveCode));
+  }
+
+  test("says first how many waiting pages will be lost, and asks for no code until confirmed", async () => {
+    service.waitingPages.mockResolvedValue(3);
+    await askForSignInCode();
+
+    await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
+    expect(service.waitingPages).toHaveBeenCalledWith("test-user");
+    expect(alert.mock.calls[0][0]).toBe(fr.signIn.switchTitle);
+    expect(alert.mock.calls[0][1]).toBe(fr.account.waitingLost(3));
+    const buttons = alert.mock.calls[0][2] as AlertButton[];
+    expect(buttons.map((button) => [button.text, button.style])).toEqual([
+      [fr.common.cancel, "cancel"],
+      [fr.signIn.switchConfirm, "default"],
+    ]);
+    expect(service.startSignIn).not.toHaveBeenCalled();
+
+    await act(async () => {
+      buttons[1].onPress?.();
+    });
+    expect(service.startSignIn).toHaveBeenCalledWith("reader@example.test");
+  });
+
+  test("asks for nothing when the confirmation is cancelled", async () => {
+    service.waitingPages.mockResolvedValue(1);
+    await askForSignInCode();
+    await waitFor(() => expect(alert).toHaveBeenCalledTimes(1));
+
+    const buttons = alert.mock.calls[0][2] as AlertButton[];
+    await act(async () => {
+      buttons[0].onPress?.();
+    });
+
+    expect(service.startSignIn).not.toHaveBeenCalled();
+    expect(fr.account.waitingLost(1)).not.toBe(fr.account.waitingLost(2));
+  });
+
+  test("asks nothing without waiting pages", async () => {
+    await askForSignInCode();
+
+    await waitFor(() => expect(service.startSignIn).toHaveBeenCalledTimes(1));
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  test("never asks for a sign-up, which keeps the account and its waiting pages", async () => {
+    service.waitingPages.mockResolvedValue(2);
+    await openSignIn();
+    await typeEmail("reader@example.test");
+
+    await fireEvent.press(screen.getByText(fr.signIn.receiveCode));
+
+    await waitFor(() => expect(service.startSignUp).toHaveBeenCalledTimes(1));
+    expect(alert).not.toHaveBeenCalled();
   });
 });
