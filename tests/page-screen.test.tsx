@@ -1,4 +1,5 @@
 import { useLocales } from "expo-localization";
+import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen, waitFor } from "expo-router/testing-library";
 import { StyleSheet } from "react-native";
 
@@ -175,6 +176,20 @@ describe("the original photo", () => {
     await fireEvent.press(screen.getByLabelText(fr.document.openPhoto, { includeHiddenElements: true }));
 
     await waitFor(() => expect(pathname()).toBe("/page/page-1"));
+    expect(screen.queryAllByTestId("photo-sheet-bar", { includeHiddenElements: true })).toHaveLength(0);
+  });
+
+  test("leaves another sheet open when the thumbnail is tapped under it", async () => {
+    const pathname = await openPage();
+    await screen.findByText(TITLE);
+
+    await act(async () => {
+      router.push("/page/page-1/move");
+    });
+    await waitFor(() => expect(pathname()).toBe("/page/page-1/move"));
+    await fireEvent.press(screen.getByLabelText(fr.document.openPhoto, { includeHiddenElements: true }));
+
+    expect(pathname()).toBe("/page/page-1/move");
     expect(screen.queryAllByTestId("photo-sheet-bar", { includeHiddenElements: true })).toHaveLength(0);
   });
 
