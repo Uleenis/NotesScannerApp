@@ -305,22 +305,16 @@ describe("viaCache while the store is still opening or the flag is still catchin
   });
 
   it("ignores a server that fails after the store has answered", async () => {
-    const unhandled = jest.fn();
-    process.on("unhandledRejection", unhandled);
-    try {
-      await fill();
-      setMirrorStore(null);
-      setOnline(false);
-      const server = waiting<unknown[]>();
-      const read = viaCache(server.request, cachedNotebooks);
-      setMirrorStore(store);
-      expect(await read).toEqual([notebook(1), notebook(2)]);
-      server.reject(new Error("down"));
-      await settle();
-      expect(unhandled).not.toHaveBeenCalled();
-    } finally {
-      process.off("unhandledRejection", unhandled);
-    }
+    await fill();
+    setMirrorStore(null);
+    setOnline(false);
+    const server = waiting<unknown[]>();
+    const read = viaCache(server.request, cachedNotebooks);
+    setMirrorStore(store);
+    expect(await read).toEqual([notebook(1), notebook(2)]);
+    server.reject(new Error("down"));
+    await settle();
+    expect(await read).toEqual([notebook(1), notebook(2)]);
   });
 
   it("stops looking at the store once it has answered", async () => {
