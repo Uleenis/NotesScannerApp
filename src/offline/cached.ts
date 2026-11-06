@@ -38,7 +38,7 @@ function watchOffline<T>(read: Reader<T>): { found: Promise<T>; stop: () => void
         return;
       }
       void readStore(read).then((cached) => {
-        if (cached !== undefined) {
+        if (cached !== undefined && !isOnline()) {
           resolve(cached);
         }
       });
@@ -66,16 +66,25 @@ async function askServer<T>(request: () => Promise<T>, read: Reader<T>): Promise
   }
 }
 
+function forOneAccount<T>(read: Reader<T>): Reader<T> {
+  let owner = getMirrorStore()?.userId ?? null;
+  return async (store) => {
+    owner ??= store.userId;
+    return store.userId === owner ? read(store) : undefined;
+  };
+}
+
 export async function viaCache<T>(request: () => Promise<T>, read: Reader<T>): Promise<T> {
+  const mine = forOneAccount(read);
   if (!isOnline()) {
-    const cached = await readStore(read);
+    const cached = await readStore(mine);
     if (cached !== undefined) {
       return cached;
     }
   }
-  const offline = watchOffline(read);
+  const offline = watchOffline(mine);
   try {
-    return await Promise.race([askServer(request, read), offline.found]);
+    return await Promise.race([askServer(request, mine), offline.found]);
   } finally {
     offline.stop();
   }

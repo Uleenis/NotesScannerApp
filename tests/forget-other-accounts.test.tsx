@@ -12,6 +12,8 @@ const KEYS = [
   ["pages", "user-1"],
   ["notebooks", "user-1"],
   ["notebook", "user-1", "n1"],
+  ["chapters", "user-1"],
+  ["page-alerts", "user-1", "p1"],
   ["allowance", "user-1"],
   ["latest-notebook", "user-1"],
   ["page", "user-1", "p1"],

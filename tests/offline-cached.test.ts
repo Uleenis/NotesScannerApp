@@ -247,16 +247,80 @@ describe("viaCache while the store is still opening or the flag is still catchin
     await expect(read).rejects.toThrow("down");
   });
 
-  it("ignores a server that fails after the store has answered", async () => {
+  async function otherStore(): Promise<AccountStore> {
+    const other = (await openAccountStore(OTHER_USER)).store;
+    await replaceNotebooks(other, [notebook(9)]);
+    return other;
+  }
+
+  it("never gives a call of one account the store of the account that took over", async () => {
     await fill();
+    const other = await otherStore();
+    const server = waiting<unknown[]>();
+    const outcome = follow(viaCache(server.request, cachedNotebooks));
     setMirrorStore(null);
+    signedIn = OTHER_USER;
     setOnline(false);
+    setMirrorStore(other);
+    await settle();
+    expect(outcome).not.toHaveBeenCalled();
+    server.resolve([notebook(7)]);
+    await settle();
+    expect(outcome).toHaveBeenCalledWith([notebook(7)]);
+  });
+
+  it("fails rather than fall back on the store of the account that took over", async () => {
+    await fill();
+    const other = await otherStore();
+    const server = waiting<unknown[]>();
+    const read = viaCache(server.request, cachedNotebooks);
+    setMirrorStore(null);
+    signedIn = OTHER_USER;
+    setMirrorStore(other);
+    server.reject(new Error("down"));
+    await expect(read).rejects.toThrow("down");
+  });
+
+  it("still reads the store of the same account when it opens again", async () => {
+    await fill();
+    setOnline(false);
+    setMirrorStore(null);
     const server = waiting<unknown[]>();
     const read = viaCache(server.request, cachedNotebooks);
     setMirrorStore(store);
     expect(await read).toEqual([notebook(1), notebook(2)]);
-    server.reject(new Error("down"));
+  });
+
+  it("does not answer from the store when the flag is back online by the end of the read", async () => {
+    await fill();
+    const server = waiting<unknown[]>();
+    const outcome = follow(viaCache(server.request, cachedNotebooks));
+    setOnline(false);
+    setOnline(true);
     await settle();
+    expect(outcome).not.toHaveBeenCalled();
+    server.resolve([notebook(7)]);
+    await settle();
+    expect(outcome).toHaveBeenCalledWith([notebook(7)]);
+  });
+
+  it("ignores a server that fails after the store has answered", async () => {
+    const unhandled = jest.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      await fill();
+      setMirrorStore(null);
+      setOnline(false);
+      const server = waiting<unknown[]>();
+      const read = viaCache(server.request, cachedNotebooks);
+      setMirrorStore(store);
+      expect(await read).toEqual([notebook(1), notebook(2)]);
+      server.reject(new Error("down"));
+      await settle();
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
   });
 
   it("stops looking at the store once it has answered", async () => {
