@@ -1,5 +1,5 @@
-import { createClient, isAuthRetryableFetchError } from "npm:@supabase/supabase-js@2";
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { createClient, isAuthRetryableFetchError } from "npm:@supabase/supabase-js@2.118.0";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.118.0";
 import { UUID } from "./http.ts";
 import type { PageType } from "./page-type.ts";
 import type {
