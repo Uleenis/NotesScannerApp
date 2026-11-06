@@ -29,6 +29,8 @@ Paths below are from the repository root.
 | 4 | `t8/queue` (offline capture, limit, queue, sending, refusals, deleted notebook, waiting pages on screen) | 8 to 12, 14, 16, 19 | sensitive (users' files) | Sonnet 5.5, High | code and security, Sonnet | done |
 | 5 | `t8/accounts` (one database per account, confirmation, wipe on sign-out, account change and deletion) | 13, 18, 21 | critical (accounts) | Opus 5.5, High | code, Sonnet; security, Opus | done |
 
+Fix after the phone checks: `fix/offline-expired-start` (level critical, as it sits next to the offline authentication; code, Sonnet; security, Opus): a read started before the store opens no longer waits for the retries of the Supabase libraries. The owner still has to measure it on the phone (`../Tranche 8/Bilan.md`). The Edge Functions now import `@supabase/supabase-js` at exactly 2.118.0, the version of the app, as `deno.lock` is not tracked and a floating `@2` changed what CI and production run without a review. Move it on purpose: 2.119.0 makes `auth.admin.deleteUser` read the user first (two calls, one more failure path for `delete-account`, and the test `deleting the account` counts one).
+
 ## Still open from slice 6
 
 - iOS (pre-beta): VisionKit has no page limit, and the module keeps the first pages up to the limit, dropping the others without a word: decide (an error, or a message). The `tmp/scans` folder is out of reach of `expo-file-system`: clear it in the native module. The app id `com.uleenis.notesscanner` becomes final at the first release.

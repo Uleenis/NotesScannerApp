@@ -16,7 +16,7 @@ export function isOnline(): boolean {
   return online;
 }
 
-function subscribe(listener: () => void): () => void {
+export function subscribeToNetwork(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -24,7 +24,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function useOnline(): boolean {
-  return useSyncExternalStore(subscribe, isOnline, isOnline);
+  return useSyncExternalStore(subscribeToNetwork, isOnline, isOnline);
 }
 
 export function whenOnline(message: string, action: () => void): void {

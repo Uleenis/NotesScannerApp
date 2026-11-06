@@ -2,10 +2,11 @@ import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat, type ImageRef } from "expo-image-manipulator";
 
 import { getSupabase } from "@/lib/supabase";
+import { isStoreOpen, viaCache } from "@/offline/cached";
 import { beginMirror } from "@/offline/mirror";
 import { isOnline } from "@/offline/network";
 import type { Allowance } from "./allowance";
-import { offlineLimit } from "./offline-limit";
+import { knownLimit, offlineLimit } from "./offline-limit";
 import { queuePage, type EnqueueInput, type EnqueueResult } from "./queue-service";
 import { callPrepare, callRead, fetchAllowance, fetchLatestNotebookId, insertPage, markUploaded, uploadPhotoFile } from "./api";
 import { PHOTO_QUALITY, preparePhoto, shrinkTarget, type Picture } from "./photo";
@@ -85,23 +86,17 @@ function discardPhoto(uri: string): void {
 
 export const captureService: CaptureService = {
   allowance: async () => {
-    if (!isOnline()) {
+    if (!isOnline() && isStoreOpen()) {
       return offlineLimit();
     }
-    const mirror = beginMirror();
-    try {
+    return viaCache(async () => {
+      const mirror = beginMirror();
       const allowance = await fetchAllowance(getSupabase());
       if (allowance !== null) {
         await mirror.limit(allowance);
       }
       return allowance;
-    } catch (error) {
-      const known = await offlineLimit();
-      if (known === null) {
-        throw error;
-      }
-      return known;
-    }
+    }, knownLimit);
   },
   enqueue: queuePage,
   latestNotebookId: () => fetchLatestNotebookId(getSupabase()),
