@@ -156,6 +156,127 @@ describe("viaCache", () => {
   });
 });
 
+describe("viaCache while the store is still opening or the flag is still catching up", () => {
+  function waiting<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((good, bad) => {
+      resolve = good;
+      reject = bad;
+    });
+    return { promise, resolve, reject, request: jest.fn(() => promise) };
+  }
+
+  async function settle(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  function follow<T>(read: Promise<T>): jest.Mock {
+    const outcome = jest.fn();
+    void read.then(outcome, outcome);
+    return outcome;
+  }
+
+  it("answers from the store as soon as it opens, without waiting for the server", async () => {
+    await fill();
+    setMirrorStore(null);
+    setOnline(false);
+    const server = waiting<typeof notebook[]>();
+    const read = viaCache(server.request as never, cachedNotebooks);
+    setMirrorStore(store);
+    expect(await read).toEqual([notebook(1), notebook(2)]);
+  });
+
+  it("answers from the store as soon as the flag learns the network is gone", async () => {
+    await fill();
+    setOnline(true);
+    const server = waiting<typeof notebook[]>();
+    const read = viaCache(server.request as never, cachedNotebooks);
+    await settle();
+    setOnline(false);
+    expect(await read).toEqual([notebook(1), notebook(2)]);
+  });
+
+  it("does not answer from the store while the flag says online, even when it opens meanwhile", async () => {
+    await fill();
+    setMirrorStore(null);
+    const server = waiting<unknown[]>();
+    const outcome = follow(viaCache(server.request, cachedNotebooks));
+    setMirrorStore(store);
+    await settle();
+    expect(outcome).not.toHaveBeenCalled();
+    server.resolve([notebook(7)]);
+    await settle();
+    expect(outcome).toHaveBeenCalledWith([notebook(7)]);
+  });
+
+  it("keeps waiting for the server when the store opens and knows nothing", async () => {
+    setMirrorStore(null);
+    setOnline(false);
+    const server = waiting<unknown[]>();
+    const outcome = follow(viaCache(server.request, cachedNotebooks));
+    setMirrorStore(store);
+    await settle();
+    expect(outcome).not.toHaveBeenCalled();
+    server.resolve([notebook(7)]);
+    await settle();
+    expect(outcome).toHaveBeenCalledWith([notebook(7)]);
+  });
+
+  it("reads nothing from a store that opens for another account", async () => {
+    await fill();
+    setMirrorStore(null);
+    setOnline(false);
+    signedIn = OTHER_USER;
+    const server = waiting<unknown[]>();
+    const outcome = follow(viaCache(server.request, cachedNotebooks));
+    setMirrorStore(store);
+    await settle();
+    expect(outcome).not.toHaveBeenCalled();
+    server.resolve([notebook(7)]);
+    await settle();
+    expect(outcome).toHaveBeenCalledWith([notebook(7)]);
+  });
+
+  it("fails like the server when the store never opens", async () => {
+    setMirrorStore(null);
+    setOnline(false);
+    const server = waiting<unknown[]>();
+    const read = viaCache(server.request, cachedNotebooks);
+    server.reject(new Error("down"));
+    await expect(read).rejects.toThrow("down");
+  });
+
+  it("ignores a server that fails after the store has answered", async () => {
+    await fill();
+    setMirrorStore(null);
+    setOnline(false);
+    const server = waiting<unknown[]>();
+    const read = viaCache(server.request, cachedNotebooks);
+    setMirrorStore(store);
+    expect(await read).toEqual([notebook(1), notebook(2)]);
+    server.reject(new Error("down"));
+    await settle();
+  });
+
+  it("stops looking at the store once it has answered", async () => {
+    await fill();
+    setMirrorStore(null);
+    setOnline(false);
+    const reader = jest.fn(cachedNotebooks);
+    const server = waiting<unknown[]>();
+    const read = viaCache(server.request, reader);
+    server.resolve([notebook(7)]);
+    expect(await read).toEqual([notebook(7)]);
+    reader.mockClear();
+    setMirrorStore(store);
+    setOnline(true);
+    setOnline(false);
+    await settle();
+    expect(reader).not.toHaveBeenCalled();
+  });
+});
+
 describe("the network flag", () => {
   it("starts online, follows what it is told, and runs a gesture only with the network", () => {
     expect(isOnline()).toBe(true);

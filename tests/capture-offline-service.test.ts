@@ -95,6 +95,69 @@ describe("the allowance without a network", () => {
   });
 });
 
+describe("the allowance while the store is still opening", () => {
+  const never = () => new Promise(() => undefined);
+
+  it("gives the known limit as soon as the store opens, without waiting for the server", async () => {
+    await captureService.allowance();
+    await wait();
+    setMirrorStore(null);
+    setOnline(false);
+    rpc.mockImplementation(never);
+    const allowance = captureService.allowance();
+    setMirrorStore(store);
+    expect(await allowance).toMatchObject({ remaining: 10, max: 15 });
+  });
+
+  it("knows nothing as soon as the store opens without a limit", async () => {
+    setMirrorStore(null);
+    setOnline(false);
+    rpc.mockImplementation(never);
+    const allowance = captureService.allowance();
+    setMirrorStore(store);
+    expect(await allowance).toBeNull();
+  });
+
+  it("does not say it knows nothing before the store has opened", async () => {
+    setMirrorStore(null);
+    setOnline(false);
+    rpc.mockImplementation(never);
+    const outcome = jest.fn();
+    void captureService.allowance().then(outcome);
+    await wait();
+    expect(outcome).not.toHaveBeenCalled();
+    setMirrorStore(store);
+    await wait();
+    expect(outcome).toHaveBeenCalledWith(null);
+  });
+
+  it("gives the known limit as soon as the flag learns the network is gone", async () => {
+    await captureService.allowance();
+    await wait();
+    rpc.mockImplementation(never);
+    const allowance = captureService.allowance();
+    await wait();
+    setOnline(false);
+    expect(await allowance).toMatchObject({ remaining: 10, max: 15 });
+  });
+
+  it("waits for the server while the flag says online, even when the store opens meanwhile", async () => {
+    await captureService.allowance();
+    await wait();
+    setMirrorStore(null);
+    let answer!: (value: unknown) => void;
+    rpc.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const outcome = jest.fn();
+    void captureService.allowance().then(outcome);
+    setMirrorStore(store);
+    await wait();
+    expect(outcome).not.toHaveBeenCalled();
+    answer({ data: [{ ...row, remaining: 3 }], error: null });
+    await wait();
+    expect(outcome).toHaveBeenCalledWith(expect.objectContaining({ remaining: 3 }));
+  });
+});
+
 describe("keeping a captured page in the queue", () => {
   beforeEach(() => {
     fakeFiles.set(PHOTO, jpeg(3000));
