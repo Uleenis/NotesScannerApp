@@ -14,7 +14,7 @@ ADD --checksum=sha256:103f36a11079994f128a20c46cb388912dc9d481fded4ce12fbfe2d9f6
 ADD --checksum=sha256:2fe563b59de779621fa6ef3756e7ae565a87d78ac249afb728daf743ba3821ed \
     https://huggingface.co/Xenova/camembert-ner/resolve/8e1988247e872ba0137062653b1e5033a31e14fc/tokenizer.json /tokenizer.json
 
-FROM python:3.13.15-slim-trixie@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS base
+FROM python:3.15.0-slim-trixie@sha256:f5b92f2a669a4c347044f29367f31983280b648250ca94dea66f98c53bc87e58 AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
